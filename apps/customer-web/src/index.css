@@ -1,0 +1,11 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  font-family: var(--sx-font-sans);
+  color: var(--sx-neutral-800);
+  background: var(--sx-neutral-50);
+}
