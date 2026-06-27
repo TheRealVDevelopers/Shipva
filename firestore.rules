@@ -1,0 +1,68 @@
+rules_version = '2';
+
+// Ground Network — deny-by-default. All writes that carry business rules go
+// through Cloud Functions (admin SDK bypasses these rules). Clients get
+// scoped reads + a few self-service writes only.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function role() { return request.auth.token.role; }
+    function isStaff() { return signedIn() && role() in ['super_admin', 'admin', 'dispatcher', 'support']; }
+    function isSelf(uid) { return signedIn() && request.auth.uid == uid; }
+
+    // Users — readable by self or staff; role/claims set only by backend.
+    match /users/{uid} {
+      allow read: if isSelf(uid) || isStaff();
+      allow write: if false;
+    }
+
+    // Customer profile — self or staff read; self may edit saved addresses.
+    match /customers/{uid} {
+      allow read: if isSelf(uid) || isStaff();
+      allow create, update: if isSelf(uid);
+      allow delete: if false;
+    }
+
+    // Drivers — staff read all; a driver reads own doc. Verification via backend.
+    match /drivers/{uid} {
+      allow read: if isSelf(uid) || isStaff();
+      allow write: if false;
+    }
+
+    // Bookings — customer sees own; assigned driver sees theirs; staff see all.
+    // All mutations go through callables, so client writes are denied.
+    match /bookings/{id} {
+      allow read: if isStaff()
+        || (signedIn() && resource.data.customerId == request.auth.uid)
+        || (signedIn() && resource.data.assignedDriverId == request.auth.uid);
+      allow write: if false;
+    }
+
+    // Bids — staff and the bidding driver; written by callables.
+    match /bids/{id} {
+      allow read: if isStaff() || (signedIn() && resource.data.bidderId == request.auth.uid);
+      allow write: if false;
+    }
+
+    // Transporter exchange — verified members + staff read; writes via backend.
+    match /transporters/{id}     { allow read: if signedIn(); allow write: if false; }
+    match /fleetVehicles/{id}     { allow read: if signedIn(); allow write: if false; }
+    match /fleetDrivers/{id}      { allow read: if signedIn(); allow write: if false; }
+    match /loadPosts/{id}         { allow read: if signedIn(); allow write: if false; }
+    match /truckPosts/{id}        { allow read: if signedIn(); allow write: if false; }
+    match /connections/{id} {
+      allow read: if isStaff()
+        || (signedIn() && (resource.data.partyA == request.auth.uid || resource.data.partyB == request.auth.uid));
+      allow write: if false;
+    }
+
+    // Public config (vehicle types, zones, fares) — readable by any signed-in user.
+    match /config/{doc} { allow read: if signedIn(); allow write: if false; }
+
+    // Everything else (auditLogs, counters, notifications) — backend only.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

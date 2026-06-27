@@ -1,0 +1,37 @@
+:root {
+  /* Sarva brand v1 placeholder — see packages/ui/src/tokens.ts */
+  --sx-primary-50: #E6EEF8;
+  --sx-primary-100: #C0D4EB;
+  --sx-primary-200: #8CB0DA;
+  --sx-primary-300: #5589C6;
+  --sx-primary-400: #2A66B0;
+  --sx-primary-500: #0F3D72;
+  --sx-primary-600: #0D3461;
+  --sx-primary-700: #0A284C;
+  --sx-primary-800: #071D38;
+  --sx-primary-900: #041224;
+
+  --sx-accent-400: #F58220;
+  --sx-accent-500: #D86C0E;
+
+  --sx-neutral-0: #FFFFFF;
+  --sx-neutral-50: #F7F8FA;
+  --sx-neutral-100: #EDEFF3;
+  --sx-neutral-200: #D8DCE3;
+  --sx-neutral-400: #8A93A3;
+  --sx-neutral-600: #414B5C;
+  --sx-neutral-800: #181D27;
+  --sx-neutral-900: #0B0E14;
+
+  --sx-success: #1B8A4B;
+  --sx-warning: #C77B16;
+  --sx-danger: #B42D2D;
+  --sx-info: #1F6FAF;
+
+  --sx-font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --sx-font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --sx-radius-sm: 4px;
+  --sx-radius-md: 8px;
+  --sx-radius-lg: 12px;
+}

@@ -1,0 +1,31 @@
+rules_version = '2';
+
+// Ground Network storage — deny-by-default. KYC docs and POD photos are
+// written by the apps to user-scoped paths; everything is read via signed
+// URLs minted by Cloud Functions.
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() { return request.auth != null; }
+    function isSelf(uid) { return signedIn() && request.auth.uid == uid; }
+
+    // KYC + profile docs: a user writes only under their own uid.
+    match /kyc/{uid}/{allPaths=**} {
+      allow read: if isSelf(uid);
+      allow write: if isSelf(uid)
+        && request.resource.size < 8 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*|application/pdf');
+    }
+
+    // Proof-of-delivery photos: assigned driver writes under the booking path.
+    match /pod/{bookingId}/{allPaths=**} {
+      allow read: if signedIn();
+      allow write: if signedIn()
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

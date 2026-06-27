@@ -1,0 +1,19 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "driverLocations": {
+      "$driverId": {
+        ".read": "auth != null && (auth.uid === $driverId || auth.token.role === 'dispatcher' || auth.token.role === 'admin' || auth.token.role === 'super_admin' || auth.token.role === 'support')",
+        ".write": "auth != null && auth.uid === $driverId",
+        ".validate": "newData.hasChildren(['lat', 'lng', 'at'])"
+      }
+    },
+    "presence": {
+      "$driverId": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid === $driverId"
+      }
+    }
+  }
+}

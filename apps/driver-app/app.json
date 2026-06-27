@@ -1,0 +1,38 @@
+{
+  "expo": {
+    "name": "Ground Network Driver",
+    "slug": "ground-network-driver",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "scheme": "gndriver",
+    "splash": {
+      "backgroundColor": "#0F3D72"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "in.groundnetwork.driver",
+      "infoPlist": {
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Ground Network needs your location to alert you to nearby jobs and track active trips.",
+        "NSLocationWhenInUseUsageDescription": "Ground Network needs your location to alert you to nearby jobs and track active trips.",
+        "NSCameraUsageDescription": "Ground Network needs the camera for delivery proof photos.",
+        "UIBackgroundModes": ["location"]
+      }
+    },
+    "android": {
+      "package": "in.groundnetwork.driver",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "CAMERA",
+        "RECEIVE_BOOT_COMPLETED",
+        "FOREGROUND_SERVICE"
+      ]
+    },
+    "plugins": ["expo-camera", "expo-location", "expo-notifications", "expo-secure-store"],
+    "extra": {
+      "firebaseProjectId": "ground-network"
+    }
+  }
+}
