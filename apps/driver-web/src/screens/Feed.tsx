@@ -99,7 +99,7 @@ function InstantCard({ job, disabled, onAccept, onIgnore }: { job: Job; disabled
       <Route pickup={job.pickup} drop={job.drop} km={job.distanceKm} />
       <div className="mt-3 grid grid-cols-3 gap-2">
         <button onClick={onIgnore} className="flex items-center justify-center gap-1 rounded-lg bg-neutral-100 py-2.5 text-sm font-medium text-neutral-600"><X size={14} /> Ignore</button>
-        <button onClick={onAccept} disabled={disabled} className="col-span-2 flex items-center justify-center gap-1.5 rounded-lg bg-primary-500 py-2.5 text-sm font-semibold text-white disabled:opacity-40">
+        <button onClick={onAccept} disabled={disabled} className="col-span-2 flex items-center justify-center gap-1.5 rounded-lg bg-accent-500 py-2.5 text-sm font-bold text-white transition-colors hover:bg-accent-600 disabled:opacity-40">
           <Check size={15} /> Accept
         </button>
       </div>
@@ -163,7 +163,7 @@ function AuctionCard({ job, disabled }: { job: Job; disabled: boolean }) {
             <span className="text-sm text-neutral-400">₹</span>
             <input type="number" value={Math.round(bid / 100)} onChange={(e) => setBid(Math.max(0, Number(e.target.value) * 100))} className="w-full text-sm font-semibold text-neutral-900 outline-none" />
           </div>
-          <button onClick={submit} disabled={disabled} className="flex items-center gap-1 rounded-lg bg-primary-500 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40">
+          <button onClick={submit} disabled={disabled} className="flex items-center gap-1 rounded-lg bg-accent-500 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-accent-600 disabled:opacity-40">
             <Gavel size={14} /> Bid
           </button>
         </div>

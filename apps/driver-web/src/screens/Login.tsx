@@ -1,30 +1,29 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Radio, Gavel, Wallet, ArrowRight } from 'lucide-react';
-import { PrimaryButton } from '../components/Controls.js';
-import { HeroDelivery } from '../components/art.js';
+import { DriverHero } from '../components/art.js';
 
 export function Login() {
   const navigate = useNavigate();
   const [phone, setPhone] = useState('99020 11234');
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-primary-800 to-primary-600 flex justify-center">
-      <div className="flex w-full max-w-md flex-col px-6 pt-16 pb-8 text-white">
+    <div className="min-h-screen bg-gradient-to-b from-neutral-900 via-primary-900 to-primary-800 flex justify-center">
+      <div className="flex w-full max-w-md flex-col px-6 pt-14 pb-8 text-white">
         <div className="flex items-center gap-2">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white text-primary-700 font-bold text-lg">G</div>
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-500 text-white font-extrabold text-lg">G</div>
           <div>
-            <div className="text-lg font-semibold leading-none">Ground Network</div>
-            <div className="text-[11px] uppercase tracking-wide text-primary-200">Driver</div>
+            <div className="text-lg font-extrabold leading-none">Ground Network</div>
+            <div className="text-[11px] font-bold uppercase tracking-widest text-accent-400">Driver Partner</div>
           </div>
         </div>
 
-        <h1 className="mt-12 text-3xl font-bold leading-tight">Your platform.<br />Keep what you earn.</h1>
-        <p className="mt-3 text-sm text-primary-100">Commission-free. See nearby work, accept, get paid — same day.</p>
-
-        <div className="mt-6 rounded-2xl bg-white/95 p-3 shadow-lift animate-scale-in">
-          <HeroDelivery className="w-full" />
+        <div className="mt-8 rounded-2xl bg-white/[0.06] p-3 ring-1 ring-white/10 animate-scale-in">
+          <DriverHero className="w-full" />
         </div>
+
+        <h1 className="mt-7 text-3xl font-extrabold leading-tight">Your platform.<br />Keep what you <span className="text-accent-400">earn.</span></h1>
+        <p className="mt-2 text-sm text-neutral-300">Commission-free. Accept nearby work and get paid the same day.</p>
 
         <ul className="mt-6 space-y-3 text-sm">
           <Feat icon={<Radio size={16} />} text="Accept nearby jobs instantly" />
@@ -32,19 +31,20 @@ export function Login() {
           <Feat icon={<Wallet size={16} />} text="Same-day payout — keep 100%" />
         </ul>
 
-        <div className="mt-auto pt-10">
-          <div className="rounded-xl bg-white/10 p-1.5 backdrop-blur">
+        <div className="mt-auto pt-8">
+          <div className="rounded-xl bg-white/[0.06] p-1.5 ring-1 ring-white/10">
             <div className="flex items-center gap-2 rounded-lg bg-white px-3 py-3">
-              <span className="text-sm font-medium text-neutral-500">+91</span>
-              <input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="numeric" className="flex-1 text-sm text-neutral-900 outline-none" placeholder="Phone number" />
+              <span className="text-sm font-bold text-neutral-500">+91</span>
+              <input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="numeric" className="flex-1 text-sm font-semibold text-neutral-900 outline-none" placeholder="Phone number" />
             </div>
           </div>
-          <div className="mt-3">
-            <PrimaryButton onClick={() => navigate('/feed')} className="bg-white !text-primary-700 hover:bg-neutral-100">
-              Go online <ArrowRight size={16} />
-            </PrimaryButton>
-          </div>
-          <p className="mt-3 text-center text-[11px] text-primary-200">Preview build — OTP is skipped.</p>
+          <button
+            onClick={() => navigate('/feed')}
+            className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-accent-500 py-3.5 text-sm font-extrabold text-white shadow-lift transition-colors hover:bg-accent-600 active:scale-[.98]"
+          >
+            Go online <ArrowRight size={16} />
+          </button>
+          <p className="mt-3 text-center text-[11px] text-neutral-400">Preview build — OTP is skipped.</p>
         </div>
       </div>
     </div>
@@ -53,8 +53,8 @@ export function Login() {
 
 function Feat({ icon, text }: { icon: React.ReactNode; text: string }) {
   return (
-    <li className="flex items-center gap-3">
-      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/15 text-orange-200">{icon}</span>
+    <li className="flex items-center gap-3 text-neutral-200">
+      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-accent-500/20 text-accent-400">{icon}</span>
       {text}
     </li>
   );

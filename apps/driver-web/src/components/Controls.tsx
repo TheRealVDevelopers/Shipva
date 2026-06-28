@@ -7,7 +7,7 @@ export function PrimaryButton({ children, className = '', ...rest }: ButtonHTMLA
   return (
     <button
       {...rest}
-      className={`flex w-full items-center justify-center gap-2 rounded-lg bg-primary-500 px-4 py-3.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-600 active:bg-primary-700 disabled:opacity-50 ${className}`}
+      className={`flex w-full items-center justify-center gap-2 rounded-xl bg-accent-500 px-4 py-3.5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-accent-600 active:scale-[.98] disabled:opacity-50 ${className}`}
     >
       {children}
     </button>

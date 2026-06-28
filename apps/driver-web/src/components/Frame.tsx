@@ -38,7 +38,7 @@ export function Frame({
 function Tab({ to, icon, label }: { to: string; icon: ReactNode; label: string }) {
   return (
     <NavLink to={to} className={({ isActive }) =>
-      `flex flex-col items-center gap-0.5 px-6 py-1 text-[11px] font-medium ${isActive ? 'text-primary-600' : 'text-neutral-400'}`}>
+      `flex flex-col items-center gap-0.5 px-6 py-1 text-[11px] font-bold ${isActive ? 'text-accent-600' : 'text-neutral-400'}`}>
       {icon}
       {label}
     </NavLink>

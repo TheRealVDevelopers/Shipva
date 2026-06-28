@@ -148,6 +148,38 @@ export function SearchingArt({ className }: { className?: string }) {
   );
 }
 
+/** Driver-flavoured hero — rider + earnings, orange-led (distinct from customer). */
+export function DriverHero({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 320 180" xmlns="http://www.w3.org/2000/svg" fill="none">
+      <ellipse cx="160" cy="160" rx="130" ry="13" fill={BLUE} opacity="0.12" />
+      <g>
+        <ellipse cx="70" cy="60" rx="20" ry="20" fill={ORANGE} />
+        <ellipse cx="70" cy="60" rx="20" ry="20" fill="none" stroke="#fff" strokeWidth="2" opacity="0.7" />
+        <text x="70" y="67" textAnchor="middle" fontSize="20" fill="#fff" fontWeight="800">₹</text>
+        <ellipse cx="44" cy="86" rx="13" ry="13" fill={ORANGE_L} />
+        <text x="44" y="91" textAnchor="middle" fontSize="13" fill="#fff" fontWeight="800">₹</text>
+      </g>
+      <g stroke={ORANGE} strokeWidth="3" strokeLinecap="round" opacity="0.5">
+        <path d="M120 150 h-26 M118 138 h-18 M122 126 h-12" />
+      </g>
+      <g>
+        <circle cx="176" cy="146" r="17" fill={TYRE} /><circle cx="176" cy="146" r="6" fill={HUB} />
+        <circle cx="250" cy="146" r="17" fill={TYRE} /><circle cx="250" cy="146" r="6" fill={HUB} />
+        <path d="M168 146 q8 -30 30 -30 h28 l16 30Z" fill={ORANGE} />
+        <rect x="226" y="86" width="30" height="30" rx="5" fill={BLUE} />
+        <path d="M226 90 h30" stroke="#fff" strokeWidth="2" opacity="0.5" />
+        <path d="M210 116 l16 -34 h8" stroke={BLUE_D} strokeWidth="5" strokeLinecap="round" />
+        <circle cx="206" cy="78" r="11" fill={BLUE} />
+        <path d="M196 78 a10 10 0 0 1 20 0Z" fill={BLUE_D} />
+        <path d="M206 90 q-6 14 -20 22" stroke={BLUE} strokeWidth="9" strokeLinecap="round" />
+      </g>
+      <path d="M280 50 c0 11 -11 17 -11 17 s-11 -6 -11 -17 a11 11 0 0 1 22 0Z" fill={BLUE} />
+      <circle cx="269" cy="50" r="4.5" fill="#fff" />
+    </svg>
+  );
+}
+
 /** Round brand mark. */
 export function LogoMark({ className }: { className?: string }) {
   return (
