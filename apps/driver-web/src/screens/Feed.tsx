@@ -4,6 +4,7 @@ import {
   MapPin, Clock, Navigation, Gavel, Radio, ArrowLeftRight, Power, Loader2, Check, X,
 } from 'lucide-react';
 import { Frame } from '../components/Frame.js';
+import { EmptyArt } from '../components/art.js';
 import { useStore, type Job } from '../lib/store.js';
 import { rupees } from '../lib/format.js';
 
@@ -63,7 +64,7 @@ export function Feed() {
         {!online ? (
           <Empty icon={<Power size={28} />} text="You're offline. Go online to see nearby jobs." />
         ) : jobs.length === 0 ? (
-          <Empty icon={<Check size={28} />} text="No open jobs in this tab right now." />
+          <Empty icon={<EmptyArt className="h-20 w-20" />} text="No open jobs in this tab right now." />
         ) : (
           <div className="space-y-3">
             {jobs.map((j) =>

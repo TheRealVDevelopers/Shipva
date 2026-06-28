@@ -1,6 +1,7 @@
 import { type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { Minus, Plus } from 'lucide-react';
 import { VEHICLE_TYPES, type VehicleType } from '@ground/shared-types';
+import { VehicleArt } from './art.js';
 
 export function PrimaryButton({ children, className = '', ...rest }: ButtonHTMLAttributes<HTMLButtonElement> & { children: ReactNode }) {
   return (
@@ -22,12 +23,15 @@ export function VehiclePicker({ value, onChange }: { value: VehicleType; onChang
           <button
             key={v.type}
             onClick={() => onChange(v.type)}
-            className={`rounded-lg border px-3 py-2.5 text-left transition-colors ${
-              active ? 'border-primary-500 bg-primary-50 ring-1 ring-primary-500' : 'border-neutral-200 bg-white hover:border-neutral-300'
+            className={`flex items-center gap-2.5 rounded-xl border px-3 py-2.5 text-left transition-all ${
+              active ? 'border-primary-500 bg-primary-50 ring-1 ring-primary-500 shadow-soft' : 'border-neutral-200 bg-white hover:border-primary-300'
             }`}
           >
-            <div className={`text-sm font-semibold ${active ? 'text-primary-700' : 'text-neutral-800'}`}>{v.label}</div>
-            <div className="text-[11px] text-neutral-500">up to {v.capacityKg} kg</div>
+            <VehicleArt type={v.type} className="h-8 w-12 shrink-0" />
+            <div>
+              <div className={`text-sm font-bold ${active ? 'text-primary-700' : 'text-neutral-800'}`}>{v.label}</div>
+              <div className="text-[11px] text-neutral-500">up to {v.capacityKg} kg</div>
+            </div>
           </button>
         );
       })}

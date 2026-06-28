@@ -1,8 +1,9 @@
 import { useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Loader2, Phone, Star, Truck, CheckCircle2, X } from 'lucide-react';
+import { Phone, Star, Truck, CheckCircle2, X } from 'lucide-react';
 import { Frame } from '../components/Frame.js';
 import { PrimaryButton } from '../components/Controls.js';
+import { SearchingArt } from '../components/art.js';
 import { useStore } from '../lib/store.js';
 import { randomDriver } from '../lib/mocks.js';
 import { rupees } from '../lib/format.js';
@@ -27,9 +28,9 @@ export function Searching() {
     <Frame title={assigned ? 'Driver assigned' : 'Finding a driver'} back>
       <div className="p-4">
         {!assigned ? (
-          <div className="flex flex-col items-center py-16 text-center">
-            <Loader2 size={40} className="animate-spin text-primary-500" />
-            <div className="mt-5 text-base font-semibold text-neutral-900">Finding a driver nearby…</div>
+          <div className="flex flex-col items-center py-12 text-center">
+            <SearchingArt className="h-28 w-28 animate-pulse" />
+            <div className="mt-4 text-base font-semibold text-neutral-900">Finding a driver nearby…</div>
             <div className="mt-1 text-sm text-neutral-500">Alerting {booking.vehicleType.replaceAll('_', ' ')} drivers in your zone</div>
             <div className="mt-6 rounded-lg bg-neutral-100 px-4 py-2 text-sm text-neutral-600">{booking.pickup} → {booking.drop}</div>
             <button onClick={() => { update(id, { status: 'cancelled' }); navigate('/home'); }} className="mt-8 flex items-center gap-1.5 text-sm font-medium text-rose-600">

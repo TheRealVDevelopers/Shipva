@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Truck, Gavel, Radio, ArrowRight } from 'lucide-react';
 import { PrimaryButton } from '../components/Controls.js';
+import { HeroDelivery } from '../components/art.js';
 
 export function Welcome() {
   const navigate = useNavigate();
@@ -18,7 +19,11 @@ export function Welcome() {
         <h1 className="mt-12 text-3xl font-bold leading-tight">Move anything,<br />your way.</h1>
         <p className="mt-3 text-sm text-primary-100">Book in seconds — or name your price and let drivers compete.</p>
 
-        <ul className="mt-8 space-y-3 text-sm">
+        <div className="mt-6 rounded-2xl bg-white/95 p-3 shadow-lift animate-scale-in">
+          <HeroDelivery className="w-full" />
+        </div>
+
+        <ul className="mt-6 space-y-3 text-sm">
           <Feat icon={<Radio size={16} />} text="Instant booking — nearby drivers accept" />
           <Feat icon={<Gavel size={16} />} text="Auctions — set a budget, get the best price" />
           <Feat icon={<Truck size={16} />} text="Intercity & outstation, any vehicle" />

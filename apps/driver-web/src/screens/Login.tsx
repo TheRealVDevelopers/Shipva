@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Radio, Gavel, Wallet, ArrowRight } from 'lucide-react';
 import { PrimaryButton } from '../components/Controls.js';
+import { HeroDelivery } from '../components/art.js';
 
 export function Login() {
   const navigate = useNavigate();
@@ -21,7 +22,11 @@ export function Login() {
         <h1 className="mt-12 text-3xl font-bold leading-tight">Your platform.<br />Keep what you earn.</h1>
         <p className="mt-3 text-sm text-primary-100">Commission-free. See nearby work, accept, get paid — same day.</p>
 
-        <ul className="mt-8 space-y-3 text-sm">
+        <div className="mt-6 rounded-2xl bg-white/95 p-3 shadow-lift animate-scale-in">
+          <HeroDelivery className="w-full" />
+        </div>
+
+        <ul className="mt-6 space-y-3 text-sm">
           <Feat icon={<Radio size={16} />} text="Accept nearby jobs instantly" />
           <Feat icon={<Gavel size={16} />} text="Bid on scheduled & outstation loads" />
           <Feat icon={<Wallet size={16} />} text="Same-day payout — keep 100%" />

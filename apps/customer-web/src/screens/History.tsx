@@ -1,7 +1,8 @@
 import { useNavigate } from 'react-router-dom';
-import { Gavel, Radio, ChevronRight, Package } from 'lucide-react';
+import { Gavel, Radio, ChevronRight } from 'lucide-react';
 import { Frame } from '../components/Frame.js';
 import { BookingStatusBadge } from '../components/StatusBadge.js';
+import { EmptyArt } from '../components/art.js';
 import { useStore } from '../lib/store.js';
 import { rupees } from '../lib/format.js';
 
@@ -13,8 +14,8 @@ export function History() {
     <Frame title="Your trips" nav>
       <div className="space-y-3 p-4">
         {bookings.length === 0 && (
-          <div className="flex flex-col items-center py-20 text-center text-sm text-neutral-500">
-            <Package size={32} className="mb-2 text-neutral-300" /> No trips yet.
+          <div className="flex flex-col items-center py-16 text-center text-sm text-neutral-500">
+            <EmptyArt className="mb-3 h-24 w-24" /> No trips yet.
           </div>
         )}
         {bookings.map((b) => {
