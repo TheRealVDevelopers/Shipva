@@ -1,5 +1,14 @@
 {
   "projects": {
-    "default": "ground-network"
+    "default": "sarvaexpressos"
+  },
+  "targets": {
+    "sarvaexpressos": {
+      "hosting": {
+        "admin": ["sarva-gn-admin"],
+        "customer": ["sarva-gn-book"],
+        "driver": ["sarva-gn-driver"]
+      }
+    }
   }
 }

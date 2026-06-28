@@ -12,22 +12,35 @@
   "functions": [
     {
       "source": "functions/lib",
-      "codebase": "default",
+      "codebase": "ground-network",
       "ignore": ["**/*.map"],
       "runtime": "nodejs20"
     }
   ],
-  "hosting": {
-    "public": "apps/admin-web/dist",
-    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
-    "rewrites": [{ "source": "**", "destination": "/index.html" }]
-  },
+  "hosting": [
+    {
+      "target": "admin",
+      "public": "apps/admin-web/dist",
+      "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+      "rewrites": [{ "source": "**", "destination": "/index.html" }]
+    },
+    {
+      "target": "customer",
+      "public": "apps/customer-web/dist",
+      "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+      "rewrites": [{ "source": "**", "destination": "/index.html" }]
+    },
+    {
+      "target": "driver",
+      "public": "apps/driver-web/dist",
+      "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+      "rewrites": [{ "source": "**", "destination": "/index.html" }]
+    }
+  ],
   "emulators": {
     "auth": { "port": 9099 },
     "firestore": { "port": 8080 },
-    "database": { "port": 9000 },
     "functions": { "port": 5001 },
-    "storage": { "port": 9199 },
     "hosting": { "port": 5000 },
     "ui": { "enabled": true, "port": 4000 },
     "singleProjectMode": true
