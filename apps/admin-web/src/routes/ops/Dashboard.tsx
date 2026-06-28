@@ -20,19 +20,24 @@ export function Dashboard() {
   return (
     <OpsLayout title="Dashboard" subtitle="Today · 27 Jun 2026 · Bengaluru">
       <div className="space-y-6">
-        <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <section className="grid grid-cols-2 md:grid-cols-4 gap-4 stagger">
           <KpiCard label="Live bookings" value={String(counters.liveBookings)} hint={`${counters.onJobDrivers} drivers on a job`} tone="primary" icon={<Radio size={14} />} />
           <KpiCard label="Online drivers" value={String(counters.onlineDrivers)} hint="ready to accept" tone="success" icon={<Users size={14} />} />
           <KpiCard label="Open auctions" value={String(counters.openAuctions)} hint="bids closing today" tone="accent" icon={<Gavel size={14} />} />
           <KpiCard label="Pending KYC" value={String(counters.pendingKyc)} hint="needs verification" tone="danger" icon={<ShieldCheck size={14} />} />
         </section>
 
-        <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <section className="grid grid-cols-2 md:grid-cols-4 gap-4 stagger">
           <KpiCard label="Delivered today" value={String(counters.deliveredToday)} hint="across all zones" tone="primary" icon={<Package size={14} />} />
           <KpiCard label="GMV today" value={rupees(counters.gmvTodayPaise)} hint="gross marketplace value" tone="success" icon={<IndianRupee size={14} />} />
           <KpiCard label="Exchange — open" value={String(counters.exchangeOpen)} hint="loads + trucks posted" tone="primary" icon={<Truck size={14} />} />
           <KpiCard label="Backhaul fills" value={String(counters.backhaulFills)} hint="empty legs filled today" tone="accent" icon={<TrendingUp size={14} />} />
         </section>
+
+        <Card>
+          <CardHeader title="Bookings today" subtitle="By hour · instant + auction" action={<span className="text-xs font-semibold text-emerald-700">▲ 18% vs yesterday</span>} />
+          <CardBody><HourlyBars /></CardBody>
+        </Card>
 
         <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <Card className="lg:col-span-2">
@@ -95,5 +100,25 @@ export function Dashboard() {
         </section>
       </div>
     </OpsLayout>
+  );
+}
+
+function HourlyBars() {
+  const data = [3, 5, 4, 8, 11, 9, 14, 12, 16, 13, 18, 15];
+  const labels = ['8a', '9', '10', '11', '12p', '1', '2', '3', '4', '5', '6', '7'];
+  const max = Math.max(...data);
+  return (
+    <div className="flex h-28 items-end gap-1.5">
+      {data.map((v, i) => (
+        <div key={i} className="flex flex-1 flex-col items-center gap-1">
+          <div
+            className="w-full rounded-t bg-gradient-to-t from-primary-500 to-primary-400 transition-all hover:from-accent-500 hover:to-accent-400"
+            style={{ height: `${(v / max) * 100}%` }}
+            title={`${v} bookings`}
+          />
+          <span className="text-[9px] text-neutral-400">{labels[i]}</span>
+        </div>
+      ))}
+    </div>
   );
 }

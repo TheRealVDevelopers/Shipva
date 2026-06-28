@@ -7,6 +7,7 @@ import { DutyBadge, KycBadge } from '../../components/ui/StatusBadge.js';
 import { Button } from '../../components/ui/Button.js';
 import { drivers } from '../../lib/mocks.js';
 import { rupees } from '../../lib/format.js';
+import { VehicleArt } from '../../components/art.js';
 
 const TABS = ['All', 'Online', 'On job', 'KYC queue'] as const;
 
@@ -75,7 +76,15 @@ export function Drivers() {
                       </div>
                     </div>
                   </Td>
-                  <Td className="text-neutral-700"><span className="font-mono text-xs">{d.vehicleReg}</span><div className="text-xs text-neutral-400">{d.vehicleType.replaceAll('_', ' ')}</div></Td>
+                  <Td>
+                    <div className="flex items-center gap-2">
+                      <VehicleArt type={d.vehicleType} className="h-6 w-9 shrink-0" />
+                      <div>
+                        <div className="font-mono text-xs text-neutral-700">{d.vehicleReg}</div>
+                        <div className="text-xs text-neutral-400 capitalize">{d.vehicleType.replaceAll('_', ' ')}</div>
+                      </div>
+                    </div>
+                  </Td>
                   <Td className="text-neutral-600">{d.zone}</Td>
                   <Td><DutyBadge status={d.dutyStatus} /></Td>
                   <Td><KycBadge status={d.kycStatus} /></Td>

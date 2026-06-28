@@ -9,6 +9,7 @@ import { Button } from '../../components/ui/Button.js';
 import { bookings } from '../../lib/mocks.js';
 import { isActiveBooking } from '@ground/shared-logic';
 import { rupees, dateTime } from '../../lib/format.js';
+import { VehicleArt } from '../../components/art.js';
 
 const FILTERS = ['All', 'Active', 'Instant', 'Auction', 'Delivered', 'Cancelled'] as const;
 
@@ -62,7 +63,12 @@ export function Bookings() {
                     <div className="text-xs text-neutral-500">{b.customerPhone}</div>
                   </Td>
                   <Td className="text-neutral-600"><div>{b.pickup}</div><div className="text-xs text-neutral-400">→ {b.drop}</div></Td>
-                  <Td className="text-neutral-700">{b.vehicleType.replaceAll('_', ' ')}</Td>
+                  <Td>
+                    <div className="flex items-center gap-2 text-neutral-700">
+                      <VehicleArt type={b.vehicleType} className="h-6 w-9 shrink-0" />
+                      <span className="capitalize">{b.vehicleType.replaceAll('_', ' ')}</span>
+                    </div>
+                  </Td>
                   <Td><Badge tone={b.type === 'auction' ? 'accent' : 'neutral'}>{b.type}</Badge></Td>
                   <Td><Badge tone={b.source === 'whatsapp' ? 'success' : 'info'}>{b.source}</Badge></Td>
                   <Td className="text-neutral-700">{b.driverName ?? <span className="italic text-neutral-400">unassigned</span>}</Td>

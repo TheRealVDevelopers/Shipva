@@ -2,6 +2,7 @@ import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, Package, Radio, Gavel, Users, Truck, Settings,
 } from 'lucide-react';
+import { LogoMark } from '../art.js';
 
 const NAV = [
   { to: '/ops', label: 'Dashboard', icon: LayoutDashboard, end: true },
@@ -16,9 +17,7 @@ export function Sidebar() {
   return (
     <aside className="hidden md:flex md:w-60 md:flex-col md:border-r md:border-neutral-200 md:bg-white">
       <div className="flex h-16 items-center gap-2 border-b border-neutral-100 px-5">
-        <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary-500 text-white font-bold">
-          G
-        </div>
+        <LogoMark className="h-8 w-8" />
         <div>
           <div className="text-sm font-semibold text-neutral-900 leading-none">Ground Network</div>
           <div className="mt-0.5 text-[10px] uppercase tracking-wide text-neutral-500">Admin & Dispatch</div>

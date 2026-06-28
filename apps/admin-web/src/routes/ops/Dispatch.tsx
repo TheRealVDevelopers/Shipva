@@ -5,6 +5,7 @@ import { Badge } from '../../components/ui/Badge.js';
 import { Button } from '../../components/ui/Button.js';
 import { bookings, drivers } from '../../lib/mocks.js';
 import { rupees, relativeTime } from '../../lib/format.js';
+import { VehicleArt } from '../../components/art.js';
 
 const NOW = Date.parse('2026-06-27T15:30:00+05:30');
 
@@ -87,7 +88,7 @@ export function Dispatch() {
                     <div className="text-sm font-medium text-neutral-900 truncate">{d.name}</div>
                     <div className="flex items-center gap-2 text-[11px] text-neutral-500 mt-0.5">
                       <span className="flex items-center gap-0.5"><Phone size={9} /> {d.phone.slice(-5)}</span>
-                      <span>{d.vehicleType.replaceAll('_', ' ')}</span>
+                      <span className="inline-flex items-center gap-1 capitalize"><VehicleArt type={d.vehicleType} className="h-4 w-6" /> {d.vehicleType.replaceAll('_', ' ')}</span>
                       <span>★ {d.ratingAvg}</span>
                       <span>{d.zone}</span>
                     </div>
