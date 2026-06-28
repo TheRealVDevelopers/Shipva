@@ -1,95 +1,69 @@
 /**
- * Brand tokens — v1 placeholder.
- * Locked decision (§0.5 #6): use a neutral logistics palette so Phase 1
- * coding isn't blocked. When the real brand kit / sarvaexpress.com
- * extraction lands, ONLY values here change — no component code edits.
+ * Ground Network brand tokens — blue · white · orange.
+ * The web apps read the CSS-variable mirror (tokens.css); this TS copy is for
+ * the React Native (Expo) app and any JS consumers. Keep the two in sync.
  */
 
 export const colors = {
   primary: {
-    50: '#E6EEF8',
-    100: '#C0D4EB',
-    200: '#8CB0DA',
-    300: '#5589C6',
-    400: '#2A66B0',
-    500: '#0F3D72', // brand primary — deep logistics blue
-    600: '#0D3461',
-    700: '#0A284C',
-    800: '#071D38',
-    900: '#041224',
+    50: '#EEF4FF',
+    100: '#D9E6FF',
+    200: '#B7CEFF',
+    300: '#8AB0FF',
+    400: '#5B89F8',
+    500: '#2F66EA', // brand blue
+    600: '#1E4FD0',
+    700: '#1B40A8',
+    800: '#1B3A85',
+    900: '#182F66',
   },
   accent: {
-    50: '#FEF2E5',
-    100: '#FCDABF',
-    200: '#FABA8E',
-    300: '#F89A5D',
-    400: '#F58220', // brand accent — warm orange
-    500: '#D86C0E',
-    600: '#A85308',
+    50: '#FFF3E9',
+    100: '#FFE2C9',
+    200: '#FFCFA3',
+    300: '#FFB877',
+    400: '#FF9A3D', // brand orange (bright)
+    500: '#F97316', // brand orange
+    600: '#DD5F0A',
   },
   neutral: {
     0: '#FFFFFF',
-    50: '#F7F8FA',
-    100: '#EDEFF3',
-    200: '#D8DCE3',
-    300: '#B6BCC8',
-    400: '#8A93A3',
-    500: '#5F6A7C',
-    600: '#414B5C',
-    700: '#2A323F',
-    800: '#181D27',
-    900: '#0B0E14',
+    50: '#F5F8FC',
+    100: '#ECF1F7',
+    200: '#DDE4EE',
+    300: '#C4CEDC',
+    400: '#94A1B4',
+    500: '#677488',
+    600: '#4A5567',
+    700: '#333D4C',
+    800: '#1E2632',
+    900: '#0E141D',
   },
-  success: '#1B8A4B',
-  warning: '#C77B16',
-  danger: '#B42D2D',
-  info: '#1F6FAF',
+  success: '#16A34A',
+  warning: '#D97706',
+  danger: '#DC2626',
+  info: '#2563EB',
 } as const;
 
 export const fonts = {
-  sans: '"Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
-  mono: '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace',
-} as const;
-
-export const fontSizes = {
-  xs: '0.75rem',
-  sm: '0.875rem',
-  base: '1rem',
-  lg: '1.125rem',
-  xl: '1.25rem',
-  '2xl': '1.5rem',
-  '3xl': '1.875rem',
-  '4xl': '2.25rem',
-} as const;
-
-export const spacing = {
-  0: '0',
-  1: '0.25rem',
-  2: '0.5rem',
-  3: '0.75rem',
-  4: '1rem',
-  5: '1.25rem',
-  6: '1.5rem',
-  8: '2rem',
-  10: '2.5rem',
-  12: '3rem',
-  16: '4rem',
+  sans: '"Nunito", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif',
+  mono: '"Nunito Sans", ui-monospace, SFMono-Regular, Menlo, monospace',
 } as const;
 
 export const radii = {
   none: '0',
-  sm: '4px',
-  md: '8px', // brand default
-  lg: '12px',
+  sm: '6px',
+  md: '10px',
+  lg: '14px',
+  xl: '20px',
   full: '9999px',
 } as const;
 
 export const shadows = {
-  sm: '0 1px 2px rgba(11, 14, 20, 0.06)',
-  md: '0 4px 12px rgba(11, 14, 20, 0.08)',
-  lg: '0 12px 32px rgba(11, 14, 20, 0.12)',
+  sm: '0 1px 2px rgba(24, 47, 102, 0.06)',
+  md: '0 4px 14px rgba(24, 47, 102, 0.08)',
+  lg: '0 16px 40px rgba(24, 47, 102, 0.12)',
 } as const;
 
-export const tokens = { colors, fonts, fontSizes, spacing, radii, shadows } as const;
-
+export const tokens = { colors, fonts, radii, shadows } as const;
 export type Tokens = typeof tokens;

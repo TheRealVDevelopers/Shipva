@@ -22,7 +22,7 @@ export function Frame({
             {headerRight}
           </header>
         )}
-        <main className={`flex-1 ${nav ? 'pb-20' : ''}`}>{children}</main>
+        <main className={`flex-1 animate-fade ${nav ? 'pb-20' : ''}`}>{children}</main>
         {nav && (
           <nav className="fixed bottom-0 left-1/2 z-10 flex w-full max-w-md -translate-x-1/2 items-center justify-around border-t border-neutral-200 bg-white py-2">
             <Tab to="/feed" icon={<LayoutList size={20} />} label="Jobs" />

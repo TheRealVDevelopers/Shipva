@@ -1,37 +1,54 @@
 :root {
-  /* Sarva brand v1 placeholder — see packages/ui/src/tokens.ts */
-  --sx-primary-50: #E6EEF8;
-  --sx-primary-100: #C0D4EB;
-  --sx-primary-200: #8CB0DA;
-  --sx-primary-300: #5589C6;
-  --sx-primary-400: #2A66B0;
-  --sx-primary-500: #0F3D72;
-  --sx-primary-600: #0D3461;
-  --sx-primary-700: #0A284C;
-  --sx-primary-800: #071D38;
-  --sx-primary-900: #041224;
+  /* Ground Network brand — blue · white · orange. Modern, friendly, rounded. */
 
-  --sx-accent-400: #F58220;
-  --sx-accent-500: #D86C0E;
+  /* Primary — vivid modern blue */
+  --sx-primary-50:  #EEF4FF;
+  --sx-primary-100: #D9E6FF;
+  --sx-primary-200: #B7CEFF;
+  --sx-primary-300: #8AB0FF;
+  --sx-primary-400: #5B89F8;
+  --sx-primary-500: #2F66EA;
+  --sx-primary-600: #1E4FD0;
+  --sx-primary-700: #1B40A8;
+  --sx-primary-800: #1B3A85;
+  --sx-primary-900: #182F66;
 
-  --sx-neutral-0: #FFFFFF;
-  --sx-neutral-50: #F7F8FA;
-  --sx-neutral-100: #EDEFF3;
-  --sx-neutral-200: #D8DCE3;
-  --sx-neutral-400: #8A93A3;
-  --sx-neutral-600: #414B5C;
-  --sx-neutral-800: #181D27;
-  --sx-neutral-900: #0B0E14;
+  /* Accent — warm energetic orange (CTAs, highlights) */
+  --sx-accent-50:  #FFF3E9;
+  --sx-accent-100: #FFE2C9;
+  --sx-accent-200: #FFCFA3;
+  --sx-accent-300: #FFB877;
+  --sx-accent-400: #FF9A3D;
+  --sx-accent-500: #F97316;
+  --sx-accent-600: #DD5F0A;
 
-  --sx-success: #1B8A4B;
-  --sx-warning: #C77B16;
-  --sx-danger: #B42D2D;
-  --sx-info: #1F6FAF;
+  /* Neutral — cool slate (modern, pairs with blue) */
+  --sx-neutral-0:   #FFFFFF;
+  --sx-neutral-50:  #F5F8FC;
+  --sx-neutral-100: #ECF1F7;
+  --sx-neutral-200: #DDE4EE;
+  --sx-neutral-300: #C4CEDC;
+  --sx-neutral-400: #94A1B4;
+  --sx-neutral-500: #677488;
+  --sx-neutral-600: #4A5567;
+  --sx-neutral-700: #333D4C;
+  --sx-neutral-800: #1E2632;
+  --sx-neutral-900: #0E141D;
 
-  --sx-font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --sx-font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --sx-success: #16A34A;
+  --sx-warning: #D97706;
+  --sx-danger:  #DC2626;
+  --sx-info:    #2563EB;
 
-  --sx-radius-sm: 4px;
-  --sx-radius-md: 8px;
-  --sx-radius-lg: 12px;
+  --sx-font-sans: "Nunito", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+  --sx-font-mono: "Nunito Sans", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --sx-radius-sm: 6px;
+  --sx-radius-md: 10px;
+  --sx-radius-lg: 14px;
+  --sx-radius-xl: 20px;
+
+  --sx-shadow-sm: 0 1px 2px rgba(24, 47, 102, 0.06), 0 1px 3px rgba(24, 47, 102, 0.05);
+  --sx-shadow-md: 0 4px 14px rgba(24, 47, 102, 0.08);
+  --sx-shadow-lg: 0 16px 40px rgba(24, 47, 102, 0.12);
 }

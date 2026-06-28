@@ -8,4 +8,56 @@ html, body, #root {
   font-family: var(--sx-font-sans);
   color: var(--sx-neutral-800);
   background: var(--sx-neutral-50);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+@layer base {
+  button, a {
+    transition: background-color .16s ease, color .16s ease, box-shadow .16s ease, transform .12s ease, border-color .16s ease;
+  }
+  button:not(:disabled):active {
+    transform: scale(.975);
+  }
+}
+
+@layer utilities {
+  @keyframes gn-fade-up { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+  @keyframes gn-fade { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes gn-scale-in { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: none; } }
+  @keyframes gn-shimmer { 100% { transform: translateX(100%); } }
+
+  .animate-fade-up { animation: gn-fade-up .38s cubic-bezier(.4, 0, .2, 1) both; }
+  .animate-fade { animation: gn-fade .3s ease both; }
+  .animate-scale-in { animation: gn-scale-in .26s cubic-bezier(.4, 0, .2, 1) both; }
+
+  /* staggered list entrance */
+  .stagger > * { animation: gn-fade-up .42s cubic-bezier(.4, 0, .2, 1) both; }
+  .stagger > *:nth-child(1) { animation-delay: .02s; }
+  .stagger > *:nth-child(2) { animation-delay: .07s; }
+  .stagger > *:nth-child(3) { animation-delay: .12s; }
+  .stagger > *:nth-child(4) { animation-delay: .17s; }
+  .stagger > *:nth-child(5) { animation-delay: .22s; }
+  .stagger > *:nth-child(6) { animation-delay: .27s; }
+  .stagger > *:nth-child(7) { animation-delay: .32s; }
+  .stagger > *:nth-child(8) { animation-delay: .37s; }
+
+  .shimmer {
+    position: relative;
+    overflow: hidden;
+    background: var(--sx-neutral-100);
+  }
+  .shimmer::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .65), transparent);
+    animation: gn-shimmer 1.4s infinite;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-up, .animate-fade, .animate-scale-in, .stagger > * { animation: none !important; }
 }
