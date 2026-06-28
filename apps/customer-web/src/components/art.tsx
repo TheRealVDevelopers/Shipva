@@ -148,6 +148,36 @@ export function SearchingArt({ className }: { className?: string }) {
   );
 }
 
+/** Stylised map with a pickup→drop route, for the booking & tracking screens. */
+export function MapArt({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 380 200" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg" fill="none">
+      <rect width="380" height="200" fill="var(--sx-primary-50)" />
+      {/* blocks */}
+      <g fill="#fff" opacity="0.7">
+        <rect x="20" y="20" width="90" height="60" rx="6" />
+        <rect x="140" y="14" width="110" height="48" rx="6" />
+        <rect x="280" y="26" width="80" height="70" rx="6" />
+        <rect x="30" y="110" width="120" height="70" rx="6" />
+        <rect x="190" y="100" width="70" height="84" rx="6" />
+        <rect x="290" y="120" width="74" height="64" rx="6" />
+      </g>
+      {/* roads */}
+      <g stroke="var(--sx-neutral-200)" strokeWidth="6">
+        <path d="M0 95 H380 M170 0 V200 M270 0 V200" />
+      </g>
+      {/* route */}
+      <path d="M55 150 C130 150 150 60 200 60 S300 80 330 64" stroke="var(--sx-primary-500)" strokeWidth="5" strokeLinecap="round" />
+      {/* pins */}
+      <g>
+        <circle cx="55" cy="150" r="9" fill="#fff" stroke="var(--sx-success)" strokeWidth="4" />
+        <path d="M330 40 c0 11 -11 17 -11 17 s-11 -6 -11 -17 a11 11 0 0 1 22 0Z" fill="var(--sx-accent-500)" />
+        <circle cx="319" cy="40" r="4.5" fill="#fff" />
+      </g>
+    </svg>
+  );
+}
+
 /** Round brand mark. */
 export function LogoMark({ className }: { className?: string }) {
   return (
