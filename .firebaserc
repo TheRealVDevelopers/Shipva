@@ -7,7 +7,8 @@
       "hosting": {
         "admin": ["sarva-gn-admin"],
         "customer": ["sarva-gn-book"],
-        "driver": ["sarva-gn-driver"]
+        "driver": ["sarva-gn-driver"],
+        "partner": ["sarva-gn-partner"]
       }
     }
   }
