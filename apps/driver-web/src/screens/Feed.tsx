@@ -4,8 +4,10 @@ import {
   MapPin, Clock, Navigation, Gavel, Radio, ArrowLeftRight, Power, Loader2, Check, X,
 } from 'lucide-react';
 import { Frame } from '../components/Frame.js';
-import { EmptyArt } from '../components/art.js';
+import { EmptyArt, VehicleArt } from '../components/art.js';
 import { useStore, type Job } from '../lib/store.js';
+import { useBookings, updateBooking, type SharedBooking } from '../lib/sharedStore.js';
+import { DRIVER } from '../lib/mocks.js';
 import { rupees } from '../lib/format.js';
 
 const TABS = [
@@ -16,14 +18,22 @@ const TABS = [
 
 export function Feed() {
   const navigate = useNavigate();
-  const { online, setOnline, feed, active, accept } = useStore();
+  const { online, setOnline, feed, active, accept, startShared } = useStore();
   const [tab, setTab] = useState<(typeof TABS)[number]['key']>('instant');
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
 
   const jobs = feed.filter((j) => j.kind === tab && !dismissed.has(j.id));
+  // Real customer bookings (from the customer app, same browser) waiting for a driver.
+  const live = useBookings().filter((b) => b.type === 'instant' && b.status === 'searching');
 
   function onAccept(id: string) {
     accept(id);
+    navigate('/active');
+  }
+
+  function acceptShared(b: SharedBooking) {
+    updateBooking(b.id, { status: 'assigned', driver: { name: DRIVER.name, phone: DRIVER.phone, vehicleReg: DRIVER.vehicleReg, ratingAvg: DRIVER.ratingAvg } });
+    startShared({ id: b.id, kind: 'instant', vehicleType: b.vehicleType, pickup: b.pickup, drop: b.drop, distanceKm: b.distanceKm, customer: b.customerName, farePaise: b.farePaise ?? 0, status: 'assigned', minsAgo: 0, shared: true });
     navigate('/active');
   }
 
@@ -50,6 +60,27 @@ export function Feed() {
             </div>
             <span className="text-xs font-medium text-primary-600">Open →</span>
           </button>
+        )}
+
+        {online && live.length > 0 && (
+          <div className="mb-4">
+            <div className="mb-2 flex items-center gap-1.5 text-sm font-extrabold text-neutral-900"><span className="h-2 w-2 rounded-full bg-accent-500 animate-pulse" /> New customer requests · {live.length}</div>
+            <div className="space-y-2">
+              {live.map((b) => (
+                <div key={b.id} className="rounded-xl border border-accent-200 bg-accent-50/40 p-3">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-2"><VehicleArt type={b.vehicleType} className="h-7 w-10" /><div><div className="font-mono text-[11px] text-primary-700">{b.id}</div><div className="text-xs text-neutral-500">{b.customerName}</div></div></div>
+                    <div className="text-base font-extrabold text-neutral-900">{rupees(b.farePaise ?? 0)}</div>
+                  </div>
+                  <div className="mt-2 space-y-0.5 text-sm text-neutral-700">
+                    <div className="flex items-center gap-1.5"><MapPin size={12} className="text-emerald-600" /> {b.pickup}</div>
+                    <div className="flex items-center gap-1.5"><MapPin size={12} className="text-rose-600" /> {b.drop}</div>
+                  </div>
+                  <button onClick={() => acceptShared(b)} disabled={!!active} className="mt-2 w-full rounded-lg bg-accent-500 py-2.5 text-sm font-bold text-white transition-colors hover:bg-accent-600 disabled:opacity-40">Accept request</button>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
 
         <div className="mb-4 grid grid-cols-3 gap-1 rounded-xl bg-white p-1 ring-1 ring-neutral-200">

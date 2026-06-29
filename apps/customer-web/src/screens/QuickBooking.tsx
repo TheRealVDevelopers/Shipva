@@ -6,7 +6,7 @@ import { estimateFarePaise } from '@ground/shared-logic';
 import { Frame } from '../components/Frame.js';
 import { PrimaryButton } from '../components/Controls.js';
 import { VehicleArt, MapArt } from '../components/art.js';
-import { useStore } from '../lib/store.js';
+import { addBooking, nextBookingId } from '../lib/sharedStore.js';
 import { rupees } from '../lib/format.js';
 
 const ETA: Record<string, string> = {
@@ -16,9 +16,7 @@ const ETA: Record<string, string> = {
 
 export function QuickBooking() {
   const navigate = useNavigate();
-  const { add } = useStore();
   const st = useLocation().state as { trip?: TripType; vehicle?: VehicleType } | null;
-  const trip = st?.trip ?? 'intercity';
 
   const [pickup, setPickup] = useState('Koramangala 5th Block');
   const [drop, setDrop] = useState('');
@@ -31,20 +29,23 @@ export function QuickBooking() {
   const canBook = drop.trim().length > 0;
 
   function book() {
-    const id = add({ type: 'instant', tripType: trip, vehicleType: vehicle, pickup, drop, distanceKm: km, status: 'searching', farePaise: fare });
+    const id = nextBookingId();
+    addBooking({
+      id, type: 'instant', vehicleType: vehicle, pickup, drop, distanceKm: km,
+      farePaise: fare, status: 'searching', customerName: 'Anita Rao', createdAt: Date.now(),
+    });
     navigate(`/searching/${id}`);
   }
 
   return (
     <Frame title="Choose a vehicle" back>
       <div className="pb-40">
-        {/* map + route */}
         <div className="relative">
           <MapArt className="h-44 w-full" />
           <div className="absolute inset-x-3 -bottom-6">
             <div className="rounded-2xl bg-white p-3 shadow-card ring-1 ring-neutral-100">
               <Field icon={<span className="h-2.5 w-2.5 rounded-full bg-success ring-2 ring-success/20" />} value={pickup} onChange={setPickup} />
-              <div className="my-1 ml-[5px] border-l-2 border-dotted border-neutral-200 pl-[15px] text-[10px] text-neutral-400">{km} km · {trip}</div>
+              <div className="my-1 ml-[5px] border-l-2 border-dotted border-neutral-200 pl-[15px] text-[10px] text-neutral-400">{km} km</div>
               <Field icon={<span className="h-2.5 w-2.5 rounded-sm bg-accent-500" />} value={drop} onChange={setDrop} placeholder="Drop location" />
             </div>
           </div>
@@ -65,13 +66,8 @@ export function QuickBooking() {
               const f = estimateFarePaise(v.type, km);
               const active = v.type === vehicle;
               return (
-                <button
-                  key={v.type}
-                  onClick={() => setVehicle(v.type)}
-                  className={`flex w-full items-center gap-3 rounded-2xl border bg-white p-3 text-left transition-all ${
-                    active ? 'border-primary-500 ring-1 ring-primary-500 shadow-card' : 'border-neutral-200 hover:border-primary-300'
-                  }`}
-                >
+                <button key={v.type} onClick={() => setVehicle(v.type)}
+                  className={`flex w-full items-center gap-3 rounded-2xl border bg-white p-3 text-left transition-all ${active ? 'border-primary-500 ring-1 ring-primary-500 shadow-card' : 'border-neutral-200 hover:border-primary-300'}`}>
                   <VehicleArt type={v.type} className="h-10 w-14 shrink-0" />
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-bold text-neutral-900">{v.label}</div>
@@ -94,20 +90,16 @@ export function QuickBooking() {
             <div className="mt-2 space-y-1.5 rounded-xl border border-neutral-200 bg-white p-3 text-xs animate-fade">
               <Row label="Base fare" value={rupees(Math.round(fare * 0.35))} />
               <Row label={`Distance (${km} km)`} value={rupees(Math.round(fare * 0.65))} />
-              <div className="mt-1 flex items-center justify-between border-t border-neutral-100 pt-1.5 font-bold text-neutral-900">
-                <span>Total</span><span>{rupees(fare)}</span>
-              </div>
+              <div className="mt-1 flex items-center justify-between border-t border-neutral-100 pt-1.5 font-bold text-neutral-900"><span>Total</span><span>{rupees(fare)}</span></div>
               <p className="pt-1 text-[10px] text-neutral-400">Commission-free · pay the driver directly. No surge.</p>
             </div>
           )}
         </div>
       </div>
 
-      {/* sticky CTA */}
       <div className="fixed inset-x-0 bottom-0 z-10 mx-auto w-full max-w-md border-t border-neutral-200 bg-white/95 p-3 backdrop-blur">
         <div className="mb-1.5 flex items-center justify-between px-1 text-xs text-neutral-500">
-          <span>{label} · {km} km</span>
-          <span className="font-bold text-neutral-900">{rupees(fare)}</span>
+          <span>{label} · {km} km</span><span className="font-bold text-neutral-900">{rupees(fare)}</span>
         </div>
         <PrimaryButton onClick={book} disabled={!canBook}>Book {label}</PrimaryButton>
         {!canBook && <p className="mt-1.5 text-center text-[11px] text-neutral-400">Enter a drop location to book.</p>}

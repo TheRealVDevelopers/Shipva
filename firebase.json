@@ -19,10 +19,15 @@
   ],
   "hosting": [
     {
-      "target": "admin",
-      "public": "apps/admin-web/dist",
+      "target": "app",
+      "public": "public",
       "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
-      "rewrites": [{ "source": "**", "destination": "/index.html" }]
+      "rewrites": [
+        { "source": "/customer/**", "destination": "/customer/index.html" },
+        { "source": "/driver/**", "destination": "/driver/index.html" },
+        { "source": "/partner/**", "destination": "/partner/index.html" },
+        { "source": "/admin/**", "destination": "/admin/index.html" }
+      ]
     },
     {
       "target": "customer",
@@ -39,6 +44,12 @@
     {
       "target": "partner",
       "public": "apps/partner-web/dist",
+      "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+      "rewrites": [{ "source": "**", "destination": "/index.html" }]
+    },
+    {
+      "target": "admin",
+      "public": "apps/admin-web/dist",
       "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
       "rewrites": [{ "source": "**", "destination": "/index.html" }]
     }

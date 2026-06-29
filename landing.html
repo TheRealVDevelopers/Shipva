@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet" />
+    <meta name="theme-color" content="#2F66EA" />
+    <title>Ground Network — Choose your app</title>
+    <style>
+      * { box-sizing: border-box; margin: 0; }
+      body { font-family: "Nunito", system-ui, sans-serif; background: linear-gradient(160deg, #1B3A85, #2F66EA 60%, #5B89F8); min-height: 100vh; color: #fff; display: flex; align-items: center; justify-content: center; padding: 24px; -webkit-font-smoothing: antialiased; }
+      .wrap { width: 100%; max-width: 880px; }
+      .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
+      .logo { width: 46px; height: 46px; border-radius: 13px; background: #fff; color: #2F66EA; display: grid; place-items: center; font-weight: 900; font-size: 24px; }
+      h1 { font-size: 30px; font-weight: 900; line-height: 1.15; margin-top: 22px; }
+      .sub { color: #D9E6FF; margin-top: 8px; font-size: 15px; max-width: 560px; }
+      .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 16px; margin-top: 30px; }
+      .card { background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.14); border-radius: 18px; padding: 20px; text-decoration: none; color: #fff; transition: transform .15s ease, background .15s ease; display: block; }
+      .card:hover { transform: translateY(-3px); background: rgba(255,255,255,.14); }
+      .ico { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; font-size: 22px; margin-bottom: 12px; }
+      .card h2 { font-size: 17px; font-weight: 800; }
+      .card p { font-size: 12.5px; color: #C7D6F5; margin-top: 4px; }
+      .pill { display: inline-block; margin-top: 14px; font-size: 11px; font-weight: 800; color: #FF9A3D; }
+      .note { margin-top: 26px; font-size: 12.5px; color: #BcCAF0; color: #c2d2f5; }
+      .tag { display:inline-block; background: rgba(255,154,61,.18); color:#FF9A3D; font-weight:800; font-size:11px; padding:4px 10px; border-radius:999px; margin-bottom: 4px;}
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="brand">
+        <div class="logo">G</div>
+        <div><div style="font-weight:900;font-size:18px;line-height:1">Ground Network</div><div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#FF9A3D;font-weight:800">Bangalore logistics</div></div>
+      </div>
+      <span class="tag">One browser · live demo</span>
+      <h1>Choose your app</h1>
+      <p class="sub">All four apps share this browser — book in the Customer app, then open the Driver app in another tab and the request shows up live. Your trips persist across refresh.</p>
+
+      <div class="grid">
+        <a class="card" href="/customer/"><div class="ico" style="background:#2F66EA">📦</div><h2>Customer</h2><p>Book a delivery — instant or auction</p><span class="pill">Open →</span></a>
+        <a class="card" href="/driver/"><div class="ico" style="background:#F97316">🛵</div><h2>Driver</h2><p>Accept nearby jobs, earn</p><span class="pill">Open →</span></a>
+        <a class="card" href="/partner/"><div class="ico" style="background:#182F66">🚚</div><h2>Partner</h2><p>Run your fleet — load board, drivers</p><span class="pill">Open →</span></a>
+        <a class="card" href="/admin/"><div class="ico" style="background:#16A34A">🛠️</div><h2>Admin</h2><p>Dispatch & operations console</p><span class="pill">Open →</span></a>
+      </div>
+
+      <p class="note">Tip: open Customer and Driver in two tabs side by side to see a booking flow from one to the other in real time.</p>
+    </div>
+  </body>
+</html>

@@ -5,6 +5,7 @@
   "targets": {
     "sarvaexpressos": {
       "hosting": {
+        "app": ["sarva-gn-app"],
         "admin": ["sarva-gn-admin"],
         "customer": ["sarva-gn-book"],
         "driver": ["sarva-gn-driver"],

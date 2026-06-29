@@ -5,7 +5,13 @@ import {
 import { Frame } from '../components/Frame.js';
 import { PrimaryButton } from '../components/Controls.js';
 import { useStore, type JobStatus } from '../lib/store.js';
+import { updateBooking } from '../lib/sharedStore.js';
+import type { BookingStatus } from '@ground/shared-types';
 import { rupees } from '../lib/format.js';
+
+const SHARED_NEXT: Partial<Record<JobStatus, BookingStatus>> = {
+  assigned: 'arrived', arrived: 'picked_up', picked_up: 'in_transit', in_transit: 'delivered',
+};
 
 const STEPS: { key: JobStatus; label: string }[] = [
   { key: 'assigned', label: 'Heading to pickup' },
@@ -44,6 +50,8 @@ export function Active() {
   const pay = active.farePaise ?? active.basePricePaise ?? 0;
 
   function onAction() {
+    const next = SHARED_NEXT[active!.status];
+    if (active!.shared && next) updateBooking(active!.id, { status: next });
     if (active!.status === 'in_transit') { complete(); navigate('/earnings'); }
     else advance();
   }

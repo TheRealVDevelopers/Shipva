@@ -19,6 +19,7 @@ export interface Job {
   status: JobStatus;
   payoutPaise?: number;     // realised on delivery
   minsAgo: number;
+  shared?: boolean;         // true when this job mirrors a real customer booking
 }
 
 interface Store {
@@ -32,6 +33,7 @@ interface Store {
   win: (id: string) => void;
   advance: () => void;
   complete: () => void;
+  startShared: (job: Job) => void;
 }
 
 const Ctx = createContext<Store | null>(null);
@@ -83,8 +85,13 @@ export function StoreProvider({ children, seedFeed, seedCompleted }: {
       return null;
     });
 
+  const startShared: Store['startShared'] = (job) => {
+    if (active) return;
+    setActive(job);
+  };
+
   return (
-    <Ctx.Provider value={{ online, setOnline, feed, active, completed, accept, placeBid, win, advance, complete }}>
+    <Ctx.Provider value={{ online, setOnline, feed, active, completed, accept, placeBid, win, advance, complete, startShared }}>
       {children}
     </Ctx.Provider>
   );
