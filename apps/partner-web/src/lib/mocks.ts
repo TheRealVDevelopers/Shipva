@@ -98,3 +98,137 @@ export const payouts = [
   { id: 'PO-198', period: '9–15 Jun', amountPaise: 5140000, status: 'settled', on: '16 Jun' },
   { id: 'PO-191', period: '2–8 Jun', amountPaise: 3960000, status: 'settled', on: '9 Jun' },
 ];
+
+/* ===================== Transporter OS datasets ===================== */
+
+/** Headline counters for the redesigned Overview (money in paise). */
+export const osCounters = {
+  revenueMtdPaise: 38640000,
+  expenseMtdPaise: 25100000,
+  profitMtdPaise: 13540000,
+  outstandingPaise: 61250000,
+  activeTrips: 5,
+  driversTotal: 6,
+  fleetSize: 5,
+  utilizationPct: 68,
+  fuelMtdPaise: 9800000,
+  avgMarginPct: 35,
+  tripsMtd: 47,
+};
+
+export const months6 = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
+export const revenueSeries = [32000000, 35500000, 31000000, 38000000, 41200000, 38640000];
+export const expenseSeries = [21000000, 23500000, 22000000, 24000000, 26800000, 25100000];
+export const fuelSeries = [7800000, 8200000, 7500000, 8600000, 9400000, 9800000];
+export const profitSpark = revenueSeries.map((r, i) => r - expenseSeries[i]!);
+
+/** Small sparkline series for stat cards. */
+export const sparks = {
+  revenue: [28, 31, 27, 34, 39, 42, 38, 41],
+  profit: [9, 12, 10, 13, 12, 15, 13, 16],
+  outstanding: [72, 70, 66, 63, 65, 61, 59, 61],
+  trips: [6, 5, 8, 7, 9, 7, 8, 9],
+};
+
+export interface ExpenseSlice { label: string; value: number; color: string }
+export const expenseBreakdown: ExpenseSlice[] = [
+  { label: 'Fuel', value: 9800000, color: 'var(--sx-accent-500)' },
+  { label: 'Salaries', value: 7200000, color: 'var(--sx-primary-500)' },
+  { label: 'Toll & RTO', value: 3100000, color: '#0ea5e9' },
+  { label: 'Maintenance', value: 2600000, color: '#8b5cf6' },
+  { label: 'Misc', value: 2400000, color: 'var(--sx-neutral-400)' },
+];
+
+/** Receivables aging buckets (paise). */
+export const receivables = {
+  outstandingPaise: 61250000,
+  collectedMtdPaise: 44200000,
+  aging: [
+    { bucket: '0–30 days', amountPaise: 28500000, tone: 'success' as const },
+    { bucket: '31–60 days', amountPaise: 18000000, tone: 'warning' as const },
+    { bucket: '61–90 days', amountPaise: 9750000, tone: 'accent' as const },
+    { bucket: '90+ days', amountPaise: 5000000, tone: 'danger' as const },
+  ],
+};
+
+export const fuel = {
+  mtdCostPaise: 9800000,
+  expectedPaise: 9100000,   // (distance ÷ mileage) × diesel rate
+  leakagePaise: 700000,
+};
+
+export interface DocAlert { reg: string; doc: string; dueInDays: number }
+export const docAlerts: DocAlert[] = [
+  { reg: 'KA05K2245', doc: 'Insurance', dueInDays: 4 },
+  { reg: 'KA09H8810', doc: 'National Permit', dueInDays: 12 },
+  { reg: 'KA01C5521', doc: 'Fitness Certificate', dueInDays: 26 },
+];
+
+export type TripStatus = 'assigned' | 'loading' | 'in_transit' | 'at_drop' | 'pod_pending' | 'closed';
+export interface Trip {
+  lr: string; date: string; from: string; to: string; driver: string; vehicleReg: string;
+  material: string; weightKg: number; freightPaise: number; status: TripStatus; ewayBill: boolean;
+}
+export const trips: Trip[] = [
+  { lr: 'LR-24817', date: '27 Jun', from: 'Peenya', to: 'Hosur', driver: 'Ramesh Yadav', vehicleReg: 'KA01C5521', material: 'Steel coils', weightKg: 6800, freightPaise: 520000, status: 'in_transit', ewayBill: true },
+  { lr: 'LR-24816', date: '27 Jun', from: 'Whitefield', to: 'KR Puram', driver: 'Iqbal Sharief', vehicleReg: 'KA09H8810', material: 'Electronics', weightKg: 2400, freightPaise: 180000, status: 'loading', ewayBill: true },
+  { lr: 'LR-24814', date: '26 Jun', from: 'Bengaluru', to: 'Chennai', driver: 'Sathish Reddy', vehicleReg: 'KA02D9930', material: 'Polymer granules', weightKg: 2200, freightPaise: 1150000, status: 'at_drop', ewayBill: true },
+  { lr: 'LR-24811', date: '26 Jun', from: 'Peenya', to: 'Yelahanka', driver: 'Lokesh M', vehicleReg: 'KA03P7782', material: 'FMCG cartons', weightKg: 1400, freightPaise: 96000, status: 'pod_pending', ewayBill: false },
+  { lr: 'LR-24805', date: '25 Jun', from: 'Bengaluru', to: 'Hyderabad', driver: 'Iqbal Sharief', vehicleReg: 'KA09H8810', material: 'Machinery', weightKg: 6500, freightPaise: 2640000, status: 'closed', ewayBill: true },
+  { lr: 'LR-24802', date: '24 Jun', from: 'Whitefield', to: 'Mysuru', driver: 'Naveen Kumar', vehicleReg: 'KA51F1207', material: 'Textiles', weightKg: 1500, freightPaise: 412000, status: 'closed', ewayBill: true },
+];
+
+export type InvoiceStatus = 'paid' | 'pending' | 'overdue';
+export interface Invoice {
+  no: string; client: string; date: string; dueDate: string;
+  basePaise: number; gstPaise: number; totalPaise: number; status: InvoiceStatus;
+}
+export const invoices: Invoice[] = [
+  { no: 'INV-1042', client: 'Bharat Steels', date: '26 Jun', dueDate: '11 Jul', basePaise: 520000, gstPaise: 93600, totalPaise: 613600, status: 'pending' },
+  { no: 'INV-1041', client: 'Vexa Polymers', date: '25 Jun', dueDate: '10 Jul', basePaise: 1150000, gstPaise: 207000, totalPaise: 1357000, status: 'pending' },
+  { no: 'INV-1038', client: 'FreshCo Dairy', date: '22 Jun', dueDate: '7 Jul', basePaise: 2640000, gstPaise: 475200, totalPaise: 3115200, status: 'paid' },
+  { no: 'INV-1035', client: 'Leela Stores', date: '18 Jun', dueDate: '3 Jul', basePaise: 96000, gstPaise: 17280, totalPaise: 113280, status: 'overdue' },
+  { no: 'INV-1030', client: 'Deccan Freight', date: '12 Jun', dueDate: '27 Jun', basePaise: 300000, gstPaise: 54000, totalPaise: 354000, status: 'overdue' },
+  { no: 'INV-1028', client: 'Bharat Steels', date: '10 Jun', dueDate: '25 Jun', basePaise: 480000, gstPaise: 86400, totalPaise: 566400, status: 'paid' },
+];
+
+export interface Expense { date: string; tripLr: string; category: string; amountPaise: number; note: string }
+export const expenses: Expense[] = [
+  { date: '27 Jun', tripLr: 'LR-24817', category: 'Toll', amountPaise: 42000, note: 'NICE Road + Hosur' },
+  { date: '27 Jun', tripLr: 'LR-24817', category: 'Loading', amountPaise: 25000, note: 'Peenya hamali' },
+  { date: '26 Jun', tripLr: 'LR-24814', category: 'Toll', amountPaise: 118000, note: 'BLR–Chennai NH' },
+  { date: '26 Jun', tripLr: 'LR-24811', category: 'RTO/Police', amountPaise: 15000, note: 'Checkpost' },
+  { date: '25 Jun', tripLr: 'LR-24805', category: 'Repairs', amountPaise: 86000, note: 'Tyre replacement' },
+  { date: '24 Jun', tripLr: 'LR-24802', category: 'Misc', amountPaise: 12000, note: 'Driver bhatta top-up' },
+];
+
+export interface FuelLog {
+  date: string; reg: string; km: number; litres: number; ratePaise: number; costPaise: number; expectedPaise: number; ok: boolean;
+}
+export const fuelLogs: FuelLog[] = [
+  { date: '27 Jun', reg: 'KA01C5521', km: 96, litres: 34, ratePaise: 9200, costPaise: 312800, expectedPaise: 294400, ok: true },
+  { date: '26 Jun', reg: 'KA02D9930', km: 348, litres: 41, ratePaise: 9200, costPaise: 377200, expectedPaise: 358800, ok: true },
+  { date: '25 Jun', reg: 'KA09H8810', km: 575, litres: 82, ratePaise: 9200, costPaise: 754400, expectedPaise: 644000, ok: false },
+  { date: '24 Jun', reg: 'KA51F1207', km: 142, litres: 20, ratePaise: 9200, costPaise: 184000, expectedPaise: 174800, ok: true },
+];
+
+export type StaffRole = 'manager' | 'supervisor' | 'accountant';
+export interface Staff { id: string; name: string; role: StaffRole; phone: string; since: string; scope: string }
+export const staff: Staff[] = [
+  { id: 's1', name: 'Prakash Nayak', role: 'manager', phone: '+91 99011 22001', since: 'Jan 2025', scope: 'All operations' },
+  { id: 's2', name: 'Sunil D.', role: 'supervisor', phone: '+91 99011 22002', since: 'Mar 2025', scope: 'Peenya pool' },
+  { id: 's3', name: 'Farhan A.', role: 'supervisor', phone: '+91 99011 22003', since: 'Jun 2025', scope: 'Hosur pool' },
+  { id: 's4', name: 'Lakshmi R.', role: 'accountant', phone: '+91 99011 22004', since: 'Feb 2025', scope: 'Billing & payroll' },
+];
+
+export type PayStatus = 'paid' | 'due';
+export interface PayrollLine {
+  id: string; name: string; role: string; basePaise: number; bhattaPaise: number; deductionsPaise: number; netPaise: number; status: PayStatus;
+}
+export const payroll: PayrollLine[] = [
+  { id: 'p1', name: 'Ramesh Yadav', role: 'Driver', basePaise: 1800000, bhattaPaise: 620000, deductionsPaise: 150000, netPaise: 2270000, status: 'due' },
+  { id: 'p2', name: 'Sathish Reddy', role: 'Driver', basePaise: 1800000, bhattaPaise: 540000, deductionsPaise: 90000, netPaise: 2250000, status: 'due' },
+  { id: 'p3', name: 'Naveen Kumar', role: 'Driver', basePaise: 1700000, bhattaPaise: 480000, deductionsPaise: 60000, netPaise: 2120000, status: 'paid' },
+  { id: 'p4', name: 'Sunil D.', role: 'Supervisor', basePaise: 2600000, bhattaPaise: 0, deductionsPaise: 120000, netPaise: 2480000, status: 'due' },
+  { id: 'p5', name: 'Lakshmi R.', role: 'Accountant', basePaise: 2400000, bhattaPaise: 0, deductionsPaise: 110000, netPaise: 2290000, status: 'paid' },
+];

@@ -1,6 +1,11 @@
 import { Route, Routes, Navigate } from 'react-router-dom';
 import { Login } from './routes/partner/Login.js';
 import { Overview } from './routes/partner/Overview.js';
+import { Trips } from './routes/partner/Trips.js';
+import { Team } from './routes/partner/Team.js';
+import { Invoices } from './routes/partner/Invoices.js';
+import { Expenses } from './routes/partner/Expenses.js';
+import { Payroll } from './routes/partner/Payroll.js';
 import { LoadBoard } from './routes/partner/LoadBoard.js';
 import { ActiveJobs } from './routes/partner/ActiveJobs.js';
 import { Fleet } from './routes/partner/Fleet.js';
@@ -14,6 +19,11 @@ export function App() {
       <Route path="/" element={<Navigate to="/login" replace />} />
       <Route path="/login" element={<Login />} />
       <Route path="/p" element={<Overview />} />
+      <Route path="/p/trips" element={<Trips />} />
+      <Route path="/p/team" element={<Team />} />
+      <Route path="/p/invoices" element={<Invoices />} />
+      <Route path="/p/expenses" element={<Expenses />} />
+      <Route path="/p/payroll" element={<Payroll />} />
       <Route path="/p/loads" element={<LoadBoard />} />
       <Route path="/p/jobs" element={<ActiveJobs />} />
       <Route path="/p/fleet" element={<Fleet />} />

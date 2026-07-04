@@ -1,17 +1,23 @@
 import { type ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
-  LayoutDashboard, PackageSearch, Navigation, Users, Wallet, BadgeCheck, Building2, ShieldCheck, Bell,
+  LayoutDashboard, ClipboardList, Truck, UserCog, FileText, Fuel, Wallet, TrendingUp,
+  PackageSearch, Navigation, BadgeCheck, Building2, ShieldCheck, Bell,
 } from 'lucide-react';
 import { LogoMark } from '../art.js';
 import { subscription } from '../../lib/mocks.js';
 
 const NAV = [
   { to: '/p', label: 'Overview', icon: LayoutDashboard, end: true },
-  { to: '/p/loads', label: 'Load Board', icon: PackageSearch },
-  { to: '/p/jobs', label: 'Active Jobs', icon: Navigation },
-  { to: '/p/fleet', label: 'My Fleet', icon: Users },
-  { to: '/p/earnings', label: 'Earnings', icon: Wallet },
+  { to: '/p/trips', label: 'Trips', icon: ClipboardList },
+  { to: '/p/fleet', label: 'My Fleet', icon: Truck },
+  { to: '/p/team', label: 'Team & Roles', icon: UserCog },
+  { to: '/p/invoices', label: 'Invoices', icon: FileText },
+  { to: '/p/expenses', label: 'Expenses & Fuel', icon: Fuel },
+  { to: '/p/payroll', label: 'Payroll', icon: Wallet },
+  { to: '/p/earnings', label: 'Earnings', icon: TrendingUp },
+  { to: '/p/loads', label: 'Load Board', icon: PackageSearch, soon: true },
+  { to: '/p/jobs', label: 'Active Jobs', icon: Navigation, soon: true },
   { to: '/p/subscription', label: 'Subscription', icon: BadgeCheck },
   { to: '/p/profile', label: 'Profile', icon: Building2 },
 ];
@@ -31,7 +37,7 @@ export function PartnerLayout({ title, subtitle, children }: { title: string; su
 
         <nav className="flex-1 overflow-y-auto px-3 py-4">
           <ul className="space-y-0.5">
-            {NAV.map(({ to, label, icon: Icon, end }) => (
+            {NAV.map(({ to, label, icon: Icon, end, soon }) => (
               <li key={to}>
                 <NavLink
                   to={to}
@@ -45,7 +51,8 @@ export function PartnerLayout({ title, subtitle, children }: { title: string; su
                   {({ isActive }) => (
                     <>
                       {isActive && <span className="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r bg-accent-400" />}
-                      <Icon size={17} /> {label}
+                      <Icon size={17} /> <span className="flex-1">{label}</span>
+                      {soon && <span className="rounded bg-white/10 px-1.5 py-0.5 text-[9px] font-extrabold tracking-wide text-primary-200">SOON</span>}
                     </>
                   )}
                 </NavLink>
