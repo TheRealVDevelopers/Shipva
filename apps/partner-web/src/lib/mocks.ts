@@ -212,6 +212,20 @@ export const fuelLogs: FuelLog[] = [
   { date: '24 Jun', reg: 'KA51F1207', km: 142, litres: 20, ratePaise: 9200, costPaise: 184000, expectedPaise: 174800, ok: true },
 ];
 
+export interface VehicleDoc { reg: string; doc: string; expires: string; dueInDays: number }
+export const vehicleDocs: VehicleDoc[] = [
+  { reg: 'KA05K2245', doc: 'Insurance', expires: '8 Jul 2026', dueInDays: 4 },
+  { reg: 'KA09H8810', doc: 'National Permit', expires: '16 Jul 2026', dueInDays: 12 },
+  { reg: 'KA01C5521', doc: 'Fitness Certificate', expires: '30 Jul 2026', dueInDays: 26 },
+  { reg: 'KA02D9930', doc: 'Insurance', expires: '14 Aug 2026', dueInDays: 41 },
+  { reg: 'KA01C5521', doc: 'Insurance', expires: '2 Sep 2026', dueInDays: 60 },
+  { reg: 'KA51F1207', doc: 'PUC', expires: '19 Jul 2026', dueInDays: 15 },
+  { reg: 'KA03P7782', doc: 'Road Tax', expires: '28 Sep 2026', dueInDays: 86 },
+  { reg: 'KA09H8810', doc: 'Fitness Certificate', expires: '1 Jul 2026', dueInDays: -3 },
+  { reg: 'KA02D9930', doc: 'National Permit', expires: '11 Nov 2026', dueInDays: 130 },
+  { reg: 'KA05K2245', doc: 'PUC', expires: '22 Jul 2026', dueInDays: 18 },
+];
+
 export type StaffRole = 'manager' | 'supervisor' | 'accountant';
 export interface Staff { id: string; name: string; role: StaffRole; phone: string; since: string; scope: string }
 export const staff: Staff[] = [

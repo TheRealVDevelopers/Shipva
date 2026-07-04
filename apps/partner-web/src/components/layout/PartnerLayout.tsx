@@ -1,8 +1,9 @@
 import { useState, type ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
-  LayoutDashboard, ClipboardList, Truck, UserCog, Users, FileText, Fuel, Wallet, HandCoins,
-  TrendingUp, PackageSearch, Navigation, BadgeCheck, Building2, ShieldCheck, Bell, Menu, X,
+  LayoutDashboard, ClipboardList, Truck, FileCheck2, UserCog, Users, FileText, Fuel, Wallet,
+  HandCoins, BarChart3, TrendingUp, PackageSearch, Navigation, BadgeCheck, Building2, Settings as SettingsIcon,
+  ShieldCheck, Bell, Menu, X,
 } from 'lucide-react';
 import { LogoMark } from '../art.js';
 import { subscription } from '../../lib/mocks.js';
@@ -11,6 +12,7 @@ const NAV = [
   { to: '/p', label: 'Overview', icon: LayoutDashboard, end: true },
   { to: '/p/trips', label: 'Trips', icon: ClipboardList },
   { to: '/p/fleet', label: 'My Fleet', icon: Truck },
+  { to: '/p/documents', label: 'Documents', icon: FileCheck2 },
   { to: '/p/team', label: 'Team & Roles', icon: UserCog },
   { to: '/p/customers', label: 'Customers', icon: Users },
   { to: '/p/invoices', label: 'Invoices', icon: FileText },
@@ -18,10 +20,12 @@ const NAV = [
   { to: '/p/payables', label: 'Payables', icon: HandCoins },
   { to: '/p/payroll', label: 'Payroll', icon: Wallet },
   { to: '/p/earnings', label: 'Earnings', icon: TrendingUp },
+  { to: '/p/reports', label: 'Reports', icon: BarChart3 },
   { to: '/p/loads', label: 'Load Board', icon: PackageSearch, soon: true },
   { to: '/p/jobs', label: 'Active Jobs', icon: Navigation, soon: true },
   { to: '/p/subscription', label: 'Subscription', icon: BadgeCheck },
   { to: '/p/profile', label: 'Profile', icon: Building2 },
+  { to: '/p/settings', label: 'Settings', icon: SettingsIcon },
 ];
 
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
