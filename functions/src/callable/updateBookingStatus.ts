@@ -1,6 +1,6 @@
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
-import type { Booking, BookingStatus } from '@ground/shared-types';
-import { isLegalBookingTransition } from '@ground/shared-logic';
+import type { Booking, BookingStatus } from '@shipva/shared-types';
+import { isLegalBookingTransition } from '@shipva/shared-logic';
 import { db } from '../admin.js';
 import { requireAuth } from '../lib/authz.js';
 

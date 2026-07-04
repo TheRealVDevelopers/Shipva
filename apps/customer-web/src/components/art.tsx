@@ -1,8 +1,8 @@
 /**
- * Ground Network illustration set — inline SVG in brand colors (blue/white/orange).
+ * ShipVa illustration set — inline SVG in brand colors (blue/white/orange).
  * No external assets. Colors pull from CSS vars so they track the theme.
  */
-import type { VehicleType } from '@ground/shared-types';
+import type { VehicleType } from '@shipva/shared-types';
 
 const BLUE = 'var(--sx-primary-500)';
 const BLUE_D = 'var(--sx-primary-700)';

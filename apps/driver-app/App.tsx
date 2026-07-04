@@ -1,12 +1,13 @@
+import type { ReactElement } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, Text, View } from 'react-native';
-import { colors } from '@ground/ui';
+import { colors } from '@shipva/ui';
 
-export default function App() {
+export default function App(): ReactElement {
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
-      <Text style={styles.title}>Ground Network · Driver</Text>
+      <Text style={styles.title}>ShipVa · Driver</Text>
       <Text style={styles.body}>
         Phase 1 scaffold. Implement: phone-OTP login, online/offline toggle, nearby
         jobs (FCM by zone+vehicle), atomic accept, navigate, status updates, place

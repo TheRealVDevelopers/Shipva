@@ -1,5 +1,5 @@
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
-import type { Booking, Driver } from '@ground/shared-types';
+import type { Booking, Driver } from '@shipva/shared-types';
 import { db } from '../admin.js';
 import { requireAuth } from '../lib/authz.js';
 

@@ -1,6 +1,6 @@
 import { type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { Minus, Plus } from 'lucide-react';
-import { VEHICLE_TYPES, type VehicleType } from '@ground/shared-types';
+import { VEHICLE_TYPES, type VehicleType } from '@shipva/shared-types';
 import { VehicleArt } from './art.js';
 
 export function PrimaryButton({ children, className = '', ...rest }: ButtonHTMLAttributes<HTMLButtonElement> & { children: ReactNode }) {

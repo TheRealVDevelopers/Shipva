@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MapPin, ChevronDown, Search, Radio, Gavel, ChevronRight } from 'lucide-react';
-import { VEHICLE_TYPES, type TripType } from '@ground/shared-types';
-import { isActiveBooking } from '@ground/shared-logic';
+import { VEHICLE_TYPES, type TripType } from '@shipva/shared-types';
+import { isActiveBooking } from '@shipva/shared-logic';
 import { Frame } from '../components/Frame.js';
 import { VehicleArt } from '../components/art.js';
 import { BookingStatusBadge } from '../components/StatusBadge.js';

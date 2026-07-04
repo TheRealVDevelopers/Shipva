@@ -1,6 +1,6 @@
 # Transporter OS — Phase 1 Product Spec
 
-_Ground Network · drafted 2026-07-04_
+_ShipVa · drafted 2026-07-04_
 
 > **One-line strategy:** Win the supply side first. Give each transporter (the commission
 > agent / middleman) an operating system for their daily chaos, charge them a flat monthly
@@ -15,7 +15,7 @@ _Ground Network · drafted 2026-07-04_
 |---|---|
 | Phase-1 product | **Pure multi-tenant Transporter OS** — internal operations software. No load-matching marketplace yet. |
 | Monetization | **Flat monthly subscription**, charged to the transporter. Tiered by fleet size. |
-| Home repo | **Ground Network** — elevate `apps/partner-web` into the full OS. |
+| Home repo | **ShipVa** — elevate `apps/partner-web` into the full OS. |
 | Reuse | Port operational depth (roles, GST invoicing, payroll, trip lifecycle) from the **Sarva Express OS** repo. |
 | Phase 2 (~6 mo+) | Turn on the marketplace layer (load board / auctions already scaffolded in partner-web) + **driver & customer subscriptions**. |
 
@@ -78,7 +78,7 @@ Every job a transporter does, and where each capability comes from:
 
 ### 3.4 Live tracking
 - [HAVE/Phase-2 shell] Duty status; [PORT] geofence + tracking-token logic already reusable
-- [NEW] Per-driver GPS via the **driver app** (Ground Network `apps/driver-app` / `driver-web`)
+- [NEW] Per-driver GPS via the **driver app** (ShipVa `apps/driver-app` / `driver-web`)
 
 ### 3.5 Money — the subscription-justifying core
 - [PORT] **GST invoicing** (`Sarva OS: packages/shared-types/src/billing.ts`, invoices)

@@ -7,7 +7,7 @@ import { BookingStatusBadge } from '../../components/ui/StatusBadge.js';
 import { Badge } from '../../components/ui/Badge.js';
 import { Button } from '../../components/ui/Button.js';
 import { bookings } from '../../lib/mocks.js';
-import { isActiveBooking } from '@ground/shared-logic';
+import { isActiveBooking } from '@shipva/shared-logic';
 import { rupees, dateTime } from '../../lib/format.js';
 import { VehicleArt } from '../../components/art.js';
 

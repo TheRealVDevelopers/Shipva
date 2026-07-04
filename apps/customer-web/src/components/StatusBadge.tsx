@@ -1,4 +1,4 @@
-import type { BookingStatus } from '@ground/shared-types';
+import type { BookingStatus } from '@shipva/shared-types';
 
 const MAP: Record<BookingStatus, { label: string; cls: string }> = {
   requested: { label: 'Requested', cls: 'bg-neutral-100 text-neutral-600' },

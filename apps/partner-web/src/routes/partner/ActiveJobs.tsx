@@ -5,7 +5,7 @@ import { Button } from '../../components/ui/Button.js';
 import { BookingStatusBadge } from '../../components/ui/StatusBadge.js';
 import { VehicleArt } from '../../components/art.js';
 import { activeJobs } from '../../lib/mocks.js';
-import type { BookingStatus } from '@ground/shared-types';
+import type { BookingStatus } from '@shipva/shared-types';
 
 const STEPS: { key: BookingStatus; label: string }[] = [
   { key: 'assigned', label: 'To pickup' },

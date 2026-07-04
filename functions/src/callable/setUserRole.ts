@@ -1,5 +1,5 @@
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
-import type { Role, RoleScopes } from '@ground/shared-types';
+import type { Role, RoleScopes } from '@shipva/shared-types';
 import { auth, db } from '../admin.js';
 import { requireRole } from '../lib/authz.js';
 

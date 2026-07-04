@@ -19,7 +19,7 @@ export function Sidebar() {
       <div className="flex h-16 items-center gap-2 border-b border-neutral-100 px-5">
         <LogoMark className="h-8 w-8" />
         <div>
-          <div className="text-sm font-semibold text-neutral-900 leading-none">Ground Network</div>
+          <div className="text-sm font-semibold text-neutral-900 leading-none">ShipVa</div>
           <div className="mt-0.5 text-[10px] uppercase tracking-wide text-neutral-500">Admin & Dispatch</div>
         </div>
       </div>

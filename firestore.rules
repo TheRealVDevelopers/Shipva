@@ -1,6 +1,6 @@
 rules_version = '2';
 
-// Ground Network — deny-by-default. All writes that carry business rules go
+// ShipVa — deny-by-default. All writes that carry business rules go
 // through Cloud Functions (admin SDK bypasses these rules). Clients get
 // scoped reads + a few self-service writes only.
 service cloud.firestore {

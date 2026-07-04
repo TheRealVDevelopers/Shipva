@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Ground Network Driver",
-    "slug": "ground-network-driver",
+    "name": "ShipVa Driver",
+    "slug": "shipva-driver",
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
@@ -11,16 +11,16 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "in.groundnetwork.driver",
+      "bundleIdentifier": "in.shipva.driver",
       "infoPlist": {
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "Ground Network needs your location to alert you to nearby jobs and track active trips.",
-        "NSLocationWhenInUseUsageDescription": "Ground Network needs your location to alert you to nearby jobs and track active trips.",
-        "NSCameraUsageDescription": "Ground Network needs the camera for delivery proof photos.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "ShipVa needs your location to alert you to nearby jobs and track active trips.",
+        "NSLocationWhenInUseUsageDescription": "ShipVa needs your location to alert you to nearby jobs and track active trips.",
+        "NSCameraUsageDescription": "ShipVa needs the camera for delivery proof photos.",
         "UIBackgroundModes": ["location"]
       }
     },
     "android": {
-      "package": "in.groundnetwork.driver",
+      "package": "in.shipva.driver",
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
@@ -32,7 +32,7 @@
     },
     "plugins": ["expo-camera", "expo-location", "expo-notifications", "expo-secure-store"],
     "extra": {
-      "firebaseProjectId": "ground-network"
+      "firebaseProjectId": "sarvaexpressos"
     }
   }
 }

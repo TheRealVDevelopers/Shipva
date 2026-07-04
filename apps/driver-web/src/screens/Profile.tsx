@@ -43,7 +43,7 @@ export function Profile() {
         <button onClick={() => navigate('/')} className="flex w-full items-center justify-center gap-2 rounded-xl border border-neutral-200 bg-white py-3 text-sm font-medium text-rose-600">
           <LogOut size={15} /> Sign out
         </button>
-        <p className="text-center text-[11px] text-neutral-400">Ground Network · driver preview</p>
+        <p className="text-center text-[11px] text-neutral-400">ShipVa · driver preview</p>
       </div>
     </Frame>
   );

@@ -1,5 +1,5 @@
 /**
- * Ground Network brand tokens — blue · white · orange.
+ * ShipVa brand tokens — blue · white · orange.
  * The web apps read the CSS-variable mirror (tokens.css); this TS copy is for
  * the React Native (Expo) app and any JS consumers. Keep the two in sync.
  */

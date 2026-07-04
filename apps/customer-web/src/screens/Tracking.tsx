@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { CheckCircle2, Circle, Phone, Star, Truck, MapPin } from 'lucide-react';
-import type { BookingStatus } from '@ground/shared-types';
+import type { BookingStatus } from '@shipva/shared-types';
 import { Frame } from '../components/Frame.js';
 import { MapArt } from '../components/art.js';
 import { useBooking, updateBooking, getBooking } from '../lib/sharedStore.js';

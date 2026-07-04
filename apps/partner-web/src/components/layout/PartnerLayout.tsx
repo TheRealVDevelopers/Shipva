@@ -24,7 +24,7 @@ export function PartnerLayout({ title, subtitle, children }: { title: string; su
         <div className="flex h-16 items-center gap-2.5 px-5">
           <LogoMark className="h-8 w-8" />
           <div>
-            <div className="text-sm font-extrabold leading-none">Ground Network</div>
+            <div className="text-sm font-extrabold leading-none">ShipVa</div>
             <div className="mt-0.5 text-[10px] font-bold uppercase tracking-widest text-accent-400">Partner</div>
           </div>
         </div>

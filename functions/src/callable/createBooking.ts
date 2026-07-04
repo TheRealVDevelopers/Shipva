@@ -1,8 +1,8 @@
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import type {
   Booking, BookingPlace, BookingSource, BookingType, TripType, VehicleType,
-} from '@ground/shared-types';
-import { estimateFarePaise, suggestedBasePricePaise } from '@ground/shared-logic';
+} from '@shipva/shared-types';
+import { estimateFarePaise, suggestedBasePricePaise } from '@shipva/shared-logic';
 import { db } from '../admin.js';
 import { requireAuth } from '../lib/authz.js';
 

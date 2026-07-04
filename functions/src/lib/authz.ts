@@ -1,5 +1,5 @@
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
-import type { Role, RoleScopes } from '@ground/shared-types';
+import type { Role, RoleScopes } from '@shipva/shared-types';
 
 /**
  * Authn/authz guards for callable functions.

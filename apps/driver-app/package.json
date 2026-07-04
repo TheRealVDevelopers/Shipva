@@ -1,5 +1,5 @@
 {
-  "name": "@ground/driver-app",
+  "name": "@shipva/driver-app",
   "version": "0.1.0",
   "private": true,
   "main": "index.ts",
@@ -10,9 +10,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@ground/shared-types": "*",
-    "@ground/shared-logic": "*",
-    "@ground/ui": "*",
+    "@shipva/shared-types": "*",
+    "@shipva/shared-logic": "*",
+    "@shipva/ui": "*",
     "expo": "~51.0.0",
     "expo-camera": "~15.0.0",
     "expo-image-manipulator": "~12.0.0",

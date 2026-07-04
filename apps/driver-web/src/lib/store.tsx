@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, type ReactNode } from 'react';
-import type { VehicleType } from '@ground/shared-types';
+import type { VehicleType } from '@shipva/shared-types';
 
 export type JobKind = 'instant' | 'auction' | 'backhaul';
 export type JobStatus = 'open' | 'assigned' | 'arrived' | 'picked_up' | 'in_transit' | 'delivered';

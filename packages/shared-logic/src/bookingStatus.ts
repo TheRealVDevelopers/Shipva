@@ -1,4 +1,4 @@
-import type { BookingStatus, BookingType } from '@ground/shared-types';
+import type { BookingStatus, BookingType } from '@shipva/shared-types';
 
 /**
  * The booking finite-state machine. This is the ONLY definition of which

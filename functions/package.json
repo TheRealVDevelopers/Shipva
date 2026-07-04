@@ -20,8 +20,8 @@
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^4.0.1",
-    "@ground/shared-types": "*",
-    "@ground/shared-logic": "*",
+    "@shipva/shared-types": "*",
+    "@shipva/shared-logic": "*",
     "@types/node": "^20.16.13",
     "esbuild": "^0.24.0",
     "typescript": "^5.6.3",

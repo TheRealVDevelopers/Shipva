@@ -6,7 +6,7 @@
  * cross-tab updates; the `storage` event is the fallback.
  */
 import { useEffect, useState } from 'react';
-import type { BookingStatus, VehicleType } from '@ground/shared-types';
+import type { BookingStatus, VehicleType } from '@shipva/shared-types';
 
 export interface SharedBooking {
   id: string;

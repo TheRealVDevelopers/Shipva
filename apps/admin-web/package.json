@@ -1,5 +1,5 @@
 {
-  "name": "@ground/admin-web",
+  "name": "@shipva/admin-web",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -10,9 +10,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@ground/shared-logic": "*",
-    "@ground/shared-types": "*",
-    "@ground/ui": "*",
+    "@shipva/shared-logic": "*",
+    "@shipva/shared-types": "*",
+    "@shipva/ui": "*",
     "@tanstack/react-query": "^5.59.0",
     "firebase": "^11.0.1",
     "lucide-react": "^1.17.0",

@@ -4,8 +4,8 @@ import { writeFileSync } from 'node:fs';
 /**
  * Bundle functions for Firebase deploy.
  *
- * Why bundle: the source imports workspace packages (@ground/shared-types,
- * @ground/shared-logic) which exist only in the monorepo's hoisted
+ * Why bundle: the source imports workspace packages (@shipva/shared-types,
+ * @shipva/shared-logic) which exist only in the monorepo's hoisted
  * node_modules. Firebase deploy zips JUST the functions/ folder and runs
  * `npm install` server-side, so workspace `*` refs won't resolve there.
  * Bundling inlines them.

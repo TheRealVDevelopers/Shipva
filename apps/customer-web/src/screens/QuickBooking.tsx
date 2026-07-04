@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { MapPin, Minus, Plus, Check, ChevronUp, Clock } from 'lucide-react';
-import { VEHICLE_TYPES, type TripType, type VehicleType } from '@ground/shared-types';
-import { estimateFarePaise } from '@ground/shared-logic';
+import { VEHICLE_TYPES, type TripType, type VehicleType } from '@shipva/shared-types';
+import { estimateFarePaise } from '@shipva/shared-logic';
 import { Frame } from '../components/Frame.js';
 import { PrimaryButton } from '../components/Controls.js';
 import { VehicleArt, MapArt } from '../components/art.js';

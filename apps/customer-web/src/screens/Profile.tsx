@@ -46,7 +46,7 @@ export function Profile() {
           <LogOut size={15} /> Sign out
         </button>
 
-        <p className="text-center text-[11px] text-neutral-400">Ground Network · preview build</p>
+        <p className="text-center text-[11px] text-neutral-400">ShipVa · preview build</p>
       </div>
     </Frame>
   );

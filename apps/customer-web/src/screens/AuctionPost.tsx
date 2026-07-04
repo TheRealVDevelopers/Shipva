@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { MapPin, Gavel, RotateCcw, Minus, Plus } from 'lucide-react';
-import { type TripType, type VehicleType } from '@ground/shared-types';
-import { suggestedBasePricePaise } from '@ground/shared-logic';
+import { type TripType, type VehicleType } from '@shipva/shared-types';
+import { suggestedBasePricePaise } from '@shipva/shared-logic';
 import { Frame } from '../components/Frame.js';
 import { PrimaryButton, VehiclePicker, Stepper } from '../components/Controls.js';
 import { addBooking, nextBookingId } from '../lib/sharedStore.js';

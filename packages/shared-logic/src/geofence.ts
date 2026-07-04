@@ -1,4 +1,4 @@
-import type { GeoPoint } from '@ground/shared-types';
+import type { GeoPoint } from '@shipva/shared-types';
 
 const EARTH_RADIUS_M = 6_371_000;
 

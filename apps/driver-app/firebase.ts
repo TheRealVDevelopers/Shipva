@@ -15,7 +15,7 @@ function required(name: string, value: string | undefined): string {
 }
 
 const projectId =
-  (Constants.expoConfig?.extra?.firebaseProjectId as string | undefined) ?? 'ground-network';
+  (Constants.expoConfig?.extra?.firebaseProjectId as string | undefined) ?? 'sarvaexpressos';
 
 const firebaseConfig = {
   apiKey: required('EXPO_PUBLIC_FIREBASE_API_KEY', process.env.EXPO_PUBLIC_FIREBASE_API_KEY),

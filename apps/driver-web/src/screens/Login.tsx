@@ -13,7 +13,7 @@ export function Login() {
         <div className="flex items-center gap-2">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-500 text-white font-extrabold text-lg">G</div>
           <div>
-            <div className="text-lg font-extrabold leading-none">Ground Network</div>
+            <div className="text-lg font-extrabold leading-none">ShipVa</div>
             <div className="text-[11px] font-bold uppercase tracking-widest text-accent-400">Driver Partner</div>
           </div>
         </div>

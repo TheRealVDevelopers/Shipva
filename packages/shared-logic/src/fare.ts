@@ -1,4 +1,4 @@
-import type { VehicleType, Paise } from '@ground/shared-types';
+import type { VehicleType, Paise } from '@shipva/shared-types';
 
 /**
  * v1 fare model: flat base + per-km, by vehicle type, with an optional surge

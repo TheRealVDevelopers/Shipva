@@ -6,7 +6,7 @@ import { Frame } from '../components/Frame.js';
 import { PrimaryButton } from '../components/Controls.js';
 import { useStore, type JobStatus } from '../lib/store.js';
 import { updateBooking } from '../lib/sharedStore.js';
-import type { BookingStatus } from '@ground/shared-types';
+import type { BookingStatus } from '@shipva/shared-types';
 import { rupees } from '../lib/format.js';
 
 const SHARED_NEXT: Partial<Record<JobStatus, BookingStatus>> = {

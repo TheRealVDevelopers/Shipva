@@ -1,5 +1,5 @@
 // Mock data for the partner dashboard preview. Money in paise.
-import type { BookingStatus, DutyStatus, KycStatus, VehicleType, VerifyStatus } from '@ground/shared-types';
+import type { BookingStatus, DutyStatus, KycStatus, VehicleType, VerifyStatus } from '@shipva/shared-types';
 
 export const partner = {
   company: 'Karnataka Roadlines',

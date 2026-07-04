@@ -8,7 +8,7 @@ export type TripType = 'intercity' | 'outstation';
 /**
  * Booking lifecycle. Instant bookings go requested → searching → assigned …;
  * auctions go requested → bidding → awarded → assigned …. The legal-transition
- * map lives in `@ground/shared-logic` (`isLegalBookingTransition`).
+ * map lives in `@shipva/shared-logic` (`isLegalBookingTransition`).
  */
 export type BookingStatus =
   | 'requested'

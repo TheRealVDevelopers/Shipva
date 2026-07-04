@@ -1,5 +1,5 @@
 {
-  "name": "@ground/shared-logic",
+  "name": "@shipva/shared-logic",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -14,7 +14,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@ground/shared-types": "*"
+    "@shipva/shared-types": "*"
   },
   "devDependencies": {
     "typescript": "^5.6.3",

@@ -1,6 +1,6 @@
 rules_version = '2';
 
-// Ground Network storage — deny-by-default. KYC docs and POD photos are
+// ShipVa storage — deny-by-default. KYC docs and POD photos are
 // written by the apps to user-scoped paths; everything is read via signed
 // URLs minted by Cloud Functions.
 service firebase.storage {

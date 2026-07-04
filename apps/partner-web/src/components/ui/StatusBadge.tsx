@@ -1,5 +1,5 @@
 import { Badge, type BadgeTone } from './Badge.js';
-import type { BookingStatus, DutyStatus, KycStatus, VerifyStatus } from '@ground/shared-types';
+import type { BookingStatus, DutyStatus, KycStatus, VerifyStatus } from '@shipva/shared-types';
 
 const BOOKING_MAP: Record<BookingStatus, { label: string; tone: BadgeTone }> = {
   requested: { label: 'Requested', tone: 'neutral' },

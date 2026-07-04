@@ -5,7 +5,7 @@
 import type {
   BookingStatus, BookingType, TripType, VehicleType,
   DutyStatus, KycStatus, VerifyStatus,
-} from '@ground/shared-types';
+} from '@shipva/shared-types';
 
 export const ZONES = ['Whitefield', 'Koramangala', 'HSR Layout', 'Indiranagar', 'Electronic City', 'Peenya'];
 

@@ -1,8 +1,8 @@
 {
-  "name": "ground-network",
+  "name": "shipva",
   "version": "0.1.0",
   "private": true,
-  "description": "Ground Network — on-demand + auction + transporter-exchange logistics marketplace for Bangalore. See README.md.",
+  "description": "ShipVa — logistics platform. Phase 1: a subscription Transporter OS (fleet, trips, invoicing, payroll) for transporters; Phase 2: on-demand + auction load marketplace. See README.md.",
   "workspaces": [
     "apps/*",
     "packages/*",
@@ -14,8 +14,8 @@
     "test": "npm run test --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
     "emulators": "firebase emulators:start",
-    "dev:admin": "npm run dev -w @ground/admin-web",
-    "dev:driver": "npm run start -w @ground/driver-app",
+    "dev:admin": "npm run dev -w @shipva/admin-web",
+    "dev:driver": "npm run start -w @shipva/driver-app",
     "build:functions": "npm run build -w functions",
     "deploy:hosting": "firebase deploy --only hosting",
     "deploy:rules": "firebase deploy --only firestore:rules,storage,database",

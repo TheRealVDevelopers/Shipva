@@ -12,7 +12,7 @@
   "functions": [
     {
       "source": "functions/lib",
-      "codebase": "ground-network",
+      "codebase": "shipva",
       "ignore": ["**/*.map"],
       "runtime": "nodejs20"
     }

@@ -2,8 +2,8 @@ import { MapPin, IndianRupee, MessageCircle, Bell, CheckCircle2, Circle } from '
 import { OpsLayout } from '../../components/layout/OpsLayout.js';
 import { Card, CardHeader, CardBody } from '../../components/ui/Card.js';
 import { Badge } from '../../components/ui/Badge.js';
-import { VEHICLE_TYPES } from '@ground/shared-types';
-import { estimateFarePaise } from '@ground/shared-logic';
+import { VEHICLE_TYPES } from '@shipva/shared-types';
+import { estimateFarePaise } from '@shipva/shared-logic';
 import { ZONES } from '../../lib/mocks.js';
 import { rupees } from '../../lib/format.js';
 
