@@ -12,8 +12,9 @@ import { VehicleArt } from '../../components/art.js';
 import { rupees } from '../../lib/format.js';
 import {
   osCounters, months6, revenueSeries, expenseSeries, expenseBreakdown, receivables,
-  fuel, docAlerts, trips, sparks, trucks, type TripStatus,
+  fuel, docAlerts, sparks, type TripStatus,
 } from '../../lib/mocks.js';
+import { useStore } from '../../lib/store.js';
 
 const TRIP_BADGE: Record<TripStatus, { label: string; tone: BadgeTone }> = {
   assigned: { label: 'Assigned', tone: 'info' },
@@ -33,6 +34,7 @@ function QuickAction({ to, icon, label }: { to: string; icon: React.ReactNode; l
 }
 
 export function Overview() {
+  const { trips, trucks } = useStore();
   const onTrip = trucks.filter((t) => t.status === 'on_trip').length;
   const available = trucks.filter((t) => t.status === 'available').length;
   const maintenance = trucks.filter((t) => t.status === 'maintenance').length;

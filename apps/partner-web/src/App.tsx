@@ -3,8 +3,10 @@ import { Login } from './routes/partner/Login.js';
 import { Overview } from './routes/partner/Overview.js';
 import { Trips } from './routes/partner/Trips.js';
 import { Team } from './routes/partner/Team.js';
+import { Customers } from './routes/partner/Customers.js';
 import { Invoices } from './routes/partner/Invoices.js';
 import { Expenses } from './routes/partner/Expenses.js';
+import { Payables } from './routes/partner/Payables.js';
 import { Payroll } from './routes/partner/Payroll.js';
 import { LoadBoard } from './routes/partner/LoadBoard.js';
 import { ActiveJobs } from './routes/partner/ActiveJobs.js';
@@ -21,8 +23,10 @@ export function App() {
       <Route path="/p" element={<Overview />} />
       <Route path="/p/trips" element={<Trips />} />
       <Route path="/p/team" element={<Team />} />
+      <Route path="/p/customers" element={<Customers />} />
       <Route path="/p/invoices" element={<Invoices />} />
       <Route path="/p/expenses" element={<Expenses />} />
+      <Route path="/p/payables" element={<Payables />} />
       <Route path="/p/payroll" element={<Payroll />} />
       <Route path="/p/loads" element={<LoadBoard />} />
       <Route path="/p/jobs" element={<ActiveJobs />} />

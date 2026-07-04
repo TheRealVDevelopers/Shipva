@@ -6,9 +6,11 @@ import { Table, THead, Th, TBody, Tr, Td } from '../../components/ui/Table.js';
 import { Badge } from '../../components/ui/Badge.js';
 import { Button } from '../../components/ui/Button.js';
 import { rupees } from '../../lib/format.js';
-import { payroll, payouts } from '../../lib/mocks.js';
+import { payouts } from '../../lib/mocks.js';
+import { useStore } from '../../lib/store.js';
 
 export function Payroll() {
+  const { payroll, runPayroll } = useStore();
   const netTotal = payroll.reduce((s, p) => s + p.netPaise, 0);
   const dueTotal = payroll.filter((p) => p.status === 'due').reduce((s, p) => s + p.netPaise, 0);
   const bhattaTotal = payroll.reduce((s, p) => s + p.bhattaPaise, 0);
@@ -28,7 +30,7 @@ export function Payroll() {
             <CardHeader
               title="Current payroll run"
               subtitle="16–30 Jun 2026"
-              action={<Button size="sm"><Plus size={13} /> Run payroll</Button>}
+              action={<Button size="sm" onClick={runPayroll}><Plus size={13} /> Run payroll</Button>}
             />
             <Table>
               <THead>

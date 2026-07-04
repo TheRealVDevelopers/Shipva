@@ -6,15 +6,44 @@ import { KpiCard } from '../../components/ui/KpiCard.js';
 import { Table, THead, Th, TBody, Tr, Td } from '../../components/ui/Table.js';
 import { Badge } from '../../components/ui/Badge.js';
 import { Button } from '../../components/ui/Button.js';
+import { Modal, Field, TextInput, Select, Row } from '../../components/ui/Modal.js';
 import { Donut } from '../../components/ui/Charts.js';
 import { rupees } from '../../lib/format.js';
-import { expenses, fuelLogs, fuel, expenseBreakdown, osCounters } from '../../lib/mocks.js';
+import { fuel, expenseBreakdown, osCounters } from '../../lib/mocks.js';
+import { useStore, todayLabel } from '../../lib/store.js';
 
 const TABS = ['Expenses', 'Fuel log'] as const;
+const CATEGORIES = ['Toll', 'RTO/Police', 'Loading', 'Repairs', 'Misc'];
+const MILEAGE_KMPL = 4; // typical loaded truck; used for the expected-fuel calc
+
+const EXP_EMPTY = { tripLr: '', category: 'Toll', amount: '', note: '' };
+const FUEL_EMPTY = { reg: '', km: '', litres: '', rate: '92' };
 
 export function Expenses() {
+  const { expenses, fuelLogs, trucks, trips, addExpense, addFuelLog } = useStore();
   const [tab, setTab] = useState<(typeof TABS)[number]>('Expenses');
-  const expTotal = expenses.reduce((s, e) => s + e.amountPaise, 0);
+  const [open, setOpen] = useState<null | 'expense' | 'fuel'>(null);
+  const [e, setE] = useState(EXP_EMPTY);
+  const [g, setG] = useState(FUEL_EMPTY);
+
+  const expTotal = expenses.reduce((s, x) => s + x.amountPaise, 0);
+  const expValid = Number(e.amount) > 0;
+  const fuelValid = g.reg && Number(g.km) > 0 && Number(g.litres) > 0;
+
+  function submitExpense() {
+    if (!expValid) return;
+    addExpense({ date: todayLabel(), tripLr: e.tripLr || '—', category: e.category, amountPaise: Math.round(Number(e.amount) * 100), note: e.note });
+    setE(EXP_EMPTY); setOpen(null);
+  }
+
+  function submitFuel() {
+    if (!fuelValid) return;
+    const km = Number(g.km), litres = Number(g.litres), ratePaise = Math.round(Number(g.rate) * 100);
+    const costPaise = Math.round(litres * ratePaise);
+    const expectedPaise = Math.round((km / MILEAGE_KMPL) * ratePaise);
+    addFuelLog({ date: todayLabel(), reg: g.reg, km, litres, ratePaise, costPaise, expectedPaise, ok: costPaise <= expectedPaise * 1.08 });
+    setG(FUEL_EMPTY); setOpen(null);
+  }
 
   return (
     <PartnerLayout title="Expenses & Fuel" subtitle="Trip costs, fuel and leakage control">
@@ -23,7 +52,7 @@ export function Expenses() {
           <KpiCard label="Expense · MTD" value={rupees(osCounters.expenseMtdPaise)} hint="all categories" tone="primary" />
           <KpiCard label="Fuel · MTD" value={rupees(fuel.mtdCostPaise)} hint="diesel" tone="accent" />
           <KpiCard label="Fuel leakage" value={rupees(fuel.leakagePaise)} hint="actual − expected" tone="danger" />
-          <KpiCard label="Logged trips" value={String(expenses.length)} hint="recent entries" tone="neutral" />
+          <KpiCard label="Logged entries" value={String(expenses.length + fuelLogs.length)} hint="expense + fuel" tone="neutral" />
         </section>
 
         <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -37,20 +66,22 @@ export function Expenses() {
                   </button>
                 ))}
               </div>
-              <Button size="sm">{tab === 'Fuel log' ? <><Fuel size={13} /> Log fuel</> : <><Plus size={13} /> Add expense</>}</Button>
+              {tab === 'Fuel log'
+                ? <Button size="sm" onClick={() => setOpen('fuel')}><Fuel size={13} /> Log fuel</Button>
+                : <Button size="sm" onClick={() => setOpen('expense')}><Plus size={13} /> Add expense</Button>}
             </div>
 
             {tab === 'Expenses' ? (
               <Table>
                 <THead><Tr><Th>Date</Th><Th>Trip</Th><Th>Category</Th><Th>Note</Th><Th className="text-right">Amount</Th></Tr></THead>
                 <TBody>
-                  {expenses.map((e, idx) => (
+                  {expenses.map((x, idx) => (
                     <Tr key={idx}>
-                      <Td className="text-neutral-500">{e.date}</Td>
-                      <Td className="font-mono text-xs text-neutral-700">{e.tripLr}</Td>
-                      <Td><Badge tone="neutral">{e.category}</Badge></Td>
-                      <Td className="text-neutral-600">{e.note}</Td>
-                      <Td className="text-right font-bold text-neutral-900">{rupees(e.amountPaise)}</Td>
+                      <Td className="text-neutral-500">{x.date}</Td>
+                      <Td className="font-mono text-xs text-neutral-700">{x.tripLr}</Td>
+                      <Td><Badge tone="neutral">{x.category}</Badge></Td>
+                      <Td className="text-neutral-600">{x.note}</Td>
+                      <Td className="text-right font-bold text-neutral-900">{rupees(x.amountPaise)}</Td>
                     </Tr>
                   ))}
                 </TBody>
@@ -59,16 +90,16 @@ export function Expenses() {
               <Table>
                 <THead><Tr><Th>Date</Th><Th>Vehicle</Th><Th className="text-right">Km</Th><Th className="text-right">Litres</Th><Th className="text-right">Actual</Th><Th className="text-right">Expected</Th><Th>Check</Th></Tr></THead>
                 <TBody>
-                  {fuelLogs.map((f, idx) => (
+                  {fuelLogs.map((x, idx) => (
                     <Tr key={idx}>
-                      <Td className="text-neutral-500">{f.date}</Td>
-                      <Td className="font-mono text-xs text-neutral-800">{f.reg}</Td>
-                      <Td className="text-right text-neutral-600">{f.km}</Td>
-                      <Td className="text-right text-neutral-600">{f.litres} L</Td>
-                      <Td className="text-right font-bold text-neutral-900">{rupees(f.costPaise)}</Td>
-                      <Td className="text-right text-neutral-500">{rupees(f.expectedPaise)}</Td>
+                      <Td className="text-neutral-500">{x.date}</Td>
+                      <Td className="font-mono text-xs text-neutral-800">{x.reg}</Td>
+                      <Td className="text-right text-neutral-600">{x.km}</Td>
+                      <Td className="text-right text-neutral-600">{x.litres} L</Td>
+                      <Td className="text-right font-bold text-neutral-900">{rupees(x.costPaise)}</Td>
+                      <Td className="text-right text-neutral-500">{rupees(x.expectedPaise)}</Td>
                       <Td>
-                        {f.ok
+                        {x.ok
                           ? <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600"><CheckCircle2 size={13} /> OK</span>
                           : <span className="inline-flex items-center gap-1 text-xs font-bold text-rose-600"><AlertTriangle size={13} /> Flag</span>}
                       </Td>
@@ -96,6 +127,42 @@ export function Expenses() {
           </div>
         </section>
       </div>
+
+      {/* Add expense */}
+      <Modal open={open === 'expense'} onClose={() => setOpen(null)} title="Add expense" onSubmit={submitExpense} submitLabel="Add expense" submitDisabled={!expValid}>
+        <Row>
+          <Field label="Trip (LR)">
+            <Select value={e.tripLr} onChange={(ev) => setE({ ...e, tripLr: ev.target.value })}>
+              <option value="">— none —</option>
+              {trips.map((t) => <option key={t.lr} value={t.lr}>{t.lr}</option>)}
+            </Select>
+          </Field>
+          <Field label="Category">
+            <Select value={e.category} onChange={(ev) => setE({ ...e, category: ev.target.value })}>
+              {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+            </Select>
+          </Field>
+        </Row>
+        <Field label="Amount (₹)"><TextInput type="number" value={e.amount} onChange={(ev) => setE({ ...e, amount: ev.target.value })} placeholder="4200" /></Field>
+        <Field label="Note"><TextInput value={e.note} onChange={(ev) => setE({ ...e, note: ev.target.value })} placeholder="NICE Road toll" /></Field>
+      </Modal>
+
+      {/* Log fuel */}
+      <Modal open={open === 'fuel'} onClose={() => setOpen(null)} title="Log fuel" subtitle="Leakage is auto-flagged" onSubmit={submitFuel} submitLabel="Save fuel entry" submitDisabled={!fuelValid}>
+        <Field label="Vehicle">
+          <Select value={g.reg} onChange={(ev) => setG({ ...g, reg: ev.target.value })}>
+            <option value="">Select vehicle</option>
+            {trucks.map((t) => <option key={t.id} value={t.reg}>{t.reg}</option>)}
+          </Select>
+        </Field>
+        <Row>
+          <Field label="Distance (km)"><TextInput type="number" value={g.km} onChange={(ev) => setG({ ...g, km: ev.target.value })} placeholder="96" /></Field>
+          <Field label="Litres filled"><TextInput type="number" value={g.litres} onChange={(ev) => setG({ ...g, litres: ev.target.value })} placeholder="34" /></Field>
+        </Row>
+        <Field label="Diesel rate (₹/L)" hint={`Expected fuel is computed at ${MILEAGE_KMPL} km/L.`}>
+          <TextInput type="number" value={g.rate} onChange={(ev) => setG({ ...g, rate: ev.target.value })} placeholder="92" />
+        </Field>
+      </Modal>
     </PartnerLayout>
   );
 }
