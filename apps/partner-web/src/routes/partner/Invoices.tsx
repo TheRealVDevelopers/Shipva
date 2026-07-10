@@ -11,6 +11,7 @@ import { HBar } from '../../components/ui/Charts.js';
 import { rupees } from '../../lib/format.js';
 import { receivables, type InvoiceStatus } from '../../lib/mocks.js';
 import { useStore, todayLabel } from '../../lib/store.js';
+import { useNotify } from '../../lib/notify.js';
 
 const INV_BADGE: Record<InvoiceStatus, { label: string; tone: BadgeTone }> = {
   paid: { label: 'Paid', tone: 'success' },
@@ -23,8 +24,14 @@ const dueLabel = () => new Date(Date.now() + 15 * 864e5).toLocaleDateString('en-
 
 export function Invoices() {
   const { invoices, customers, addInvoice, markInvoicePaid } = useStore();
+  const { push } = useNotify();
   const [open, setOpen] = useState(false);
   const [f, setF] = useState(EMPTY);
+
+  function payInvoice(no: string, client: string, total: number) {
+    markInvoicePaid(no);
+    push({ title: 'Payment received', body: `${client} paid ${rupees(total)} against ${no}.`, tone: 'success' });
+  }
 
   const paid = invoices.filter((i) => i.status === 'paid').reduce((s, i) => s + i.totalPaise, 0);
   const overdue = invoices.filter((i) => i.status === 'overdue').reduce((s, i) => s + i.totalPaise, 0);
@@ -74,7 +81,7 @@ export function Invoices() {
                         {i.status !== 'paid' && (
                           <>
                             <button className="hover:text-primary-600" title="Send reminder"><Send size={14} /></button>
-                            <button onClick={() => markInvoicePaid(i.no)} className="text-[11px] font-bold text-emerald-600 hover:text-emerald-700">Mark paid</button>
+                            <button onClick={() => payInvoice(i.no, i.client, i.totalPaise)} className="text-[11px] font-bold text-emerald-600 hover:text-emerald-700">Mark paid</button>
                           </>
                         )}
                       </div>

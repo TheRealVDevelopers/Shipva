@@ -1,34 +1,45 @@
-import { useState, type ReactNode } from 'react';
+import { Fragment, useState, type ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, ClipboardList, Truck, FileCheck2, UserCog, Users, FileText, Fuel, Wallet,
-  HandCoins, BarChart3, TrendingUp, PackageSearch, Navigation, BadgeCheck, Building2, Settings as SettingsIcon,
-  ShieldCheck, Bell, Menu, X,
+  HandCoins, BarChart3, TrendingUp, PackageSearch, Navigation, BadgeCheck, Building2,
+  Settings as SettingsIcon, MessageCircle, MessagesSquare, FileSpreadsheet,
+  ShieldCheck, Bell, Menu, X, Volume2, VolumeX, CheckCheck, type LucideIcon,
 } from 'lucide-react';
 import { LogoMark } from '../art.js';
 import { subscription } from '../../lib/mocks.js';
+import { FEATURES, type FeatureId } from '../../lib/features.js';
+import { useNotify } from '../../lib/notify.js';
 
-const NAV = [
-  { to: '/p', label: 'Overview', icon: LayoutDashboard, end: true },
-  { to: '/p/trips', label: 'Trips', icon: ClipboardList },
-  { to: '/p/fleet', label: 'My Fleet', icon: Truck },
-  { to: '/p/documents', label: 'Documents', icon: FileCheck2 },
-  { to: '/p/team', label: 'Team & Roles', icon: UserCog },
-  { to: '/p/customers', label: 'Customers', icon: Users },
-  { to: '/p/invoices', label: 'Invoices', icon: FileText },
-  { to: '/p/expenses', label: 'Expenses & Fuel', icon: Fuel },
-  { to: '/p/payables', label: 'Payables', icon: HandCoins },
-  { to: '/p/payroll', label: 'Payroll', icon: Wallet },
-  { to: '/p/earnings', label: 'Earnings', icon: TrendingUp },
-  { to: '/p/reports', label: 'Reports', icon: BarChart3 },
-  { to: '/p/loads', label: 'Load Board', icon: PackageSearch, soon: true },
-  { to: '/p/jobs', label: 'Active Jobs', icon: Navigation, soon: true },
-  { to: '/p/subscription', label: 'Subscription', icon: BadgeCheck },
-  { to: '/p/profile', label: 'Profile', icon: Building2 },
-  { to: '/p/settings', label: 'Settings', icon: SettingsIcon },
+interface NavItem { key: FeatureId; to: string; label: string; icon: LucideIcon; end?: boolean; group?: string; soon?: boolean }
+
+const NAV: NavItem[] = [
+  { key: 'overview', to: '/p', label: 'Overview', icon: LayoutDashboard, end: true },
+  { key: 'trips', to: '/p/trips', label: 'Trips & Routes', icon: ClipboardList, group: 'Operations' },
+  { key: 'fleet', to: '/p/fleet', label: 'Trucks & Drivers', icon: Truck, group: 'Operations' },
+  { key: 'documents', to: '/p/documents', label: 'Documents', icon: FileCheck2, group: 'Operations' },
+  { key: 'customers', to: '/p/customers', label: 'Customers', icon: Users, group: 'Vendors' },
+  { key: 'payables', to: '/p/payables', label: 'Truck Owners', icon: HandCoins, group: 'Vendors' },
+  { key: 'invoices', to: '/p/invoices', label: 'Invoices', icon: FileText, group: 'Accounts' },
+  { key: 'expenses', to: '/p/expenses', label: 'Expenses & Fuel', icon: Fuel, group: 'Accounts' },
+  { key: 'payroll', to: '/p/payroll', label: 'Payroll', icon: Wallet, group: 'Accounts' },
+  { key: 'reports', to: '/p/reports', label: 'Reports', icon: BarChart3, group: 'Accounts' },
+  { key: 'earnings', to: '/p/earnings', label: 'Earnings', icon: TrendingUp, group: 'Accounts' },
+  { key: 'team', to: '/p/team', label: 'Team & Roles', icon: UserCog, group: 'Admin' },
+  { key: 'messages', to: '/p/messages', label: 'WhatsApp', icon: MessageCircle, group: 'Tools' },
+  { key: 'chat', to: '/p/chat', label: 'Team Chat', icon: MessagesSquare, group: 'Tools' },
+  { key: 'export', to: '/p/export', label: 'Data Export', icon: FileSpreadsheet, group: 'Tools' },
+  { key: 'loads', to: '/p/loads', label: 'Load Board', icon: PackageSearch, group: 'Marketplace', soon: true },
+  { key: 'jobs', to: '/p/jobs', label: 'Active Jobs', icon: Navigation, group: 'Marketplace', soon: true },
+  { key: 'subscription', to: '/p/subscription', label: 'Subscription', icon: BadgeCheck, group: 'Account' },
+  { key: 'profile', to: '/p/profile', label: 'Profile', icon: Building2, group: 'Account' },
+  { key: 'settings', to: '/p/settings', label: 'Settings', icon: SettingsIcon, group: 'Account' },
 ];
 
+const VISIBLE = NAV.filter((n) => FEATURES[n.key]);
+
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
+  let lastGroup: string | undefined;
   return (
     <>
       <div className="flex h-16 items-center gap-2.5 px-5">
@@ -41,43 +52,112 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
 
       <nav className="flex-1 overflow-y-auto px-3 py-4">
         <ul className="space-y-0.5">
-          {NAV.map(({ to, label, icon: Icon, end, soon }) => (
-            <li key={to}>
-              <NavLink
-                to={to}
-                end={end ?? false}
-                onClick={onNavigate}
-                className={({ isActive }) =>
-                  `group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-bold transition-colors ${
-                    isActive ? 'bg-white/10 text-white' : 'text-primary-200 hover:bg-white/5 hover:text-white'
-                  }`
-                }
-              >
-                {({ isActive }) => (
-                  <>
-                    {isActive && <span className="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r bg-accent-400" />}
-                    <Icon size={17} /> <span className="flex-1">{label}</span>
-                    {soon && <span className="rounded bg-white/10 px-1.5 py-0.5 text-[9px] font-extrabold tracking-wide text-primary-200">SOON</span>}
-                  </>
+          {VISIBLE.map(({ to, label, icon: Icon, end, soon, group }, i) => {
+            const showGroup = group && group !== lastGroup;
+            lastGroup = group;
+            return (
+              <Fragment key={to}>
+                {showGroup && (
+                  <li className={`px-3 pb-1 text-[10px] font-extrabold uppercase tracking-widest text-primary-300/70 ${i === 0 ? '' : 'pt-4'}`}>{group}</li>
                 )}
-              </NavLink>
-            </li>
-          ))}
+                <li>
+                  <NavLink
+                    to={to}
+                    end={end ?? false}
+                    onClick={onNavigate}
+                    className={({ isActive }) =>
+                      `group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-bold transition-colors ${
+                        isActive ? 'bg-white/10 text-white' : 'text-primary-200 hover:bg-white/5 hover:text-white'
+                      }`
+                    }
+                  >
+                    {({ isActive }) => (
+                      <>
+                        {isActive && <span className="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r bg-accent-400" />}
+                        <Icon size={17} /> <span className="flex-1">{label}</span>
+                        {soon && <span className="rounded bg-white/10 px-1.5 py-0.5 text-[9px] font-extrabold tracking-wide text-primary-200">SOON</span>}
+                      </>
+                    )}
+                  </NavLink>
+                </li>
+              </Fragment>
+            );
+          })}
         </ul>
       </nav>
 
-      <div className="m-3 rounded-xl bg-white/[0.06] p-3 ring-1 ring-white/10">
-        <div className="flex items-center justify-between text-xs">
-          <span className="font-bold text-white">{subscription.tier} plan</span>
-          <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-300">Active</span>
+      {FEATURES.subscription && (
+        <div className="m-3 rounded-xl bg-white/[0.06] p-3 ring-1 ring-white/10">
+          <div className="flex items-center justify-between text-xs">
+            <span className="font-bold text-white">{subscription.tier} plan</span>
+            <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-300">Active</span>
+          </div>
+          <div className="mt-1.5 text-[11px] text-primary-200">{subscription.driversUsed}/{subscription.driverSlots} driver slots</div>
         </div>
-        <div className="mt-1.5 text-[11px] text-primary-200">{subscription.driversUsed}/{subscription.driverSlots} driver slots</div>
-        <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-white/10">
-          <div className="h-full rounded-full bg-accent-400" style={{ width: `${(subscription.driversUsed / subscription.driverSlots) * 100}%` }} />
-        </div>
-        <NavLink to="/p/subscription" onClick={onNavigate} className="mt-2 block text-[11px] font-bold text-accent-300">Manage plan →</NavLink>
-      </div>
+      )}
     </>
+  );
+}
+
+function timeAgo(ts: number): string {
+  const m = Math.round((Date.now() - ts) / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m}m ago`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.round(h / 24)}d ago`;
+}
+
+function NotificationBell() {
+  const { notes, unread, soundOn, toggleSound, markAllRead, clear } = useNotify();
+  const [open, setOpen] = useState(false);
+  const toneDot = { info: 'bg-sky-500', success: 'bg-emerald-500', warning: 'bg-amber-500' };
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => { setOpen((o) => !o); if (!open) markAllRead(); }}
+        className="relative rounded-lg p-2 text-neutral-600 hover:bg-neutral-100" aria-label="Notifications"
+      >
+        <Bell size={16} />
+        {unread > 0 && (
+          <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent-500 px-1 text-[10px] font-extrabold text-white ring-2 ring-white">{unread}</span>
+        )}
+      </button>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 z-50 mt-2 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl bg-white shadow-lift ring-1 ring-neutral-200">
+            <div className="flex items-center justify-between border-b border-neutral-100 px-4 py-2.5">
+              <span className="text-sm font-extrabold text-neutral-900">Notifications</span>
+              <div className="flex items-center gap-1">
+                <button onClick={toggleSound} title={soundOn ? 'Sound on' : 'Sound off'} className="rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100">
+                  {soundOn ? <Volume2 size={15} /> : <VolumeX size={15} />}
+                </button>
+                <button onClick={markAllRead} title="Mark all read" className="rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100"><CheckCheck size={15} /></button>
+              </div>
+            </div>
+            <div className="max-h-80 overflow-y-auto">
+              {notes.length === 0 && <p className="px-4 py-8 text-center text-sm text-neutral-400">No notifications.</p>}
+              {notes.map((n) => (
+                <div key={n.id} className={`flex gap-3 border-b border-neutral-50 px-4 py-3 ${n.read ? '' : 'bg-primary-50/40'}`}>
+                  <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${toneDot[n.tone]}`} />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-bold text-neutral-900">{n.title}</div>
+                    <div className="text-xs text-neutral-600">{n.body}</div>
+                    <div className="mt-0.5 text-[10px] text-neutral-400">{timeAgo(n.ts)}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {notes.length > 0 && (
+              <button onClick={clear} className="w-full border-t border-neutral-100 py-2 text-xs font-bold text-neutral-500 hover:bg-neutral-50">Clear all</button>
+            )}
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -85,12 +165,10 @@ export function PartnerLayout({ title, subtitle, children }: { title: string; su
   const [drawer, setDrawer] = useState(false);
   return (
     <div className="flex h-screen bg-neutral-50">
-      {/* desktop sidebar */}
       <aside className="hidden md:flex md:w-64 md:flex-col bg-primary-900 text-white">
         <SidebarContent />
       </aside>
 
-      {/* mobile drawer */}
       {drawer && (
         <div className="fixed inset-0 z-50 md:hidden">
           <div className="absolute inset-0 bg-neutral-900/50 backdrop-blur-sm" onClick={() => setDrawer(false)} />
@@ -112,17 +190,14 @@ export function PartnerLayout({ title, subtitle, children }: { title: string; su
           </div>
           <div className="flex items-center gap-3">
             <span className="hidden lg:inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700 ring-1 ring-inset ring-emerald-200">
-              <ShieldCheck size={12} /> Keep 100% · no commission
+              <ShieldCheck size={12} /> Karnataka Roadlines
             </span>
-            <button className="relative rounded-lg p-2 text-neutral-600 hover:bg-neutral-100" aria-label="Notifications">
-              <Bell size={16} />
-              <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-accent-500 ring-2 ring-white" />
-            </button>
+            <NotificationBell />
             <div className="flex items-center gap-2 pl-2 border-l border-neutral-200">
               <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-500 text-white text-xs font-extrabold">KR</div>
               <div className="hidden sm:block">
                 <div className="text-xs font-extrabold text-neutral-900 leading-none">Karnataka Roadlines</div>
-                <div className="text-[10px] text-neutral-500 mt-0.5">Partner · Peenya corridor</div>
+                <div className="text-[10px] text-neutral-500 mt-0.5">Admin · Peenya corridor</div>
               </div>
             </div>
           </div>

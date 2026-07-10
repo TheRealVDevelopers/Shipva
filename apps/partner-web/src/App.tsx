@@ -11,12 +11,23 @@ import { Payables } from './routes/partner/Payables.js';
 import { Payroll } from './routes/partner/Payroll.js';
 import { Reports } from './routes/partner/Reports.js';
 import { Settings } from './routes/partner/Settings.js';
+import { Messages } from './routes/partner/Messages.js';
+import { Chat } from './routes/partner/Chat.js';
+import { ExportData } from './routes/partner/ExportData.js';
 import { LoadBoard } from './routes/partner/LoadBoard.js';
 import { ActiveJobs } from './routes/partner/ActiveJobs.js';
 import { Fleet } from './routes/partner/Fleet.js';
 import { Earnings } from './routes/partner/Earnings.js';
 import { Subscription } from './routes/partner/Subscription.js';
 import { Profile } from './routes/partner/Profile.js';
+import { FEATURES, type FeatureId } from './lib/features.js';
+
+/** Register a /p/* route only when its feature is enabled. Disabled sections
+ *  keep their code but their URL falls through to the dashboard. */
+function Gated({ id, path, element }: { id: FeatureId; path: string; element: JSX.Element }) {
+  if (!FEATURES[id]) return null;
+  return <Route path={path} element={element} />;
+}
 
 export function App() {
   return (
@@ -24,23 +35,29 @@ export function App() {
       <Route path="/" element={<Navigate to="/login" replace />} />
       <Route path="/login" element={<Login />} />
       <Route path="/p" element={<Overview />} />
-      <Route path="/p/trips" element={<Trips />} />
-      <Route path="/p/team" element={<Team />} />
-      <Route path="/p/customers" element={<Customers />} />
-      <Route path="/p/documents" element={<Documents />} />
-      <Route path="/p/invoices" element={<Invoices />} />
-      <Route path="/p/expenses" element={<Expenses />} />
-      <Route path="/p/payables" element={<Payables />} />
-      <Route path="/p/payroll" element={<Payroll />} />
-      <Route path="/p/reports" element={<Reports />} />
-      <Route path="/p/settings" element={<Settings />} />
-      <Route path="/p/loads" element={<LoadBoard />} />
-      <Route path="/p/jobs" element={<ActiveJobs />} />
-      <Route path="/p/fleet" element={<Fleet />} />
-      <Route path="/p/earnings" element={<Earnings />} />
-      <Route path="/p/subscription" element={<Subscription />} />
-      <Route path="/p/profile" element={<Profile />} />
-      <Route path="*" element={<Navigate to="/login" replace />} />
+
+      {Gated({ id: 'trips', path: '/p/trips', element: <Trips /> })}
+      {Gated({ id: 'fleet', path: '/p/fleet', element: <Fleet /> })}
+      {Gated({ id: 'documents', path: '/p/documents', element: <Documents /> })}
+      {Gated({ id: 'customers', path: '/p/customers', element: <Customers /> })}
+      {Gated({ id: 'payables', path: '/p/payables', element: <Payables /> })}
+      {Gated({ id: 'invoices', path: '/p/invoices', element: <Invoices /> })}
+      {Gated({ id: 'expenses', path: '/p/expenses', element: <Expenses /> })}
+      {Gated({ id: 'payroll', path: '/p/payroll', element: <Payroll /> })}
+      {Gated({ id: 'reports', path: '/p/reports', element: <Reports /> })}
+      {Gated({ id: 'earnings', path: '/p/earnings', element: <Earnings /> })}
+      {Gated({ id: 'team', path: '/p/team', element: <Team /> })}
+      {Gated({ id: 'messages', path: '/p/messages', element: <Messages /> })}
+      {Gated({ id: 'chat', path: '/p/chat', element: <Chat /> })}
+      {Gated({ id: 'export', path: '/p/export', element: <ExportData /> })}
+      {Gated({ id: 'loads', path: '/p/loads', element: <LoadBoard /> })}
+      {Gated({ id: 'jobs', path: '/p/jobs', element: <ActiveJobs /> })}
+      {Gated({ id: 'subscription', path: '/p/subscription', element: <Subscription /> })}
+      {Gated({ id: 'profile', path: '/p/profile', element: <Profile /> })}
+      {Gated({ id: 'settings', path: '/p/settings', element: <Settings /> })}
+
+      {/* Disabled sections and unknown URLs land on the dashboard. */}
+      <Route path="*" element={<Navigate to="/p" replace />} />
     </Routes>
   );
 }

@@ -5,12 +5,18 @@ import '@shipva/ui/tokens.css';
 import './index.css';
 import { App } from './App.js';
 import { StoreProvider } from './lib/store.js';
+import { NotificationsProvider } from './lib/notify.js';
+import { ChatProvider } from './lib/chat.js';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '') || '/'}>
       <StoreProvider>
-        <App />
+        <NotificationsProvider>
+          <ChatProvider>
+            <App />
+          </ChatProvider>
+        </NotificationsProvider>
       </StoreProvider>
     </BrowserRouter>
   </StrictMode>,

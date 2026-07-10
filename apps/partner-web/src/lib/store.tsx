@@ -56,6 +56,8 @@ interface StoreApi extends StoreShape {
   addExpense: (e: Expense) => void;
   addFuelLog: (f: FuelLog) => void;
   addCustomer: (c: Omit<Customer, 'id' | 'outstandingPaise'>) => void;
+  addDriver: (d: Omit<FleetDriver, 'id'>) => void;
+  addTruck: (t: Omit<Truck, 'id'>) => void;
   runPayroll: () => void;
   reset: () => void;
 }
@@ -121,6 +123,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setS((p) => ({ ...p, customers: [{ ...c, id: uid(), outstandingPaise: 0 }, ...p.customers] }));
   }, []);
 
+  const addDriver = useCallback((d: Omit<FleetDriver, 'id'>) => {
+    setS((p) => ({ ...p, drivers: [{ ...d, id: uid() }, ...p.drivers] }));
+  }, []);
+
+  const addTruck = useCallback((t: Omit<Truck, 'id'>) => {
+    setS((p) => ({ ...p, trucks: [{ ...t, id: uid() }, ...p.trucks] }));
+  }, []);
+
   const runPayroll = useCallback(() => {
     setS((p) => ({ ...p, payroll: p.payroll.map((l) => ({ ...l, status: 'paid' })) }));
   }, []);
@@ -128,8 +138,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const reset = useCallback(() => setS(seed()), []);
 
   const value = useMemo<StoreApi>(() => ({
-    ...s, addTrip, updateTripStatus, addInvoice, markInvoicePaid, addExpense, addFuelLog, addCustomer, runPayroll, reset,
-  }), [s, addTrip, updateTripStatus, addInvoice, markInvoicePaid, addExpense, addFuelLog, addCustomer, runPayroll, reset]);
+    ...s, addTrip, updateTripStatus, addInvoice, markInvoicePaid, addExpense, addFuelLog, addCustomer, addDriver, addTruck, runPayroll, reset,
+  }), [s, addTrip, updateTripStatus, addInvoice, markInvoicePaid, addExpense, addFuelLog, addCustomer, addDriver, addTruck, runPayroll, reset]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

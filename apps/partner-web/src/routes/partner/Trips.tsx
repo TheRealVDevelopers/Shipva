@@ -10,6 +10,7 @@ import { Modal, Field, TextInput, Select, Row } from '../../components/ui/Modal.
 import { rupees } from '../../lib/format.js';
 import { osCounters, type TripStatus } from '../../lib/mocks.js';
 import { useStore, todayLabel } from '../../lib/store.js';
+import { useNotify } from '../../lib/notify.js';
 
 const TRIP_BADGE: Record<TripStatus, { label: string; tone: BadgeTone }> = {
   assigned: { label: 'Assigned', tone: 'info' },
@@ -25,6 +26,7 @@ const EMPTY = { from: '', to: '', driver: '', vehicleReg: '', material: '', weig
 
 export function Trips() {
   const { trips, drivers, trucks, addTrip } = useStore();
+  const { push } = useNotify();
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>('All');
   const [q, setQ] = useState('');
   const [open, setOpen] = useState(false);
@@ -46,6 +48,7 @@ export function Trips() {
       material: f.material || 'General goods', weightKg: Number(f.weight) || 0,
       freightPaise: Math.round(Number(f.freight) * 100), status: 'assigned', ewayBill: false,
     });
+    push({ title: 'Trip created', body: `${f.from} → ${f.to} assigned to ${f.driver}.`, tone: 'success' });
     setF(EMPTY); setOpen(false);
   }
 
