@@ -174,12 +174,12 @@ export interface Trip {
   material: string; weightKg: number; freightPaise: number; status: TripStatus; ewayBill: boolean;
 }
 export const trips: Trip[] = [
-  { lr: 'LR-24817', date: '27 Jun', from: 'Peenya', to: 'Hosur', driver: 'Ramesh Yadav', vehicleReg: 'KA01C5521', material: 'Steel coils', weightKg: 6800, freightPaise: 520000, status: 'in_transit', ewayBill: true },
-  { lr: 'LR-24816', date: '27 Jun', from: 'Whitefield', to: 'KR Puram', driver: 'Iqbal Sharief', vehicleReg: 'KA09H8810', material: 'Electronics', weightKg: 2400, freightPaise: 180000, status: 'loading', ewayBill: true },
-  { lr: 'LR-24814', date: '26 Jun', from: 'Bengaluru', to: 'Chennai', driver: 'Sathish Reddy', vehicleReg: 'KA02D9930', material: 'Polymer granules', weightKg: 2200, freightPaise: 1150000, status: 'at_drop', ewayBill: true },
-  { lr: 'LR-24811', date: '26 Jun', from: 'Peenya', to: 'Yelahanka', driver: 'Lokesh M', vehicleReg: 'KA03P7782', material: 'FMCG cartons', weightKg: 1400, freightPaise: 96000, status: 'pod_pending', ewayBill: false },
-  { lr: 'LR-24805', date: '25 Jun', from: 'Bengaluru', to: 'Hyderabad', driver: 'Iqbal Sharief', vehicleReg: 'KA09H8810', material: 'Machinery', weightKg: 6500, freightPaise: 2640000, status: 'closed', ewayBill: true },
-  { lr: 'LR-24802', date: '24 Jun', from: 'Whitefield', to: 'Mysuru', driver: 'Naveen Kumar', vehicleReg: 'KA51F1207', material: 'Textiles', weightKg: 1500, freightPaise: 412000, status: 'closed', ewayBill: true },
+  { lr: 'LR-24817', date: '27 Jun', from: 'Peenya', to: 'Hosur', driver: 'Ramesh Yadav', vehicleReg: 'KA01C5521', material: 'Steel coils', weightKg: 6800, freightPaise: 3400000, status: 'in_transit', ewayBill: true },
+  { lr: 'LR-24816', date: '27 Jun', from: 'Whitefield', to: 'KR Puram', driver: 'Iqbal Sharief', vehicleReg: 'KA09H8810', material: 'Electronics', weightKg: 2400, freightPaise: 1500000, status: 'loading', ewayBill: true },
+  { lr: 'LR-24814', date: '26 Jun', from: 'Bengaluru', to: 'Chennai', driver: 'Sathish Reddy', vehicleReg: 'KA02D9930', material: 'Polymer granules', weightKg: 2200, freightPaise: 4400000, status: 'at_drop', ewayBill: true },
+  { lr: 'LR-24811', date: '26 Jun', from: 'Peenya', to: 'Yelahanka', driver: 'Lokesh M', vehicleReg: 'KA03P7782', material: 'FMCG cartons', weightKg: 1400, freightPaise: 1200000, status: 'pod_pending', ewayBill: false },
+  { lr: 'LR-24805', date: '25 Jun', from: 'Bengaluru', to: 'Hyderabad', driver: 'Iqbal Sharief', vehicleReg: 'KA09H8810', material: 'Machinery', weightKg: 6500, freightPaise: 5800000, status: 'closed', ewayBill: true },
+  { lr: 'LR-24802', date: '24 Jun', from: 'Whitefield', to: 'Mysuru', driver: 'Naveen Kumar', vehicleReg: 'KA51F1207', material: 'Textiles', weightKg: 1500, freightPaise: 1900000, status: 'closed', ewayBill: true },
 ];
 
 export type InvoiceStatus = 'paid' | 'pending' | 'overdue';
@@ -188,12 +188,12 @@ export interface Invoice {
   basePaise: number; gstPaise: number; totalPaise: number; status: InvoiceStatus;
 }
 export const invoices: Invoice[] = [
-  { no: 'INV-1042', client: 'Bharat Steels', date: '26 Jun', dueDate: '11 Jul', basePaise: 520000, gstPaise: 93600, totalPaise: 613600, status: 'pending' },
-  { no: 'INV-1041', client: 'Vexa Polymers', date: '25 Jun', dueDate: '10 Jul', basePaise: 1150000, gstPaise: 207000, totalPaise: 1357000, status: 'pending' },
-  { no: 'INV-1038', client: 'FreshCo Dairy', date: '22 Jun', dueDate: '7 Jul', basePaise: 2640000, gstPaise: 475200, totalPaise: 3115200, status: 'paid' },
-  { no: 'INV-1035', client: 'Leela Stores', date: '18 Jun', dueDate: '3 Jul', basePaise: 96000, gstPaise: 17280, totalPaise: 113280, status: 'overdue' },
-  { no: 'INV-1030', client: 'Deccan Freight', date: '12 Jun', dueDate: '27 Jun', basePaise: 300000, gstPaise: 54000, totalPaise: 354000, status: 'overdue' },
-  { no: 'INV-1028', client: 'Bharat Steels', date: '10 Jun', dueDate: '25 Jun', basePaise: 480000, gstPaise: 86400, totalPaise: 566400, status: 'paid' },
+  { no: 'INV-1042', client: 'Bharat Steels', date: '26 Jun', dueDate: '11 Jul', basePaise: 3400000, gstPaise: 612000, totalPaise: 4012000, status: 'pending' },
+  { no: 'INV-1041', client: 'Vexa Polymers', date: '25 Jun', dueDate: '10 Jul', basePaise: 4400000, gstPaise: 792000, totalPaise: 5192000, status: 'pending' },
+  { no: 'INV-1038', client: 'FreshCo Dairy', date: '22 Jun', dueDate: '7 Jul', basePaise: 5800000, gstPaise: 1044000, totalPaise: 6844000, status: 'paid' },
+  { no: 'INV-1035', client: 'Leela Stores', date: '18 Jun', dueDate: '3 Jul', basePaise: 1200000, gstPaise: 216000, totalPaise: 1416000, status: 'overdue' },
+  { no: 'INV-1030', client: 'Deccan Freight', date: '12 Jun', dueDate: '27 Jun', basePaise: 1900000, gstPaise: 342000, totalPaise: 2242000, status: 'overdue' },
+  { no: 'INV-1028', client: 'Bharat Steels', date: '10 Jun', dueDate: '25 Jun', basePaise: 2800000, gstPaise: 504000, totalPaise: 3304000, status: 'paid' },
 ];
 
 export interface Expense { date: string; tripLr: string; category: string; amountPaise: number; note: string }

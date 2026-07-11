@@ -80,7 +80,7 @@ interface StoreApi extends StoreShape {
   reset: () => void;
 }
 
-const KEY = 'shipva-partner-store-v1';
+const KEY = 'shipva-partner-store-v2';
 
 function seed(): StoreShape {
   return {

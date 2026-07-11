@@ -25,8 +25,12 @@ const TRIP_BADGE: Record<TripStatus, { label: string; tone: BadgeTone }> = {
 const FILTERS = ['All', 'Active', 'Closed'] as const;
 const EMPTY = { from: '', to: '', driver: '', vehicleReg: '', material: '', weight: '', freight: '' };
 
+const NEXT: Partial<Record<TripStatus, TripStatus>> = {
+  assigned: 'loading', loading: 'in_transit', in_transit: 'at_drop', at_drop: 'pod_pending', pod_pending: 'closed',
+};
+
 export function Trips() {
-  const { trips, drivers, trucks, addTrip } = useStore();
+  const { trips, drivers, trucks, addTrip, updateTripStatus } = useStore();
   const { push } = useNotify();
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>('All');
   const [q, setQ] = useState('');
@@ -109,7 +113,16 @@ export function Trips() {
                   <Td className="text-right font-bold text-neutral-900">{rupees(t.freightPaise)}</Td>
                   <Td>{t.ewayBill ? <Badge tone="success">Linked</Badge> : <Badge tone="warning">Pending</Badge>}</Td>
                   <Td><Badge tone={TRIP_BADGE[t.status].tone}>{TRIP_BADGE[t.status].label}</Badge></Td>
-                  <Td><button onClick={() => printLR(t)} className="inline-flex items-center gap-1 text-xs font-bold text-primary-600 hover:text-primary-700"><FileText size={12} /> LR</button></Td>
+                  <Td>
+                    <div className="flex items-center justify-end gap-3">
+                      {NEXT[t.status] && (
+                        <button onClick={() => updateTripStatus(t.lr, NEXT[t.status]!)} className="text-xs font-bold text-emerald-600 hover:text-emerald-700" title="Advance trip status">
+                          → {TRIP_BADGE[NEXT[t.status]!].label}
+                        </button>
+                      )}
+                      <button onClick={() => printLR(t)} className="inline-flex items-center gap-1 text-xs font-bold text-primary-600 hover:text-primary-700"><FileText size={12} /> LR</button>
+                    </div>
+                  </Td>
                 </Tr>
               ))}
               {shown.length === 0 && (
