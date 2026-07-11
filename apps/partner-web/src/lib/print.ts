@@ -4,7 +4,13 @@
  */
 import { rupees } from './format.js';
 import { partner } from './mocks.js';
+import { BRAND } from './brand.js';
 import type { Invoice, Trip } from './mocks.js';
+
+const parts = BRAND.name.split(' ');
+const LOGO_HTML = parts.length > 1
+  ? `${parts.slice(0, -1).join(' ')} <span>${parts[parts.length - 1]}</span>`
+  : BRAND.name;
 
 const CSS = `
   * { box-sizing: border-box; font-family: -apple-system, Segoe UI, Roboto, sans-serif; }
@@ -39,8 +45,8 @@ function header(docLabel: string, docNo: string, date: string) {
   return `
     <div class="brand">
       <div>
-        <div class="logo">Ship<span>Va</span></div>
-        <div class="muted" style="margin-top:6px">${partner.company}</div>
+        <div class="logo">${LOGO_HTML}</div>
+        <div class="muted" style="margin-top:6px">${BRAND.company}</div>
         <div class="muted">${partner.region}</div>
         <div class="muted">GSTIN: ${partner.gstin}</div>
         <div class="muted">${partner.phone}</div>
@@ -71,7 +77,7 @@ export function printInvoice(inv: Invoice) {
       <div><span>GST</span><span>${rupees(inv.gstPaise)}</span></div>
       <div class="grand"><span>Total</span><span>${rupees(inv.totalPaise)}</span></div>
     </div>
-    <div class="foot">This is a computer-generated invoice from ShipVa Transporter OS.</div>`;
+    <div class="foot">This is a computer-generated invoice from ${BRAND.name} · ${BRAND.tagline}.</div>`;
   open(`Invoice ${inv.no}`, body);
 }
 
@@ -94,6 +100,6 @@ export function printLR(t: Trip) {
       <div class="box"><div class="lbl">E-way bill</div><div style="font-weight:700;margin-top:4px">${t.ewayBill ? 'Linked' : 'Pending'}</div></div>
       <div class="box"><div class="lbl">Status</div><div style="font-weight:700;margin-top:4px;text-transform:capitalize">${t.status.replaceAll('_', ' ')}</div></div>
     </div>
-    <div class="foot">Goods received in good condition · ShipVa Transporter OS · signature ______________</div>`;
+    <div class="foot">Goods received in good condition · ${BRAND.name} · signature ______________</div>`;
   open(`LR ${t.lr}`, body);
 }

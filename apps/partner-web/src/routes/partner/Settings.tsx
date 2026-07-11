@@ -8,6 +8,7 @@ import { Badge } from '../../components/ui/Badge.js';
 import { rupees } from '../../lib/format.js';
 import { partner, subscription } from '../../lib/mocks.js';
 import { useStore } from '../../lib/store.js';
+import { BRAND } from '../../lib/brand.js';
 
 export function Settings() {
   const { reset } = useStore();
@@ -51,7 +52,7 @@ export function Settings() {
 
         {/* Subscription */}
         <Card>
-          <CardHeader title="Subscription" subtitle="Your ShipVa plan" action={<BadgeCheck size={16} className="text-emerald-500" />} />
+          <CardHeader title="Subscription" subtitle={`Your ${BRAND.name} plan`} action={<BadgeCheck size={16} className="text-emerald-500" />} />
           <CardBody className="space-y-2.5 text-sm">
             <div className="flex items-center justify-between"><span className="text-neutral-600">Plan</span><span className="font-extrabold">{subscription.tier} · {rupees(subscription.pricePaise)}/mo</span></div>
             <div className="flex items-center justify-between"><span className="text-neutral-600">Driver slots</span><span className="font-semibold">{subscription.driversUsed}/{subscription.driverSlots}</span></div>
@@ -77,7 +78,7 @@ export function Settings() {
           </CardBody>
         </Card>
 
-        <p className="pb-4 text-center text-xs text-neutral-400">ShipVa · Transporter OS — preview build</p>
+        <p className="pb-4 text-center text-xs text-neutral-400">{BRAND.name} · {BRAND.tagline} — preview build</p>
       </div>
     </PartnerLayout>
   );

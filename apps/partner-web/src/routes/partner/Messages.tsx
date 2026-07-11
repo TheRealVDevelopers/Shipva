@@ -6,6 +6,7 @@ import { Field, Select, TextInput } from '../../components/ui/Modal.js';
 import { Button } from '../../components/ui/Button.js';
 import { rupees } from '../../lib/format.js';
 import { useStore } from '../../lib/store.js';
+import { BRAND } from '../../lib/brand.js';
 
 type Template = 'trip_driver' | 'dispatch_customer' | 'payment_reminder' | 'custom';
 
@@ -38,14 +39,14 @@ export function Messages() {
     const inv = invoices.find((i) => i.no === invNo);
     if (tpl === 'trip_driver' && trip) {
       const ph = drivers.find((d) => d.name === trip.driver)?.phone ?? '';
-      return { phone: ph, msg: `Namaste ${trip.driver},\n\nNew trip *${trip.lr}*\nRoute: ${trip.from} → ${trip.to}\nMaterial: ${trip.material} (${trip.weightKg.toLocaleString('en-IN')} kg)\nVehicle: ${trip.vehicleReg}\nFreight: ${rupees(trip.freightPaise)}\n\nPlease confirm pickup. — Karnataka Roadlines` };
+      return { phone: ph, msg: `Namaste ${trip.driver},\n\nNew trip *${trip.lr}*\nRoute: ${trip.from} → ${trip.to}\nMaterial: ${trip.material} (${trip.weightKg.toLocaleString('en-IN')} kg)\nVehicle: ${trip.vehicleReg}\nFreight: ${rupees(trip.freightPaise)}\n\nPlease confirm pickup. — ${BRAND.company}` };
     }
     if (tpl === 'dispatch_customer' && trip) {
-      return { phone: '', msg: `Dear Customer,\n\nYour consignment *${trip.lr}* has been dispatched.\n${trip.from} → ${trip.to}\nMaterial: ${trip.material} (${trip.weightKg.toLocaleString('en-IN')} kg)\n\nWe will share updates as it moves. Thank you for choosing Karnataka Roadlines.` };
+      return { phone: '', msg: `Dear Customer,\n\nYour consignment *${trip.lr}* has been dispatched.\n${trip.from} → ${trip.to}\nMaterial: ${trip.material} (${trip.weightKg.toLocaleString('en-IN')} kg)\n\nWe will share updates as it moves. Thank you for choosing ${BRAND.company}.` };
     }
     if (tpl === 'payment_reminder' && inv) {
       const ph = customers.find((c) => c.name === inv.client)?.phone ?? '';
-      return { phone: ph, msg: `Dear ${inv.client},\n\nThis is a gentle reminder that invoice *${inv.no}* for *${rupees(inv.totalPaise)}* (incl. GST) is due on ${inv.dueDate}.\n\nKindly arrange payment at your earliest convenience. Thank you.\n— Karnataka Roadlines Accounts` };
+      return { phone: ph, msg: `Dear ${inv.client},\n\nThis is a gentle reminder that invoice *${inv.no}* for *${rupees(inv.totalPaise)}* (incl. GST) is due on ${inv.dueDate}.\n\nKindly arrange payment at your earliest convenience. Thank you.\n— ${BRAND.company} Accounts` };
     }
     return { phone: '', msg: '' };
   }, [tpl, tripLr, invNo, trips, invoices, drivers, customers]);

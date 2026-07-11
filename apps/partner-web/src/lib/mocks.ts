@@ -37,25 +37,29 @@ export const counters = {
 export interface FleetDriver {
   id: string; name: string; phone: string; vehicleReg: string; vehicleType: VehicleType;
   dutyStatus: DutyStatus; kycStatus: KycStatus; ratingAvg: number; tripsToday: number;
+  /** Compliance documents — empty/undefined = not provided. */
+  aadhaar?: string; licenseNo?: string; licenseExpiry?: string;
 }
 export const fleetDrivers: FleetDriver[] = [
-  { id: 'fd1', name: 'Ramesh Yadav', phone: '+91 99020 51001', vehicleReg: 'KA01C5521', vehicleType: 'truck', dutyStatus: 'on_job', kycStatus: 'verified', ratingAvg: 4.7, tripsToday: 2 },
-  { id: 'fd2', name: 'Sathish Reddy', phone: '+91 99020 51002', vehicleReg: 'KA02D9930', vehicleType: 'pickup', dutyStatus: 'online', kycStatus: 'verified', ratingAvg: 4.5, tripsToday: 3 },
-  { id: 'fd3', name: 'Naveen Kumar', phone: '+91 99020 51003', vehicleReg: 'KA51F1207', vehicleType: 'tempo', dutyStatus: 'online', kycStatus: 'verified', ratingAvg: 4.8, tripsToday: 1 },
-  { id: 'fd4', name: 'Iqbal Sharief', phone: '+91 99020 51004', vehicleReg: 'KA09H8810', vehicleType: 'truck', dutyStatus: 'on_job', kycStatus: 'verified', ratingAvg: 4.4, tripsToday: 1 },
+  { id: 'fd1', name: 'Ramesh Yadav', phone: '+91 99020 51001', vehicleReg: 'KA01C5521', vehicleType: 'truck', dutyStatus: 'on_job', kycStatus: 'verified', ratingAvg: 4.7, tripsToday: 2, aadhaar: '4821 7745 9012', licenseNo: 'KA0120200012345', licenseExpiry: '14 Aug 2031' },
+  { id: 'fd2', name: 'Sathish Reddy', phone: '+91 99020 51002', vehicleReg: 'KA02D9930', vehicleType: 'pickup', dutyStatus: 'online', kycStatus: 'verified', ratingAvg: 4.5, tripsToday: 3, aadhaar: '7712 3390 1188', licenseNo: 'KA0220190098765', licenseExpiry: '02 Mar 2029' },
+  { id: 'fd3', name: 'Naveen Kumar', phone: '+91 99020 51003', vehicleReg: 'KA51F1207', vehicleType: 'tempo', dutyStatus: 'online', kycStatus: 'verified', ratingAvg: 4.8, tripsToday: 1, aadhaar: '5590 2211 8834', licenseNo: 'KA5120210044556', licenseExpiry: '19 Nov 2030' },
+  { id: 'fd4', name: 'Iqbal Sharief', phone: '+91 99020 51004', vehicleReg: 'KA09H8810', vehicleType: 'truck', dutyStatus: 'on_job', kycStatus: 'verified', ratingAvg: 4.4, tripsToday: 1, aadhaar: '3321 9087 4455' },
   { id: 'fd5', name: 'Babu Rao', phone: '+91 99020 51005', vehicleReg: 'KA05K2245', vehicleType: 'mini_truck', dutyStatus: 'offline', kycStatus: 'pending', ratingAvg: 0, tripsToday: 0 },
-  { id: 'fd6', name: 'Lokesh M', phone: '+91 99020 51006', vehicleReg: 'KA03P7782', vehicleType: 'tempo', dutyStatus: 'online', kycStatus: 'verified', ratingAvg: 4.6, tripsToday: 4 },
+  { id: 'fd6', name: 'Lokesh M', phone: '+91 99020 51006', vehicleReg: 'KA03P7782', vehicleType: 'tempo', dutyStatus: 'online', kycStatus: 'verified', ratingAvg: 4.6, tripsToday: 4, licenseNo: 'KA0320200077889', licenseExpiry: '08 Jul 2028' },
 ];
 
 export interface Truck {
   id: string; reg: string; type: VehicleType; capacityKg: number; status: 'available' | 'on_trip' | 'maintenance'; docsOk: boolean;
+  /** Compliance documents — empty/undefined = not submitted. */
+  rc?: string; insuranceNo?: string; insuranceExpiry?: string; fitnessNo?: string; fitnessExpiry?: string;
 }
 export const trucks: Truck[] = [
-  { id: 't1', reg: 'KA01C5521', type: 'truck', capacityKg: 7000, status: 'on_trip', docsOk: true },
-  { id: 't2', reg: 'KA02D9930', type: 'pickup', capacityKg: 2500, status: 'available', docsOk: true },
-  { id: 't3', reg: 'KA51F1207', type: 'tempo', capacityKg: 1500, status: 'available', docsOk: true },
-  { id: 't4', reg: 'KA09H8810', type: 'truck', capacityKg: 7000, status: 'on_trip', docsOk: true },
-  { id: 't5', reg: 'KA05K2245', type: 'mini_truck', capacityKg: 850, status: 'maintenance', docsOk: false },
+  { id: 't1', reg: 'KA01C5521', type: 'truck', capacityKg: 7000, status: 'on_trip', docsOk: true, rc: 'RC-KA01C5521', insuranceNo: 'INS-778812', insuranceExpiry: '02 Sep 2026', fitnessNo: 'FIT-4521', fitnessExpiry: '30 Jul 2026' },
+  { id: 't2', reg: 'KA02D9930', type: 'pickup', capacityKg: 2500, status: 'available', docsOk: true, rc: 'RC-KA02D9930', insuranceNo: 'INS-556677', insuranceExpiry: '14 Aug 2026', fitnessNo: 'FIT-2210', fitnessExpiry: '21 Dec 2026' },
+  { id: 't3', reg: 'KA51F1207', type: 'tempo', capacityKg: 1500, status: 'available', docsOk: true, rc: 'RC-KA51F1207', insuranceNo: 'INS-334455', insuranceExpiry: '11 Jan 2027', fitnessNo: 'FIT-9087', fitnessExpiry: '19 Jul 2026' },
+  { id: 't4', reg: 'KA09H8810', type: 'truck', capacityKg: 7000, status: 'on_trip', docsOk: false, rc: 'RC-KA09H8810', insuranceNo: 'INS-221100', insuranceExpiry: '16 Jul 2026' },
+  { id: 't5', reg: 'KA05K2245', type: 'mini_truck', capacityKg: 850, status: 'maintenance', docsOk: false, rc: 'RC-KA05K2245' },
 ];
 
 export type LoadKind = 'instant' | 'auction' | 'backhaul';

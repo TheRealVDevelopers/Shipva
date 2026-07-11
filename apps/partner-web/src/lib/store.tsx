@@ -15,12 +15,23 @@ import {
   type PayrollLine, type Staff, type TripStatus,
 } from './mocks.js';
 
+/** Vendor agreement — absence means "not created yet". */
+export interface Agreement {
+  createdOn: string;
+  effectiveFrom: string;
+  durationMonths: number;
+  ratePerKmPaise?: number;
+  commissionPct?: number;
+  notes?: string;
+}
+
 export interface Customer {
   id: string; name: string; gstin: string; phone: string; city: string;
   ratePerKmPaise: number; outstandingPaise: number;
+  agreement?: Agreement;
 }
 const seedCustomers: Customer[] = [
-  { id: 'c1', name: 'Bharat Steels', gstin: '29AABCB1111C1Z9', phone: '+91 98450 10001', city: 'Hosur', ratePerKmPaise: 4200, outstandingPaise: 1180000 },
+  { id: 'c1', name: 'Bharat Steels', gstin: '29AABCB1111C1Z9', phone: '+91 98450 10001', city: 'Hosur', ratePerKmPaise: 4200, outstandingPaise: 1180000, agreement: { createdOn: '12 Jun 2026', effectiveFrom: '01 Jun 2026', durationMonths: 12, ratePerKmPaise: 4200 } },
   { id: 'c2', name: 'Vexa Polymers', gstin: '29AACCV2222D1Z8', phone: '+91 98450 10002', city: 'Chennai', ratePerKmPaise: 3800, outstandingPaise: 1357000 },
   { id: 'c3', name: 'FreshCo Dairy', gstin: '36AADCF3333E1Z7', phone: '+91 98450 10003', city: 'Hyderabad', ratePerKmPaise: 5100, outstandingPaise: 0 },
   { id: 'c4', name: 'Leela Stores', gstin: '29AAECL4444F1Z6', phone: '+91 98450 10004', city: 'Bengaluru', ratePerKmPaise: 3200, outstandingPaise: 113280 },
@@ -28,9 +39,10 @@ const seedCustomers: Customer[] = [
 
 export interface AttachedTruck {
   id: string; owner: string; reg: string; phone: string; balancePaise: number; trips: number;
+  agreement?: Agreement;
 }
 const seedAttached: AttachedTruck[] = [
-  { id: 'a1', owner: 'Deccan Freight', reg: 'KA25B4410', phone: '+91 90080 22001', balancePaise: 420000, trips: 6 },
+  { id: 'a1', owner: 'Deccan Freight', reg: 'KA25B4410', phone: '+91 90080 22001', balancePaise: 420000, trips: 6, agreement: { createdOn: '05 May 2026', effectiveFrom: '01 May 2026', durationMonths: 24, commissionPct: 8 } },
   { id: 'a2', owner: 'Sri Sai Carriers', reg: 'AP16C7788', phone: '+91 90080 22002', balancePaise: 185000, trips: 3 },
   { id: 'a3', owner: 'M. Khan (owner-driver)', reg: 'KA51D3321', phone: '+91 90080 22003', balancePaise: 0, trips: 9 },
 ];
@@ -58,6 +70,10 @@ interface StoreApi extends StoreShape {
   addCustomer: (c: Omit<Customer, 'id' | 'outstandingPaise'>) => void;
   addDriver: (d: Omit<FleetDriver, 'id'>) => void;
   addTruck: (t: Omit<Truck, 'id'>) => void;
+  setDriverDocs: (id: string, docs: Pick<FleetDriver, 'aadhaar' | 'licenseNo' | 'licenseExpiry'>) => void;
+  setTruckDocs: (id: string, docs: Pick<Truck, 'rc' | 'insuranceNo' | 'insuranceExpiry' | 'fitnessNo' | 'fitnessExpiry'>) => void;
+  setCustomerAgreement: (id: string, a: Agreement) => void;
+  setAttachedAgreement: (id: string, a: Agreement) => void;
   runPayroll: () => void;
   reset: () => void;
 }
@@ -131,6 +147,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setS((p) => ({ ...p, trucks: [{ ...t, id: uid() }, ...p.trucks] }));
   }, []);
 
+  const setDriverDocs = useCallback((id: string, docs: Pick<FleetDriver, 'aadhaar' | 'licenseNo' | 'licenseExpiry'>) => {
+    setS((p) => ({ ...p, drivers: p.drivers.map((d) => (d.id === id ? { ...d, ...docs } : d)) }));
+  }, []);
+
+  const setTruckDocs = useCallback((id: string, docs: Pick<Truck, 'rc' | 'insuranceNo' | 'insuranceExpiry' | 'fitnessNo' | 'fitnessExpiry'>) => {
+    setS((p) => ({ ...p, trucks: p.trucks.map((t) => (t.id === id ? { ...t, ...docs } : t)) }));
+  }, []);
+
+  const setCustomerAgreement = useCallback((id: string, a: Agreement) => {
+    setS((p) => ({ ...p, customers: p.customers.map((c) => (c.id === id ? { ...c, agreement: a } : c)) }));
+  }, []);
+
+  const setAttachedAgreement = useCallback((id: string, a: Agreement) => {
+    setS((p) => ({ ...p, attached: p.attached.map((x) => (x.id === id ? { ...x, agreement: a } : x)) }));
+  }, []);
+
   const runPayroll = useCallback(() => {
     setS((p) => ({ ...p, payroll: p.payroll.map((l) => ({ ...l, status: 'paid' })) }));
   }, []);
@@ -138,8 +170,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const reset = useCallback(() => setS(seed()), []);
 
   const value = useMemo<StoreApi>(() => ({
-    ...s, addTrip, updateTripStatus, addInvoice, markInvoicePaid, addExpense, addFuelLog, addCustomer, addDriver, addTruck, runPayroll, reset,
-  }), [s, addTrip, updateTripStatus, addInvoice, markInvoicePaid, addExpense, addFuelLog, addCustomer, addDriver, addTruck, runPayroll, reset]);
+    ...s, addTrip, updateTripStatus, addInvoice, markInvoicePaid, addExpense, addFuelLog, addCustomer, addDriver, addTruck,
+    setDriverDocs, setTruckDocs, setCustomerAgreement, setAttachedAgreement, runPayroll, reset,
+  }), [s, addTrip, updateTripStatus, addInvoice, markInvoicePaid, addExpense, addFuelLog, addCustomer, addDriver, addTruck,
+    setDriverDocs, setTruckDocs, setCustomerAgreement, setAttachedAgreement, runPayroll, reset]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

@@ -10,6 +10,7 @@ import { LogoMark } from '../art.js';
 import { subscription } from '../../lib/mocks.js';
 import { FEATURES, type FeatureId } from '../../lib/features.js';
 import { useNotify } from '../../lib/notify.js';
+import { BRAND, companyInitials } from '../../lib/brand.js';
 
 interface NavItem { key: FeatureId; to: string; label: string; icon: LucideIcon; end?: boolean; group?: string; soon?: boolean }
 
@@ -45,8 +46,8 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
       <div className="flex h-16 items-center gap-2.5 px-5">
         <LogoMark className="h-8 w-8" />
         <div>
-          <div className="text-sm font-extrabold leading-none">ShipVa</div>
-          <div className="mt-0.5 text-[10px] font-bold uppercase tracking-widest text-accent-400">Partner</div>
+          <div className="text-sm font-extrabold leading-none">{BRAND.name}</div>
+          <div className="mt-0.5 text-[10px] font-bold uppercase tracking-widest text-accent-400">{BRAND.tagline}</div>
         </div>
       </div>
 
@@ -190,13 +191,13 @@ export function PartnerLayout({ title, subtitle, children }: { title: string; su
           </div>
           <div className="flex items-center gap-3">
             <span className="hidden lg:inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700 ring-1 ring-inset ring-emerald-200">
-              <ShieldCheck size={12} /> Karnataka Roadlines
+              <ShieldCheck size={12} /> {BRAND.company}
             </span>
             <NotificationBell />
             <div className="flex items-center gap-2 pl-2 border-l border-neutral-200">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-500 text-white text-xs font-extrabold">KR</div>
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-500 text-white text-xs font-extrabold">{companyInitials}</div>
               <div className="hidden sm:block">
-                <div className="text-xs font-extrabold text-neutral-900 leading-none">Karnataka Roadlines</div>
+                <div className="text-xs font-extrabold text-neutral-900 leading-none">{BRAND.company}</div>
                 <div className="text-[10px] text-neutral-500 mt-0.5">Admin · Peenya corridor</div>
               </div>
             </div>

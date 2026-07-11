@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Mail, Lock, ArrowRight, PackageSearch, Users, Wallet } from 'lucide-react';
+import { Mail, Lock, ArrowRight, ClipboardList, Users, Wallet } from 'lucide-react';
 import { LogoMark } from '../../components/art.js';
+import { BRAND } from '../../lib/brand.js';
 
 export function Login() {
   const navigate = useNavigate();
-  const [email, setEmail] = useState('ops@karnatakaroadlines.in');
+  const [email, setEmail] = useState('admin@sarvaexpress.in');
   const [password, setPassword] = useState('••••••••••');
 
   return (
@@ -15,24 +16,24 @@ export function Login() {
           <div className="flex items-center gap-2.5">
             <LogoMark className="h-9 w-9" />
             <div>
-              <div className="text-lg font-extrabold leading-none">ShipVa</div>
-              <div className="text-[11px] font-bold uppercase tracking-widest text-accent-400">Partner</div>
+              <div className="text-lg font-extrabold leading-none">{BRAND.name}</div>
+              <div className="text-[11px] font-bold uppercase tracking-widest text-accent-400">{BRAND.tagline}</div>
             </div>
           </div>
           <div>
-            <h2 className="text-2xl font-extrabold leading-tight">Run your fleet.<br />Keep <span className="text-accent-400">100%.</span></h2>
-            <p className="mt-3 text-sm text-primary-100">Claim loads, assign your drivers, track live. One flat subscription — no commission, ever.</p>
+            <h2 className="text-2xl font-extrabold leading-tight">Run your whole<br />transport business.</h2>
+            <p className="mt-3 text-sm text-primary-100">Trips, fleet, billing, fuel and payroll — one place for your entire operation.</p>
             <ul className="mt-7 space-y-2.5 text-sm text-primary-50">
-              <li className="flex items-center gap-2"><PackageSearch size={15} className="text-accent-300" /> Load board — claim or bid</li>
-              <li className="flex items-center gap-2"><Users size={15} className="text-accent-300" /> Onboard & assign your drivers</li>
-              <li className="flex items-center gap-2"><Wallet size={15} className="text-accent-300" /> Earnings — keep every rupee</li>
+              <li className="flex items-center gap-2"><ClipboardList size={15} className="text-accent-300" /> Trips & lorry receipts</li>
+              <li className="flex items-center gap-2"><Users size={15} className="text-accent-300" /> Trucks, drivers & staff</li>
+              <li className="flex items-center gap-2"><Wallet size={15} className="text-accent-300" /> Invoicing, expenses & payroll</li>
             </ul>
           </div>
         </div>
 
         <form onSubmit={(e) => { e.preventDefault(); navigate('/p'); }} className="flex flex-col justify-center p-10">
-          <h1 className="text-xl font-extrabold text-neutral-900">Partner sign in</h1>
-          <p className="mt-1 text-sm text-neutral-500">Manage your fleet and loads.</p>
+          <h1 className="text-xl font-extrabold text-neutral-900">Sign in to {BRAND.name}</h1>
+          <p className="mt-1 text-sm text-neutral-500">Manage your fleet, trips and accounts.</p>
           <div className="mt-7 space-y-4">
             <label className="block">
               <span className="text-xs font-bold text-neutral-700">Email</span>

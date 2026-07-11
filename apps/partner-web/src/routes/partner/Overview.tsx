@@ -15,6 +15,7 @@ import {
   fuel, docAlerts, sparks, type TripStatus,
 } from '../../lib/mocks.js';
 import { useStore } from '../../lib/store.js';
+import { BRAND } from '../../lib/brand.js';
 
 const TRIP_BADGE: Record<TripStatus, { label: string; tone: BadgeTone }> = {
   assigned: { label: 'Assigned', tone: 'info' },
@@ -44,7 +45,7 @@ export function Overview() {
   const inr = (n: number) => rupees(n);
 
   return (
-    <PartnerLayout title="Overview" subtitle="Karnataka Roadlines · June 2026">
+    <PartnerLayout title="Overview" subtitle={`${BRAND.company} · June 2026`}>
       <div className="space-y-6">
         {/* Quick actions */}
         <div className="flex flex-wrap items-center gap-2">

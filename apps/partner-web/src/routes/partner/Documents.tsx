@@ -6,6 +6,7 @@ import { Table, THead, Th, TBody, Tr, Td } from '../../components/ui/Table.js';
 import { Badge, type BadgeTone } from '../../components/ui/Badge.js';
 import { Button } from '../../components/ui/Button.js';
 import { vehicleDocs } from '../../lib/mocks.js';
+import { BRAND } from '../../lib/brand.js';
 
 function statusOf(days: number): { label: string; tone: BadgeTone } {
   if (days < 0) return { label: 'Expired', tone: 'danger' };
@@ -63,7 +64,7 @@ export function Documents() {
         <Card>
           <div className="flex items-start gap-3 px-5 py-4 text-sm text-neutral-600">
             <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-600"><AlertTriangle size={16} /></span>
-            <p>Keep RC, insurance, national permit, fitness, PUC and road-tax for every vehicle here. ShipVa surfaces anything expiring within 30 days on your dashboard so a lapsed document never grounds a truck or invites a fine.</p>
+            <p>Keep RC, insurance, national permit, fitness, PUC and road-tax for every vehicle here. {BRAND.name} surfaces anything expiring within 30 days on your dashboard so a lapsed document never grounds a truck or invites a fine.</p>
           </div>
         </Card>
       </div>
