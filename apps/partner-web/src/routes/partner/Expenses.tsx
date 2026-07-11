@@ -9,7 +9,7 @@ import { Button } from '../../components/ui/Button.js';
 import { Modal, Field, TextInput, Select, Row } from '../../components/ui/Modal.js';
 import { Donut } from '../../components/ui/Charts.js';
 import { rupees } from '../../lib/format.js';
-import { fuel, expenseBreakdown, osCounters } from '../../lib/mocks.js';
+import { expenseBreakdown } from '../../lib/mocks.js';
 import { useStore, todayLabel } from '../../lib/store.js';
 
 const TABS = ['Expenses', 'Fuel log'] as const;
@@ -27,6 +27,9 @@ export function Expenses() {
   const [g, setG] = useState(FUEL_EMPTY);
 
   const expTotal = expenses.reduce((s, x) => s + x.amountPaise, 0);
+  const fuelActual = fuelLogs.reduce((s, f) => s + f.costPaise, 0);
+  const fuelExpected = fuelLogs.reduce((s, f) => s + f.expectedPaise, 0);
+  const fuelLeak = Math.max(0, fuelActual - fuelExpected);
   const expValid = Number(e.amount) > 0;
   const fuelValid = g.reg && Number(g.km) > 0 && Number(g.litres) > 0;
 
@@ -49,9 +52,9 @@ export function Expenses() {
     <PartnerLayout title="Expenses & Fuel" subtitle="Trip costs, fuel and leakage control">
       <div className="space-y-6">
         <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <KpiCard label="Expense · MTD" value={rupees(osCounters.expenseMtdPaise)} hint="all categories" tone="primary" />
-          <KpiCard label="Fuel · MTD" value={rupees(fuel.mtdCostPaise)} hint="diesel" tone="accent" />
-          <KpiCard label="Fuel leakage" value={rupees(fuel.leakagePaise)} hint="actual − expected" tone="danger" />
+          <KpiCard label="Expenses" value={rupees(expTotal + fuelActual)} hint="all categories" tone="primary" />
+          <KpiCard label="Fuel" value={rupees(fuelActual)} hint="diesel" tone="accent" />
+          <KpiCard label="Fuel leakage" value={rupees(fuelLeak)} hint="actual − expected" tone="danger" />
           <KpiCard label="Logged entries" value={String(expenses.length + fuelLogs.length)} hint="expense + fuel" tone="neutral" />
         </section>
 
@@ -118,9 +121,9 @@ export function Expenses() {
             <Card>
               <CardHeader title="Fuel leakage" subtitle="How it's computed" action={<Receipt size={15} className="text-accent-500" />} />
               <CardBody className="space-y-2 text-sm">
-                <div className="flex justify-between"><span className="text-neutral-600">Actual diesel</span><span className="font-bold">{rupees(fuel.mtdCostPaise)}</span></div>
-                <div className="flex justify-between"><span className="text-neutral-600">Expected</span><span className="font-bold">{rupees(fuel.expectedPaise)}</span></div>
-                <div className="flex justify-between rounded-lg bg-rose-50 px-3 py-2 ring-1 ring-inset ring-rose-100"><span className="font-bold text-rose-700">Leakage</span><span className="font-extrabold text-rose-700">{rupees(fuel.leakagePaise)}</span></div>
+                <div className="flex justify-between"><span className="text-neutral-600">Actual diesel</span><span className="font-bold">{rupees(fuelActual)}</span></div>
+                <div className="flex justify-between"><span className="text-neutral-600">Expected</span><span className="font-bold">{rupees(fuelExpected)}</span></div>
+                <div className="flex justify-between rounded-lg bg-rose-50 px-3 py-2 ring-1 ring-inset ring-rose-100"><span className="font-bold text-rose-700">Leakage</span><span className="font-extrabold text-rose-700">{rupees(fuelLeak)}</span></div>
                 <p className="text-[11px] text-neutral-500">Expected = (distance ÷ vehicle mileage) × diesel rate. A persistent gap signals pilferage or a mileage that needs updating.</p>
               </CardBody>
             </Card>

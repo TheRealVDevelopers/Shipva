@@ -6,17 +6,29 @@ import { KpiCard } from '../../components/ui/KpiCard.js';
 import { Table, THead, Th, TBody, Tr, Td } from '../../components/ui/Table.js';
 import { Badge } from '../../components/ui/Badge.js';
 import { Button } from '../../components/ui/Button.js';
-import { Modal, Field, TextInput, Row } from '../../components/ui/Modal.js';
+import { Modal, Field, TextInput, Select, Row } from '../../components/ui/Modal.js';
 import { rupees } from '../../lib/format.js';
 import { useStore, todayLabel, type AttachedTruck } from '../../lib/store.js';
 import { printAgreement } from '../../lib/agreement.js';
+import { useNotify } from '../../lib/notify.js';
 
 const AG_EMPTY = { effectiveFrom: '', durationMonths: '24', commission: '', notes: '' };
 
 export function Payables() {
-  const { attached, setAttachedAgreement } = useStore();
+  const { attached, setAttachedAgreement, recordOwnerPayment } = useStore();
+  const { push } = useNotify();
   const [agFor, setAgFor] = useState<AttachedTruck | null>(null);
   const [ag, setAg] = useState(AG_EMPTY);
+  const [payOpen, setPayOpen] = useState(false);
+  const [pay, setPay] = useState({ id: '', amount: '' });
+
+  function submitPayment() {
+    const owner = attached.find((a) => a.id === pay.id);
+    if (!owner || Number(pay.amount) <= 0) return;
+    recordOwnerPayment(owner.id, Math.round(Number(pay.amount) * 100));
+    push({ title: 'Payment recorded', body: `Paid ${rupees(Math.round(Number(pay.amount) * 100))} to ${owner.owner}.`, tone: 'success' });
+    setPay({ id: '', amount: '' }); setPayOpen(false);
+  }
 
   const totalDue = attached.reduce((s, a) => s + a.balancePaise, 0);
   const owing = attached.filter((a) => a.balancePaise > 0).length;
@@ -51,7 +63,7 @@ export function Payables() {
 
         <Card>
           <CardHeader title="Truck-owner ledger" subtitle="Balances owed to attached vehicles"
-            action={<Button size="sm"><HandCoins size={13} /> Record payment</Button>} />
+            action={<Button size="sm" onClick={() => { setPay({ id: attached.find((a) => a.balancePaise > 0)?.id ?? '', amount: '' }); setPayOpen(true); }}><HandCoins size={13} /> Record payment</Button>} />
           <Table>
             <THead>
               <Tr><Th>Owner</Th><Th>Vehicle</Th><Th className="text-right">Trips</Th><Th className="text-right">Balance</Th><Th>Agreement</Th><Th></Th></Tr>
@@ -91,6 +103,17 @@ export function Payables() {
           </div>
         </Card>
       </div>
+
+      {/* Record payment */}
+      <Modal open={payOpen} onClose={() => setPayOpen(false)} title="Record payment" subtitle="Pay an attached truck owner" onSubmit={submitPayment} submitLabel="Record payment" submitDisabled={!pay.id || Number(pay.amount) <= 0}>
+        <Field label="Owner">
+          <Select value={pay.id} onChange={(e) => setPay({ ...pay, id: e.target.value })}>
+            <option value="">Select owner</option>
+            {attached.map((a) => <option key={a.id} value={a.id}>{a.owner} · balance {rupees(a.balancePaise)}</option>)}
+          </Select>
+        </Field>
+        <Field label="Amount (₹)"><TextInput type="number" value={pay.amount} onChange={(e) => setPay({ ...pay, amount: e.target.value })} placeholder="20000" /></Field>
+      </Modal>
 
       {/* Create agreement */}
       <Modal open={!!agFor} onClose={() => setAgFor(null)} title={`Agreement · ${agFor?.owner ?? ''}`} subtitle="Vehicle attachment terms"

@@ -12,6 +12,7 @@ import { rupees } from '../../lib/format.js';
 import { receivables, type InvoiceStatus } from '../../lib/mocks.js';
 import { useStore, todayLabel } from '../../lib/store.js';
 import { useNotify } from '../../lib/notify.js';
+import { printInvoice } from '../../lib/print.js';
 
 const INV_BADGE: Record<InvoiceStatus, { label: string; tone: BadgeTone }> = {
   paid: { label: 'Paid', tone: 'success' },
@@ -35,8 +36,18 @@ export function Invoices() {
 
   const paid = invoices.filter((i) => i.status === 'paid').reduce((s, i) => s + i.totalPaise, 0);
   const overdue = invoices.filter((i) => i.status === 'overdue').reduce((s, i) => s + i.totalPaise, 0);
+  const outstanding = invoices.filter((i) => i.status !== 'paid').reduce((s, i) => s + i.totalPaise, 0);
   const gstMtd = invoices.reduce((s, i) => s + i.gstPaise, 0);
   const valid = f.client && Number(f.base) > 0;
+
+  function sendReminder(no: string, client: string, total: number, due: string) {
+    const phone = customers.find((c) => c.name === client)?.phone ?? '';
+    const digits = phone.replace(/\D/g, '');
+    const wa = digits.length === 10 ? `91${digits}` : digits;
+    const text = `Dear ${client}, a gentle reminder that invoice ${no} for ${rupees(total)} is due on ${due}. Kindly arrange payment. Thank you.`;
+    window.open(`https://wa.me/${wa}?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer');
+    push({ title: 'Reminder sent', body: `WhatsApp reminder opened for ${client} · ${no}.`, tone: 'info' });
+  }
 
   function submit() {
     if (!valid) return;
@@ -48,8 +59,8 @@ export function Invoices() {
     <PartnerLayout title="Invoices" subtitle="GST billing & receivables">
       <div className="space-y-6">
         <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <KpiCard label="Outstanding" value={rupees(receivables.outstandingPaise)} hint="to collect" tone="danger" />
-          <KpiCard label="Collected · MTD" value={rupees(receivables.collectedMtdPaise)} hint="received" tone="success" />
+          <KpiCard label="Outstanding" value={rupees(outstanding)} hint="to collect" tone="danger" />
+          <KpiCard label="Collected" value={rupees(paid)} hint="received" tone="success" />
           <KpiCard label="Overdue" value={rupees(overdue)} hint="past due date" tone="accent" />
           <KpiCard label="GST · output" value={rupees(gstMtd)} hint="on invoices" tone="primary" />
         </section>
@@ -77,10 +88,10 @@ export function Invoices() {
                     <Td><Badge tone={INV_BADGE[i.status].tone}>{INV_BADGE[i.status].label}</Badge></Td>
                     <Td>
                       <div className="flex items-center gap-2 text-neutral-400">
-                        <button className="hover:text-primary-600" title="Download PDF"><Download size={14} /></button>
+                        <button onClick={() => printInvoice(i)} className="hover:text-primary-600" title="Download PDF"><Download size={14} /></button>
                         {i.status !== 'paid' && (
                           <>
-                            <button className="hover:text-primary-600" title="Send reminder"><Send size={14} /></button>
+                            <button onClick={() => sendReminder(i.no, i.client, i.totalPaise, i.dueDate)} className="hover:text-primary-600" title="Send WhatsApp reminder"><Send size={14} /></button>
                             <button onClick={() => payInvoice(i.no, i.client, i.totalPaise)} className="text-[11px] font-bold text-emerald-600 hover:text-emerald-700">Mark paid</button>
                           </>
                         )}

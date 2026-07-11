@@ -74,6 +74,8 @@ interface StoreApi extends StoreShape {
   setTruckDocs: (id: string, docs: Pick<Truck, 'rc' | 'insuranceNo' | 'insuranceExpiry' | 'fitnessNo' | 'fitnessExpiry'>) => void;
   setCustomerAgreement: (id: string, a: Agreement) => void;
   setAttachedAgreement: (id: string, a: Agreement) => void;
+  addStaff: (s: Omit<Staff, 'id'>) => void;
+  recordOwnerPayment: (id: string, amountPaise: number) => void;
   runPayroll: () => void;
   reset: () => void;
 }
@@ -163,6 +165,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setS((p) => ({ ...p, attached: p.attached.map((x) => (x.id === id ? { ...x, agreement: a } : x)) }));
   }, []);
 
+  const addStaff = useCallback((st: Omit<Staff, 'id'>) => {
+    setS((p) => ({ ...p, staff: [{ ...st, id: uid() }, ...p.staff] }));
+  }, []);
+
+  const recordOwnerPayment = useCallback((id: string, amountPaise: number) => {
+    setS((p) => ({ ...p, attached: p.attached.map((x) => (x.id === id ? { ...x, balancePaise: Math.max(0, x.balancePaise - amountPaise) } : x)) }));
+  }, []);
+
   const runPayroll = useCallback(() => {
     setS((p) => ({ ...p, payroll: p.payroll.map((l) => ({ ...l, status: 'paid' })) }));
   }, []);
@@ -171,9 +181,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<StoreApi>(() => ({
     ...s, addTrip, updateTripStatus, addInvoice, markInvoicePaid, addExpense, addFuelLog, addCustomer, addDriver, addTruck,
-    setDriverDocs, setTruckDocs, setCustomerAgreement, setAttachedAgreement, runPayroll, reset,
+    setDriverDocs, setTruckDocs, setCustomerAgreement, setAttachedAgreement, addStaff, recordOwnerPayment, runPayroll, reset,
   }), [s, addTrip, updateTripStatus, addInvoice, markInvoicePaid, addExpense, addFuelLog, addCustomer, addDriver, addTruck,
-    setDriverDocs, setTruckDocs, setCustomerAgreement, setAttachedAgreement, runPayroll, reset]);
+    setDriverDocs, setTruckDocs, setCustomerAgreement, setAttachedAgreement, addStaff, recordOwnerPayment, runPayroll, reset]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

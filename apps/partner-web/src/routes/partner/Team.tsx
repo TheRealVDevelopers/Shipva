@@ -1,9 +1,12 @@
+import { useState } from 'react';
 import { Plus, Shield, Phone, UserCog } from 'lucide-react';
 import { PartnerLayout } from '../../components/layout/PartnerLayout.js';
 import { Card, CardHeader, CardBody } from '../../components/ui/Card.js';
 import { Badge, type BadgeTone } from '../../components/ui/Badge.js';
 import { Button } from '../../components/ui/Button.js';
-import { staff, subscription, type StaffRole } from '../../lib/mocks.js';
+import { Modal, Field, TextInput, Select, Row } from '../../components/ui/Modal.js';
+import { subscription, type StaffRole } from '../../lib/mocks.js';
+import { useStore } from '../../lib/store.js';
 
 const ROLE_META: Record<StaffRole, { label: string; tone: BadgeTone; can: string[] }> = {
   manager: { label: 'Manager', tone: 'primary', can: ['All operations', 'Assign trips', 'View money', 'Manage staff'] },
@@ -11,25 +14,37 @@ const ROLE_META: Record<StaffRole, { label: string; tone: BadgeTone; can: string
   accountant: { label: 'Accountant', tone: 'accent', can: ['Invoicing & GST', 'Payroll', 'Expenses & ledgers'] },
 };
 
-const STAFF_SEATS = 3;
+const EMPTY = { name: '', role: 'supervisor' as StaffRole, phone: '', scope: '' };
 
 export function Team() {
+  const { staff, addStaff } = useStore();
+  const [open, setOpen] = useState(false);
+  const [f, setF] = useState(EMPTY);
+  const valid = f.name.trim().length > 0;
+
+  function submit() {
+    if (!valid) return;
+    addStaff({
+      name: f.name, role: f.role, phone: f.phone, scope: f.scope || 'All operations',
+      since: new Date().toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }),
+    });
+    setF(EMPTY); setOpen(false);
+  }
+
   return (
     <PartnerLayout title="Team & Roles" subtitle="Managers, supervisors and accountants">
       <div className="space-y-6">
-        {/* seats banner */}
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-primary-900 px-5 py-4 text-white">
           <div className="flex items-center gap-3">
             <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/10"><UserCog size={18} /></span>
             <div>
-              <div className="text-sm font-extrabold">{staff.length} of {STAFF_SEATS} staff seats used</div>
+              <div className="text-sm font-extrabold">{staff.length} staff members</div>
               <div className="text-xs text-primary-200">{subscription.tier} plan · add supervisors, managers & accountants</div>
             </div>
           </div>
-          <Button size="sm" variant="secondary"><Plus size={13} /> Invite member</Button>
+          <Button size="sm" variant="secondary" onClick={() => setOpen(true)}><Plus size={13} /> Invite member</Button>
         </div>
 
-        {/* staff cards */}
         <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 stagger">
           {staff.map((s) => {
             const meta = ROLE_META[s.role];
@@ -48,9 +63,7 @@ export function Team() {
                   <Badge tone={meta.tone}>{meta.label}</Badge>
                 </div>
 
-                <div className="mt-3 flex items-center gap-2 text-xs text-neutral-500">
-                  <Phone size={12} /> {s.phone}
-                </div>
+                <div className="mt-3 flex items-center gap-2 text-xs text-neutral-500"><Phone size={12} /> {s.phone || '—'}</div>
                 <div className="mt-1 text-xs text-neutral-500">Scope: <span className="font-semibold text-neutral-700">{s.scope}</span></div>
 
                 <div className="mt-3 border-t border-neutral-100 pt-3">
@@ -66,9 +79,8 @@ export function Team() {
           })}
         </section>
 
-        {/* role reference */}
         <Card>
-          <CardHeader title="What each role can do" subtitle="Tenant-scoped access — everyone sees only your company's data" />
+          <CardHeader title="What each role can do" subtitle="Everyone sees only your company's data" />
           <CardBody className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {(Object.keys(ROLE_META) as StaffRole[]).map((r) => {
               const meta = ROLE_META[r];
@@ -86,6 +98,23 @@ export function Team() {
           </CardBody>
         </Card>
       </div>
+
+      <Modal open={open} onClose={() => setOpen(false)} title="Invite team member" subtitle="Add a manager, supervisor or accountant" onSubmit={submit} submitLabel="Add member" submitDisabled={!valid}>
+        <Row>
+          <Field label="Full name"><TextInput value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="Prakash Nayak" /></Field>
+          <Field label="Role">
+            <Select value={f.role} onChange={(e) => setF({ ...f, role: e.target.value as StaffRole })}>
+              <option value="manager">Manager</option>
+              <option value="supervisor">Supervisor</option>
+              <option value="accountant">Accountant</option>
+            </Select>
+          </Field>
+        </Row>
+        <Row>
+          <Field label="Phone"><TextInput value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} placeholder="+91 99011 22001" /></Field>
+          <Field label="Scope" hint="e.g. pool / billing"><TextInput value={f.scope} onChange={(e) => setF({ ...f, scope: e.target.value })} placeholder="Peenya pool" /></Field>
+        </Row>
+      </Modal>
     </PartnerLayout>
   );
 }

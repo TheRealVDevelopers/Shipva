@@ -11,8 +11,8 @@ import { BarPairChart, Donut, RadialGauge, HBar } from '../../components/ui/Char
 import { VehicleArt } from '../../components/art.js';
 import { rupees } from '../../lib/format.js';
 import {
-  osCounters, months6, revenueSeries, expenseSeries, expenseBreakdown, receivables,
-  fuel, docAlerts, sparks, type TripStatus,
+  months6, revenueSeries, expenseSeries, expenseBreakdown, receivables,
+  docAlerts, sparks, type TripStatus,
 } from '../../lib/mocks.js';
 import { useStore } from '../../lib/store.js';
 import { BRAND } from '../../lib/brand.js';
@@ -35,14 +35,27 @@ function QuickAction({ to, icon, label }: { to: string; icon: React.ReactNode; l
 }
 
 export function Overview() {
-  const { trips, trucks } = useStore();
+  const { trips, trucks, invoices, expenses, fuelLogs, payroll, drivers } = useStore();
+  const inr = (n: number) => rupees(n);
+
   const onTrip = trucks.filter((t) => t.status === 'on_trip').length;
   const available = trucks.filter((t) => t.status === 'available').length;
   const maintenance = trucks.filter((t) => t.status === 'maintenance').length;
-  const collectPct = Math.round(
-    (receivables.collectedMtdPaise / (receivables.collectedMtdPaise + receivables.outstandingPaise)) * 100,
-  );
-  const inr = (n: number) => rupees(n);
+  const utilization = trucks.length ? Math.round((onTrip / trucks.length) * 100) : 0;
+
+  const revenue = trips.reduce((s, t) => s + t.freightPaise, 0);
+  const expenseTotal = expenses.reduce((s, e) => s + e.amountPaise, 0)
+    + fuelLogs.reduce((s, f) => s + f.costPaise, 0)
+    + payroll.reduce((s, p) => s + p.netPaise, 0);
+  const profit = revenue - expenseTotal;
+  const marginPct = revenue > 0 ? Math.round((profit / revenue) * 100) : 0;
+  const outstanding = invoices.filter((i) => i.status !== 'paid').reduce((s, i) => s + i.totalPaise, 0);
+  const collected = invoices.filter((i) => i.status === 'paid').reduce((s, i) => s + i.totalPaise, 0);
+  const activeTrips = trips.filter((t) => t.status !== 'closed').length;
+  const fuelActual = fuelLogs.reduce((s, f) => s + f.costPaise, 0);
+  const fuelExpected = fuelLogs.reduce((s, f) => s + f.expectedPaise, 0);
+  const fuelLeak = Math.max(0, fuelActual - fuelExpected);
+  const collectPct = (collected + outstanding) > 0 ? Math.round((collected / (collected + outstanding)) * 100) : 0;
 
   return (
     <PartnerLayout title="Overview" subtitle={`${BRAND.company} · June 2026`}>
@@ -57,10 +70,10 @@ export function Overview() {
 
         {/* Hero KPIs */}
         <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 stagger">
-          <StatCard label="Revenue · MTD" value={inr(osCounters.revenueMtdPaise)} icon={<IndianRupee size={16} />} tone="primary" deltaPct={12} hint="vs May" spark={sparks.revenue} />
-          <StatCard label="Net profit · MTD" value={inr(osCounters.profitMtdPaise)} icon={<TrendingUp size={16} />} tone="success" deltaPct={8} hint={`${osCounters.avgMarginPct}% margin`} spark={sparks.profit} />
-          <StatCard label="Outstanding" value={inr(osCounters.outstandingPaise)} icon={<Wallet size={16} />} tone="danger" deltaPct={-4} hint="receivables" spark={sparks.outstanding} />
-          <StatCard label="Active trips" value={String(osCounters.activeTrips)} icon={<Navigation size={16} />} tone="accent" hint={`${osCounters.tripsMtd} this month`} spark={sparks.trips} />
+          <StatCard label="Revenue" value={inr(revenue)} icon={<IndianRupee size={16} />} tone="primary" deltaPct={12} hint="gross freight" spark={sparks.revenue} />
+          <StatCard label="Net profit" value={inr(profit)} icon={<TrendingUp size={16} />} tone="success" deltaPct={8} hint={`${marginPct}% margin`} spark={sparks.profit} />
+          <StatCard label="Outstanding" value={inr(outstanding)} icon={<Wallet size={16} />} tone="danger" deltaPct={-4} hint="receivables" spark={sparks.outstanding} />
+          <StatCard label="Active trips" value={String(activeTrips)} icon={<Navigation size={16} />} tone="accent" hint={`${trips.length} total`} spark={sparks.trips} />
         </section>
 
         {/* Charts row */}
@@ -82,7 +95,7 @@ export function Overview() {
             <CardBody>
               <Donut
                 segments={expenseBreakdown}
-                centerMain={inr(osCounters.expenseMtdPaise)}
+                centerMain={inr(expenseTotal)}
                 centerSub="total"
               />
             </CardBody>
@@ -116,7 +129,7 @@ export function Overview() {
             <CardBody className="flex flex-col items-center justify-center py-2">
               <RadialGauge value={collectPct} color="#10b981" label={`${collectPct}%`} sub="collected" />
               <div className="mt-2 text-center text-xs text-neutral-500">
-                {inr(receivables.collectedMtdPaise)} of {inr(receivables.collectedMtdPaise + receivables.outstandingPaise)}
+                {inr(collected)} of {inr(collected + outstanding)}
               </div>
             </CardBody>
           </Card>
@@ -126,16 +139,16 @@ export function Overview() {
             <CardHeader title="Fuel control" subtitle="Actual vs calculated" action={<Fuel size={15} className="text-accent-500" />} />
             <CardBody className="space-y-3">
               <div className="flex items-center justify-between text-sm">
-                <span className="text-neutral-600">Actual (MTD)</span>
-                <span className="font-bold text-neutral-900">{inr(fuel.mtdCostPaise)}</span>
+                <span className="text-neutral-600">Actual</span>
+                <span className="font-bold text-neutral-900">{inr(fuelActual)}</span>
               </div>
               <div className="flex items-center justify-between text-sm">
                 <span className="text-neutral-600">Expected</span>
-                <span className="font-bold text-neutral-900">{inr(fuel.expectedPaise)}</span>
+                <span className="font-bold text-neutral-900">{inr(fuelExpected)}</span>
               </div>
               <div className="flex items-center justify-between rounded-lg bg-rose-50 px-3 py-2 ring-1 ring-inset ring-rose-100">
                 <span className="flex items-center gap-1.5 text-xs font-bold text-rose-700"><AlertTriangle size={13} /> Leakage flag</span>
-                <span className="font-extrabold text-rose-700">{inr(fuel.leakagePaise)}</span>
+                <span className="font-extrabold text-rose-700">{inr(fuelLeak)}</span>
               </div>
               <p className="text-[11px] text-neutral-500">Gap between diesel bought and (distance ÷ mileage × rate). Worth a check.</p>
             </CardBody>
@@ -178,7 +191,7 @@ export function Overview() {
                     { label: 'Available', value: available, color: '#10b981' },
                     { label: 'Maintenance', value: maintenance, color: '#f43f5e' },
                   ]}
-                  centerMain={`${osCounters.utilizationPct}%`}
+                  centerMain={`${utilization}%`}
                   centerSub="utilized"
                 />
               </CardBody>
@@ -207,22 +220,22 @@ export function Overview() {
         <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <Link to="/p/fleet" className="flex items-center gap-3 rounded-xl bg-white p-4 shadow-sm ring-1 ring-inset ring-neutral-200 transition hover:-translate-y-0.5 hover:ring-primary-200">
             <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary-50 text-primary-600"><TruckIcon size={18} /></span>
-            <div><div className="text-lg font-extrabold text-neutral-900">{osCounters.fleetSize}</div><div className="text-xs text-neutral-500">Vehicles</div></div>
+            <div><div className="text-lg font-extrabold text-neutral-900">{trucks.length}</div><div className="text-xs text-neutral-500">Vehicles</div></div>
             <ArrowRight size={15} className="ml-auto text-neutral-300" />
           </Link>
           <Link to="/p/fleet" className="flex items-center gap-3 rounded-xl bg-white p-4 shadow-sm ring-1 ring-inset ring-neutral-200 transition hover:-translate-y-0.5 hover:ring-primary-200">
             <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600"><Users size={18} /></span>
-            <div><div className="text-lg font-extrabold text-neutral-900">{osCounters.driversTotal}</div><div className="text-xs text-neutral-500">Drivers</div></div>
+            <div><div className="text-lg font-extrabold text-neutral-900">{drivers.length}</div><div className="text-xs text-neutral-500">Drivers</div></div>
             <ArrowRight size={15} className="ml-auto text-neutral-300" />
           </Link>
           <Link to="/p/expenses" className="flex items-center gap-3 rounded-xl bg-white p-4 shadow-sm ring-1 ring-inset ring-neutral-200 transition hover:-translate-y-0.5 hover:ring-primary-200">
             <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-violet-50 text-violet-600"><Fuel size={18} /></span>
-            <div><div className="text-lg font-extrabold text-neutral-900">{inr(osCounters.fuelMtdPaise)}</div><div className="text-xs text-neutral-500">Fuel · MTD</div></div>
+            <div><div className="text-lg font-extrabold text-neutral-900">{inr(fuelActual)}</div><div className="text-xs text-neutral-500">Fuel</div></div>
             <ArrowRight size={15} className="ml-auto text-neutral-300" />
           </Link>
           <Link to="/p/trips" className="flex items-center gap-3 rounded-xl bg-white p-4 shadow-sm ring-1 ring-inset ring-neutral-200 transition hover:-translate-y-0.5 hover:ring-primary-200">
             <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-orange-50 text-orange-600"><Navigation size={18} /></span>
-            <div><div className="text-lg font-extrabold text-neutral-900">{osCounters.tripsMtd}</div><div className="text-xs text-neutral-500">Trips · MTD</div></div>
+            <div><div className="text-lg font-extrabold text-neutral-900">{trips.length}</div><div className="text-xs text-neutral-500">Trips</div></div>
             <ArrowRight size={15} className="ml-auto text-neutral-300" />
           </Link>
         </section>

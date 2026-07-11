@@ -11,6 +11,7 @@ import { rupees } from '../../lib/format.js';
 import { osCounters, type TripStatus } from '../../lib/mocks.js';
 import { useStore, todayLabel } from '../../lib/store.js';
 import { useNotify } from '../../lib/notify.js';
+import { printLR } from '../../lib/print.js';
 
 const TRIP_BADGE: Record<TripStatus, { label: string; tone: BadgeTone }> = {
   assigned: { label: 'Assigned', tone: 'info' },
@@ -108,7 +109,7 @@ export function Trips() {
                   <Td className="text-right font-bold text-neutral-900">{rupees(t.freightPaise)}</Td>
                   <Td>{t.ewayBill ? <Badge tone="success">Linked</Badge> : <Badge tone="warning">Pending</Badge>}</Td>
                   <Td><Badge tone={TRIP_BADGE[t.status].tone}>{TRIP_BADGE[t.status].label}</Badge></Td>
-                  <Td><button className="inline-flex items-center gap-1 text-xs font-bold text-primary-600 hover:text-primary-700"><FileText size={12} /> LR</button></Td>
+                  <Td><button onClick={() => printLR(t)} className="inline-flex items-center gap-1 text-xs font-bold text-primary-600 hover:text-primary-700"><FileText size={12} /> LR</button></Td>
                 </Tr>
               ))}
               {shown.length === 0 && (
