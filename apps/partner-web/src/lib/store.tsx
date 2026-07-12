@@ -101,6 +101,20 @@ const seedPoints: SavedPoint[] = [
   { label: 'Bommasandra' }, { label: 'Nelamangala' },
 ];
 
+/** A money/approval request a worker raises for the accountant to action. */
+export interface MoneyRequest {
+  id: string; createdOn: string; raisedBy: string;
+  kind: 'expense' | 'advance' | 'trip' | 'other';
+  title: string; note?: string; amountPaise?: number; tripLr?: string;
+  status: 'pending' | 'approved' | 'rejected';
+}
+const seedRequests: MoneyRequest[] = [
+  { id: 'rq1', createdOn: '27 Jun', raisedBy: 'Supervisor · Peenya', kind: 'advance', title: 'Driver advance — Ramesh (Hosur trip)', amountPaise: 300000, tripLr: 'LR-24817', status: 'pending', note: 'Diesel + food advance for the run.' },
+  { id: 'rq2', createdOn: '26 Jun', raisedBy: 'Supervisor · Peenya', kind: 'expense', title: 'Tyre puncture repair — KA02D9930', amountPaise: 45000, status: 'pending' },
+];
+
+const seedCategories = ['Toll', 'RTO/Police', 'Loading', 'Repairs', 'Office', 'Misc'];
+
 interface StoreShape {
   trips: Trip[];
   invoices: Invoice[];
@@ -114,6 +128,8 @@ interface StoreShape {
   attached: AttachedTruck[];
   tours: Tour[];
   savedPoints: SavedPoint[];
+  expenseCategories: string[];
+  requests: MoneyRequest[];
 }
 
 interface StoreApi extends StoreShape {
@@ -126,6 +142,9 @@ interface StoreApi extends StoreShape {
   markInvoicePaid: (no: string) => void;
   addExpense: (e: Expense) => void;
   addFuelLog: (f: FuelLog) => void;
+  addExpenseCategory: (name: string) => void;
+  addRequest: (r: Omit<MoneyRequest, 'id' | 'createdOn' | 'status'>) => void;
+  resolveRequest: (id: string, status: 'approved' | 'rejected') => void;
   addCustomer: (c: Omit<Customer, 'id' | 'outstandingPaise'>) => void;
   addDriver: (d: Omit<FleetDriver, 'id'>) => void;
   addTruck: (t: Omit<Truck, 'id'>) => void;
@@ -148,6 +167,7 @@ function seed(): StoreShape {
     trips: seedTrips, invoices: seedInvoices, expenses: seedExpenses, fuelLogs: seedFuelLogs,
     drivers: seedDrivers, trucks: seedTrucks, payroll: seedPayroll, staff: seedStaff,
     customers: seedCustomers, attached: seedAttached, tours: seedTours, savedPoints: seedPoints,
+    expenseCategories: seedCategories, requests: seedRequests,
   };
 }
 
@@ -229,6 +249,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const addExpense = useCallback((e: Expense) => setS((p) => ({ ...p, expenses: [e, ...p.expenses] })), []);
   const addFuelLog = useCallback((f: FuelLog) => setS((p) => ({ ...p, fuelLogs: [f, ...p.fuelLogs] })), []);
 
+  const addExpenseCategory = useCallback((name: string) => {
+    const n = name.trim();
+    if (!n) return;
+    setS((p) => (p.expenseCategories.some((c) => c.toLowerCase() === n.toLowerCase())
+      ? p : { ...p, expenseCategories: [...p.expenseCategories, n] }));
+  }, []);
+
+  const addRequest = useCallback((r: Omit<MoneyRequest, 'id' | 'createdOn' | 'status'>) => {
+    setS((p) => ({ ...p, requests: [{ ...r, id: uid(), createdOn: today(), status: 'pending' }, ...p.requests] }));
+  }, []);
+
+  const resolveRequest = useCallback((id: string, status: 'approved' | 'rejected') => {
+    setS((p) => ({ ...p, requests: p.requests.map((r) => (r.id === id ? { ...r, status } : r)) }));
+  }, []);
+
   const addCustomer = useCallback((c: Omit<Customer, 'id' | 'outstandingPaise'>) => {
     setS((p) => ({ ...p, customers: [{ ...c, id: uid(), outstandingPaise: 0 }, ...p.customers] }));
   }, []);
@@ -280,9 +315,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const reset = useCallback(() => setS(seed()), []);
 
   const value = useMemo<StoreApi>(() => ({
-    ...s, addTrip, updateTripStatus, advanceTrip, addSavedPoint, addInvoice, markInvoicePaid, addExpense, addFuelLog, addCustomer, addDriver, addTruck,
+    ...s, addTrip, updateTripStatus, advanceTrip, addSavedPoint, addInvoice, markInvoicePaid, addExpense, addFuelLog,
+    addExpenseCategory, addRequest, resolveRequest, addCustomer, addDriver, addTruck,
     setDriverDocs, setTruckDocs, setCustomerAgreement, setAttachedAgreement, addStaff, addAttached, recordOwnerPayment, addTour, runPayroll, reset,
-  }), [s, addTrip, updateTripStatus, advanceTrip, addSavedPoint, addInvoice, markInvoicePaid, addExpense, addFuelLog, addCustomer, addDriver, addTruck,
+  }), [s, addTrip, updateTripStatus, advanceTrip, addSavedPoint, addInvoice, markInvoicePaid, addExpense, addFuelLog,
+    addExpenseCategory, addRequest, resolveRequest, addCustomer, addDriver, addTruck,
     setDriverDocs, setTruckDocs, setCustomerAgreement, setAttachedAgreement, addStaff, addAttached, recordOwnerPayment, addTour, runPayroll, reset]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
