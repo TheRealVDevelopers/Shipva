@@ -24,6 +24,16 @@ service firebase.storage {
         && request.resource.contentType.matches('image/.*');
     }
 
+    // Transporter OS document images (driver/truck/vendor docs). Any signed-in
+    // staff of the tenant may read/write. (Tenant scoping tightens with the
+    // per-tenant auth in Phase B.)
+    match /documents/{allPaths=**} {
+      allow read: if signedIn();
+      allow write: if signedIn()
+        && request.resource.size < 8 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*|application/pdf');
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }

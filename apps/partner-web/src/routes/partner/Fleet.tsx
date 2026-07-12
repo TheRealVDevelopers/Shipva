@@ -185,12 +185,12 @@ export function Fleet() {
       <Modal open={!!docDriver} onClose={() => setDocDriver(null)} title={`Documents · ${docDriver?.name ?? ''}`} subtitle="Aadhaar & driving licence"
         onSubmit={() => { if (docDriver) { setDriverDocs(docDriver.id, dForm); setDocDriver(null); } }} submitLabel="Save documents">
         <Field label="Aadhaar number" hint="12-digit UIDAI number"><TextInput value={dForm.aadhaar} onChange={(e) => setDForm({ ...dForm, aadhaar: e.target.value })} placeholder="4821 7745 9012" /></Field>
-        <Field label="Aadhaar card image"><ImageUpload value={dForm.aadhaarImg} onChange={(v) => setDForm({ ...dForm, aadhaarImg: v })} label="Upload Aadhaar" /></Field>
+        <Field label="Aadhaar card image"><ImageUpload value={dForm.aadhaarImg} onChange={(v) => setDForm({ ...dForm, aadhaarImg: v })} label="Upload Aadhaar" path={`documents/drivers/${docDriver?.id}/aadhaar`} /></Field>
         <Row>
           <Field label="Driving licence no"><TextInput value={dForm.licenseNo} onChange={(e) => setDForm({ ...dForm, licenseNo: e.target.value })} placeholder="KA0120200012345" /></Field>
           <Field label="Licence expiry"><TextInput value={dForm.licenseExpiry} onChange={(e) => setDForm({ ...dForm, licenseExpiry: e.target.value })} placeholder="14 Aug 2031" /></Field>
         </Row>
-        <Field label="Driving licence image"><ImageUpload value={dForm.licenseImg} onChange={(v) => setDForm({ ...dForm, licenseImg: v })} label="Upload licence" /></Field>
+        <Field label="Driving licence image"><ImageUpload value={dForm.licenseImg} onChange={(v) => setDForm({ ...dForm, licenseImg: v })} label="Upload licence" path={`documents/drivers/${docDriver?.id}/licence`} /></Field>
         <p className="text-[11px] text-neutral-400">Numbers are kept for reference; the image is the actual document. Full-resolution storage arrives with the backend.</p>
       </Modal>
 
@@ -198,17 +198,17 @@ export function Fleet() {
       <Modal open={!!docTruck} onClose={() => setDocTruck(null)} title={`Documents · ${docTruck?.reg ?? ''}`} subtitle="RC, insurance & fitness"
         onSubmit={() => { if (docTruck) { setTruckDocs(docTruck.id, tForm); setDocTruck(null); } }} submitLabel="Save documents">
         <Field label="RC number"><TextInput value={tForm.rc} onChange={(e) => setTForm({ ...tForm, rc: e.target.value })} placeholder="RC-KA01C5521" /></Field>
-        <Field label="RC image"><ImageUpload value={tForm.rcImg} onChange={(v) => setTForm({ ...tForm, rcImg: v })} label="Upload RC" /></Field>
+        <Field label="RC image"><ImageUpload value={tForm.rcImg} onChange={(v) => setTForm({ ...tForm, rcImg: v })} label="Upload RC" path={`documents/trucks/${docTruck?.id}/rc`} /></Field>
         <Row>
           <Field label="Insurance no"><TextInput value={tForm.insuranceNo} onChange={(e) => setTForm({ ...tForm, insuranceNo: e.target.value })} placeholder="INS-778812" /></Field>
           <Field label="Insurance expiry"><TextInput value={tForm.insuranceExpiry} onChange={(e) => setTForm({ ...tForm, insuranceExpiry: e.target.value })} placeholder="02 Sep 2026" /></Field>
         </Row>
-        <Field label="Insurance image"><ImageUpload value={tForm.insuranceImg} onChange={(v) => setTForm({ ...tForm, insuranceImg: v })} label="Upload insurance" /></Field>
+        <Field label="Insurance image"><ImageUpload value={tForm.insuranceImg} onChange={(v) => setTForm({ ...tForm, insuranceImg: v })} label="Upload insurance" path={`documents/trucks/${docTruck?.id}/insurance`} /></Field>
         <Row>
           <Field label="Fitness cert no"><TextInput value={tForm.fitnessNo} onChange={(e) => setTForm({ ...tForm, fitnessNo: e.target.value })} placeholder="FIT-4521" /></Field>
           <Field label="Fitness expiry"><TextInput value={tForm.fitnessExpiry} onChange={(e) => setTForm({ ...tForm, fitnessExpiry: e.target.value })} placeholder="30 Jul 2026" /></Field>
         </Row>
-        <Field label="Fitness certificate image"><ImageUpload value={tForm.fitnessImg} onChange={(v) => setTForm({ ...tForm, fitnessImg: v })} label="Upload fitness" /></Field>
+        <Field label="Fitness certificate image"><ImageUpload value={tForm.fitnessImg} onChange={(v) => setTForm({ ...tForm, fitnessImg: v })} label="Upload fitness" path={`documents/trucks/${docTruck?.id}/fitness`} /></Field>
         <p className="text-[11px] text-neutral-400">Numbers are kept for reference; the image is the actual document.</p>
       </Modal>
     </PartnerLayout>
