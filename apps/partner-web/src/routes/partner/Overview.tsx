@@ -11,7 +11,7 @@ import { BarPairChart, Donut, RadialGauge, HBar } from '../../components/ui/Char
 import { VehicleArt } from '../../components/art.js';
 import { rupees } from '../../lib/format.js';
 import {
-  months6, revenueSeries, expenseSeries, expenseBreakdown, receivables,
+  months6, revenueSeries, expenseSeries, receivables,
   docAlerts, sparks, type TripStatus,
 } from '../../lib/mocks.js';
 import { useStore } from '../../lib/store.js';
@@ -25,6 +25,15 @@ const TRIP_BADGE: Record<TripStatus, { label: string; tone: BadgeTone }> = {
   pod_pending: { label: 'POD pending', tone: 'warning' },
   closed: { label: 'Closed', tone: 'success' },
 };
+
+const STATUS_ORDER: { st: TripStatus; label: string; color: string }[] = [
+  { st: 'assigned', label: 'Scheduled', color: '#0ea5e9' },
+  { st: 'loading', label: 'Loading', color: 'var(--sx-accent-500)' },
+  { st: 'in_transit', label: 'In transit', color: 'var(--sx-primary-500)' },
+  { st: 'at_drop', label: 'At drop', color: 'var(--sx-primary-300)' },
+  { st: 'pod_pending', label: 'POD pending', color: '#f59e0b' },
+  { st: 'closed', label: 'Completed', color: '#10b981' },
+];
 
 function QuickAction({ to, icon, label }: { to: string; icon: React.ReactNode; label: string }) {
   return (
@@ -57,6 +66,21 @@ export function Overview() {
   const fuelLeak = Math.max(0, fuelActual - fuelExpected);
   const collectPct = (collected + outstanding) > 0 ? Math.round((collected / (collected + outstanding)) * 100) : 0;
 
+  const statusCount = (st: TripStatus) => trips.filter((t) => t.status === st).length;
+  const scheduled = statusCount('assigned');
+  const ongoing = statusCount('loading') + statusCount('in_transit') + statusCount('at_drop') + statusCount('pod_pending');
+  const completed = statusCount('closed');
+
+  const payrollTotal = payroll.reduce((s, p) => s + p.netPaise, 0);
+  const catTotal = (labels: string[]) => expenses.filter((e) => labels.includes(e.category)).reduce((s, e) => s + e.amountPaise, 0);
+  const expenseSegments = [
+    { label: 'Fuel', value: fuelActual, color: 'var(--sx-accent-500)' },
+    { label: 'Salaries', value: payrollTotal, color: 'var(--sx-primary-500)' },
+    { label: 'Toll & RTO', value: catTotal(['Toll', 'RTO/Police']), color: '#0ea5e9' },
+    { label: 'Repairs', value: catTotal(['Repairs']), color: '#8b5cf6' },
+    { label: 'Other', value: catTotal(['Loading', 'Misc']), color: 'var(--sx-neutral-400)' },
+  ].filter((s) => s.value > 0);
+
   return (
     <PartnerLayout title="Overview" subtitle={`${BRAND.company} · June 2026`}>
       <div className="space-y-6">
@@ -76,6 +100,49 @@ export function Overview() {
           <StatCard label="Active trips" value={String(activeTrips)} icon={<Navigation size={16} />} tone="accent" hint={`${trips.length} total`} spark={sparks.trips} />
         </section>
 
+        {/* Trips by status — one-glance view of where every trip stands */}
+        <Card>
+          <CardHeader title="Trips by status" subtitle="Where every trip stands right now" action={<Link to="/p/trips" className="text-xs font-bold text-primary-600">All trips →</Link>} />
+          <CardBody>
+            <div className="grid grid-cols-3 gap-3">
+              <Link to="/p/trips?f=Scheduled" className="rounded-xl bg-sky-50 p-4 ring-1 ring-inset ring-sky-100 transition hover:-translate-y-0.5">
+                <div className="text-2xl font-extrabold text-sky-700">{scheduled}</div>
+                <div className="text-xs font-bold text-sky-600">Scheduled</div>
+                <div className="mt-0.5 text-[10px] text-neutral-500">assigned, not started</div>
+              </Link>
+              <Link to="/p/trips?f=Ongoing" className="rounded-xl bg-primary-50 p-4 ring-1 ring-inset ring-primary-100 transition hover:-translate-y-0.5">
+                <div className="text-2xl font-extrabold text-primary-700">{ongoing}</div>
+                <div className="text-xs font-bold text-primary-600">Ongoing</div>
+                <div className="mt-0.5 text-[10px] text-neutral-500">loading → in transit → POD</div>
+              </Link>
+              <Link to="/p/trips?f=Completed" className="rounded-xl bg-emerald-50 p-4 ring-1 ring-inset ring-emerald-100 transition hover:-translate-y-0.5">
+                <div className="text-2xl font-extrabold text-emerald-700">{completed}</div>
+                <div className="text-xs font-bold text-emerald-600">Completed</div>
+                <div className="mt-0.5 text-[10px] text-neutral-500">delivered & closed</div>
+              </Link>
+            </div>
+
+            {/* proportion bar across all six states */}
+            <div className="mt-4 flex h-3 w-full overflow-hidden rounded-full bg-neutral-100">
+              {STATUS_ORDER.map((s) => {
+                const c = statusCount(s.st);
+                return c > 0 ? <div key={s.st} style={{ flexGrow: c, background: s.color }} title={`${s.label}: ${c}`} /> : null;
+              })}
+            </div>
+
+            {/* per-state legend with counts */}
+            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {STATUS_ORDER.map((s) => (
+                <div key={s.st} className="flex items-center gap-2 text-xs">
+                  <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: s.color }} />
+                  <span className="text-neutral-600">{s.label}</span>
+                  <span className="ml-auto font-bold text-neutral-900">{statusCount(s.st)}</span>
+                </div>
+              ))}
+            </div>
+          </CardBody>
+        </Card>
+
         {/* Charts row */}
         <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <Card className="lg:col-span-2">
@@ -94,7 +161,7 @@ export function Overview() {
             <CardHeader title="Expense breakdown" subtitle="This month" />
             <CardBody>
               <Donut
-                segments={expenseBreakdown}
+                segments={expenseSegments}
                 centerMain={inr(expenseTotal)}
                 centerSub="total"
               />

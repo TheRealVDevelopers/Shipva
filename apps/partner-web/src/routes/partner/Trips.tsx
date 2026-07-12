@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Plus, FileText, MapPin, Search } from 'lucide-react';
 import { PartnerLayout } from '../../components/layout/PartnerLayout.js';
 import { Card } from '../../components/ui/Card.js';
@@ -22,8 +23,16 @@ const TRIP_BADGE: Record<TripStatus, { label: string; tone: BadgeTone }> = {
   closed: { label: 'Closed', tone: 'success' },
 };
 
-const FILTERS = ['All', 'Active', 'Closed'] as const;
+const FILTERS = ['All', 'Scheduled', 'Ongoing', 'Completed'] as const;
+type Filter = (typeof FILTERS)[number];
 const EMPTY = { from: '', to: '', driver: '', vehicleReg: '', material: '', weight: '', freight: '' };
+
+function matchesFilter(status: TripStatus, filter: Filter): boolean {
+  if (filter === 'All') return true;
+  if (filter === 'Scheduled') return status === 'assigned';
+  if (filter === 'Completed') return status === 'closed';
+  return status !== 'assigned' && status !== 'closed'; // Ongoing
+}
 
 const NEXT: Partial<Record<TripStatus, TripStatus>> = {
   assigned: 'loading', loading: 'in_transit', in_transit: 'at_drop', at_drop: 'pod_pending', pod_pending: 'closed',
@@ -32,13 +41,15 @@ const NEXT: Partial<Record<TripStatus, TripStatus>> = {
 export function Trips() {
   const { trips, drivers, trucks, addTrip, updateTripStatus } = useStore();
   const { push } = useNotify();
-  const [filter, setFilter] = useState<(typeof FILTERS)[number]>('All');
+  const [params] = useSearchParams();
+  const initialFilter = FILTERS.find((x) => x === params.get('f')) ?? 'All';
+  const [filter, setFilter] = useState<Filter>(initialFilter);
   const [q, setQ] = useState('');
   const [open, setOpen] = useState(false);
   const [f, setF] = useState(EMPTY);
 
   const shown = trips
-    .filter((t) => (filter === 'All' ? true : filter === 'Closed' ? t.status === 'closed' : t.status !== 'closed'))
+    .filter((t) => matchesFilter(t.status, filter))
     .filter((t) => (q ? `${t.lr} ${t.driver} ${t.from} ${t.to}`.toLowerCase().includes(q.toLowerCase()) : true));
   const active = trips.filter((t) => t.status !== 'closed').length;
   const freightTotal = trips.reduce((s, t) => s + t.freightPaise, 0);

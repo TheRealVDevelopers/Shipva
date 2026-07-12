@@ -9,7 +9,6 @@ import { Button } from '../../components/ui/Button.js';
 import { Modal, Field, TextInput, Select, Row } from '../../components/ui/Modal.js';
 import { Donut } from '../../components/ui/Charts.js';
 import { rupees } from '../../lib/format.js';
-import { expenseBreakdown } from '../../lib/mocks.js';
 import { useStore, todayLabel } from '../../lib/store.js';
 
 const TABS = ['Expenses', 'Fuel log'] as const;
@@ -30,6 +29,14 @@ export function Expenses() {
   const fuelActual = fuelLogs.reduce((s, f) => s + f.costPaise, 0);
   const fuelExpected = fuelLogs.reduce((s, f) => s + f.expectedPaise, 0);
   const fuelLeak = Math.max(0, fuelActual - fuelExpected);
+  const catTotal = (labels: string[]) => expenses.filter((x) => labels.includes(x.category)).reduce((s, x) => s + x.amountPaise, 0);
+  const expenseSegments = [
+    { label: 'Fuel', value: fuelActual, color: 'var(--sx-accent-500)' },
+    { label: 'Toll & RTO', value: catTotal(['Toll', 'RTO/Police']), color: '#0ea5e9' },
+    { label: 'Loading', value: catTotal(['Loading']), color: 'var(--sx-primary-500)' },
+    { label: 'Repairs', value: catTotal(['Repairs']), color: '#8b5cf6' },
+    { label: 'Misc', value: catTotal(['Misc']), color: 'var(--sx-neutral-400)' },
+  ].filter((s) => s.value > 0);
   const expValid = Number(e.amount) > 0;
   const fuelValid = g.reg && Number(g.km) > 0 && Number(g.litres) > 0;
 
@@ -116,7 +123,7 @@ export function Expenses() {
           <div className="space-y-6">
             <Card>
               <CardHeader title="Expense mix" subtitle="This month" />
-              <CardBody><Donut segments={expenseBreakdown} centerMain={rupees(expTotal)} centerSub="recent" /></CardBody>
+              <CardBody><Donut segments={expenseSegments} centerMain={rupees(expTotal + fuelActual)} centerSub="this month" /></CardBody>
             </Card>
             <Card>
               <CardHeader title="Fuel leakage" subtitle="How it's computed" action={<Receipt size={15} className="text-accent-500" />} />
