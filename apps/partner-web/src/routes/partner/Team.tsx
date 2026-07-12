@@ -18,8 +18,10 @@ import {
   watchAllToday, watchActivity, presence, fmtClock, fmtActive, type Activity,
 } from '../../lib/activity.js';
 import {
-  watchTasksFor, createTask, elapsedMs, fmtDuration, type Task,
+  watchTasksFor, elapsedMs, fmtDuration, isOverdue, type Task,
 } from '../../lib/tasks.js';
+import { watchWorklogFor, fmtTime, type WorklogEntry } from '../../lib/worklog.js';
+import { AssignTaskModal } from '../../components/AssignTaskModal.js';
 import { useNotify } from '../../lib/notify.js';
 
 const ROLE_TONE: Record<Role, BadgeTone> = { owner: 'success', manager: 'primary', supervisor: 'info', accountant: 'accent' };
@@ -162,7 +164,7 @@ export function Team() {
       {edit && <EditMember member={edit} onClose={() => setEdit(null)} isSelf={edit.uid === me?.uid} />}
 
       {/* Assign task */}
-      {assignTo && me && <AssignTask member={assignTo} createdBy={`${me.name} · ${roleLabel(me.role)}`} onClose={() => setAssignTo(null)} />}
+      {assignTo && me && <AssignTaskModal members={members} preset={assignTo} createdBy={`${me.name} · ${roleLabel(me.role)}`} onClose={() => setAssignTo(null)} />}
 
       {/* Member's day */}
       {todayFor && <TodayModal member={todayFor} activity={activity[todayFor.uid] ?? null} onClose={() => setTodayFor(null)} />}
@@ -184,37 +186,14 @@ function ActivityRow({ activity }: { activity: Activity | null }) {
   );
 }
 
-function AssignTask({ member, createdBy, onClose }: { member: Member; createdBy: string; onClose: () => void }) {
-  const { push } = useNotify();
-  const [title, setTitle] = useState('');
-  const [note, setNote] = useState('');
-  const [busy, setBusy] = useState(false);
-
-  async function save() {
-    if (!title.trim() || busy) return;
-    setBusy(true);
-    try {
-      await createTask({ title, note, assigneeUid: member.uid, assigneeName: member.name, createdBy });
-      push({ title: 'Task assigned', body: `${member.name} will see it on their Overview.`, tone: 'success' });
-      onClose();
-    } catch { push({ title: "Couldn't assign", body: 'Please try again.', tone: 'warning' }); }
-    finally { setBusy(false); }
-  }
-
-  return (
-    <Modal open onClose={onClose} title={`Assign task · ${member.name}`} subtitle="Shows at the top of their Overview with a timer" onSubmit={save} submitLabel={busy ? 'Assigning…' : 'Assign task'} submitDisabled={!title.trim() || busy}>
-      <Field label="Task"><TextInput value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Call Bharat Steels about POD" autoFocus /></Field>
-      <Field label="Details" hint="Optional"><TextInput value={note} onChange={(e) => setNote(e.target.value)} placeholder="Get signed POD for LR-24817" /></Field>
-    </Modal>
-  );
-}
-
 function TodayModal({ member, activity, onClose }: { member: Member; activity: Activity | null; onClose: () => void }) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [act, setAct] = useState<Activity | null>(activity);
+  const [entries, setEntries] = useState<WorklogEntry[]>([]);
   const [now, setNow] = useState(Date.now());
   useEffect(() => watchTasksFor(member.uid, setTasks), [member.uid]);
   useEffect(() => watchActivity(member.uid, setAct), [member.uid]);
+  useEffect(() => watchWorklogFor(member.uid, setEntries), [member.uid]);
   useEffect(() => { const id = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(id); }, []);
 
   const today = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
@@ -234,16 +213,30 @@ function TodayModal({ member, activity, onClose }: { member: Member; activity: A
       <div className="mt-1 text-[11px] font-bold uppercase tracking-wide text-neutral-400">Tasks</div>
       {todays.length === 0 && <p className="py-3 text-sm text-neutral-400">No tasks.</p>}
       <div className="space-y-2">
-        {todays.map((t) => (
-          <div key={t.id} className="flex items-center justify-between gap-2 rounded-lg bg-white px-3 py-2 ring-1 ring-inset ring-neutral-200">
-            <div className="min-w-0">
-              <div className="truncate text-sm font-semibold text-neutral-900">{t.title}</div>
-              <div className="text-[11px] text-neutral-400">{t.status === 'done' ? 'Completed' : t.startedAtMs ? 'In progress' : 'Not started'}</div>
+        {todays.map((t) => {
+          const overdue = isOverdue(t, now);
+          return (
+            <div key={t.id} className={`flex items-center justify-between gap-2 rounded-lg px-3 py-2 ring-1 ring-inset ${overdue ? 'bg-rose-50 ring-rose-200' : 'bg-white ring-neutral-200'}`}>
+              <div className="min-w-0">
+                <div className="truncate text-sm font-semibold text-neutral-900">{t.title}</div>
+                <div className={`text-[11px] ${overdue ? 'font-bold text-rose-600' : 'text-neutral-400'}`}>{overdue ? 'Overdue' : t.status === 'done' ? 'Completed' : t.startedAtMs ? 'In progress' : 'Not started'}</div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-xs font-bold tabular-nums text-neutral-700">{fmtDuration(elapsedMs(t, now))}</span>
+                <Badge tone={t.status === 'done' ? 'success' : overdue ? 'danger' : t.startedAtMs ? 'primary' : 'neutral'}>{t.status === 'done' ? 'Done' : t.startedAtMs ? 'Running' : 'Todo'}</Badge>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="font-mono text-xs font-bold tabular-nums text-neutral-700">{fmtDuration(elapsedMs(t, now))}</span>
-              <Badge tone={t.status === 'done' ? 'success' : t.startedAtMs ? 'primary' : 'neutral'}>{t.status === 'done' ? 'Done' : t.startedAtMs ? 'Running' : 'Todo'}</Badge>
-            </div>
+          );
+        })}
+      </div>
+
+      <div className="mt-2 text-[11px] font-bold uppercase tracking-wide text-neutral-400">Work log</div>
+      {entries.length === 0 && <p className="py-2 text-sm text-neutral-400">No entries logged today.</p>}
+      <div className="space-y-1.5">
+        {entries.map((e) => (
+          <div key={e.id} className="flex items-start gap-2 text-sm text-neutral-700">
+            <span className="mt-0.5 font-mono text-[11px] font-bold text-neutral-400">{fmtTime(e.atMs)}</span>
+            <span className="flex-1">{e.text}</span>
           </div>
         ))}
       </div>

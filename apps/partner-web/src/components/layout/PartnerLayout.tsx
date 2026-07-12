@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, ClipboardList, Route, Truck, FileCheck2, UserCog, Users, FileText, Fuel, Wallet,
@@ -14,21 +14,79 @@ import { roleLabel } from '../../lib/roles.js';
 import { useAuth } from '../../lib/auth.js';
 import { memberCanAccess } from '../../lib/members.js';
 import { touchActivity } from '../../lib/activity.js';
+import { watchAllTasks, isOverdue, type Task } from '../../lib/tasks.js';
 import { BRAND } from '../../lib/brand.js';
 
-/** Heartbeat that records screen-time while the tab is visible. */
+/** Heartbeat that records screen-time while the tab is visible. The owner is a
+ *  supervisor of the team, not a tracked worker, so we skip tracking for them. */
 function useActivityHeartbeat() {
   const { member, status } = useAuth();
-  const uid = member?.uid; const name = member?.name;
+  const uid = member?.uid; const name = member?.name; const role = member?.role;
   useEffect(() => {
-    if (status !== 'ready' || !uid || !name) return;
+    if (status !== 'ready' || !uid || !name || role === 'owner') return;
     const beat = () => { if (document.visibilityState === 'visible') void touchActivity(uid, name); };
     beat();
     const id = window.setInterval(beat, 60_000);
     document.addEventListener('visibilitychange', beat);
     window.addEventListener('focus', beat);
     return () => { window.clearInterval(id); document.removeEventListener('visibilitychange', beat); window.removeEventListener('focus', beat); };
-  }, [status, uid, name]);
+  }, [status, uid, name, role]);
+}
+
+/** Owner/manager alerts: chime + notification when a teammate finishes a task
+ *  or a deadline is crossed. Pre-existing states are primed so only live
+ *  transitions notify. */
+function useTeamTaskAlerts() {
+  const { member, status } = useAuth();
+  const { push } = useNotify();
+  const isAdmin = member?.role === 'owner' || member?.role === 'manager';
+  const tasksRef = useRef<Task[]>([]);
+  const prevStatus = useRef<Map<string, string>>(new Map());
+  const notifiedDone = useRef<Set<string>>(new Set());
+  const notifiedOverdue = useRef<Set<string>>(new Set());
+  const primed = useRef(false);
+
+  useEffect(() => {
+    if (status !== 'ready' || !isAdmin) return;
+    primed.current = false;
+    prevStatus.current = new Map();
+    notifiedDone.current = new Set();
+    notifiedOverdue.current = new Set();
+
+    const unsub = watchAllTasks((tasks) => {
+      tasksRef.current = tasks;
+      if (!primed.current) {
+        tasks.forEach((t) => {
+          prevStatus.current.set(t.id, t.status);
+          if (t.status === 'done') notifiedDone.current.add(t.id);
+          if (isOverdue(t)) notifiedOverdue.current.add(t.id);
+        });
+        primed.current = true;
+        return;
+      }
+      tasks.forEach((t) => {
+        const prev = prevStatus.current.get(t.id);
+        if (t.status === 'done' && prev !== 'done' && !notifiedDone.current.has(t.id)) {
+          notifiedDone.current.add(t.id);
+          push({ title: 'Task completed ✅', body: `${t.assigneeName} completed: ${t.title}`, tone: 'success' });
+        }
+        prevStatus.current.set(t.id, t.status);
+      });
+    });
+
+    const overdueTimer = window.setInterval(() => {
+      if (!primed.current) return;
+      const now = Date.now();
+      tasksRef.current.forEach((t) => {
+        if (isOverdue(t, now) && !notifiedOverdue.current.has(t.id)) {
+          notifiedOverdue.current.add(t.id);
+          push({ title: 'Task overdue ⏰', body: `${t.assigneeName}'s task is overdue: ${t.title}`, tone: 'warning' });
+        }
+      });
+    }, 20_000);
+
+    return () => { unsub(); window.clearInterval(overdueTimer); };
+  }, [status, isAdmin, push]);
 }
 
 interface NavItem { key: FeatureId; to: string; label: string; icon: LucideIcon; end?: boolean; group?: string; soon?: boolean }
@@ -221,6 +279,7 @@ function UserMenu() {
 export function PartnerLayout({ title, subtitle, children }: { title: string; subtitle?: string; children: ReactNode }) {
   const [drawer, setDrawer] = useState(false);
   useActivityHeartbeat();
+  useTeamTaskAlerts();
   return (
     <div className="flex h-screen bg-neutral-50">
       <aside className="hidden md:flex md:w-64 md:flex-col bg-primary-900 text-white">

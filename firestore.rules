@@ -93,6 +93,13 @@ service cloud.firestore {
       allow delete: if isOrgAdmin();
     }
 
+    // Work log — each member appends their own entries; the team can read them.
+    match /orgWorklog/{id} {
+      allow read: if isOrgMember();
+      allow create: if isOrgMember() && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if isOrgAdmin();
+    }
+
     // Public config (vehicle types, zones, fares) — readable by any signed-in user.
     match /config/{doc} { allow read: if signedIn(); allow write: if false; }
 

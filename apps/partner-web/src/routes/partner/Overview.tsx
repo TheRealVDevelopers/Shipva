@@ -10,6 +10,8 @@ import { Badge, type BadgeTone } from '../../components/ui/Badge.js';
 import { BarPairChart, Donut, RadialGauge } from '../../components/ui/Charts.js';
 import { VehicleArt } from '../../components/art.js';
 import { MyDayStrip } from '../../components/MyDay.js';
+import { TeamMix } from '../../components/TeamMix.js';
+import { useAuth } from '../../lib/auth.js';
 import { rupees } from '../../lib/format.js';
 import { months6, revenueSeries, expenseSeries, sparks, type TripStatus } from '../../lib/mocks.js';
 import { useStore } from '../../lib/store.js';
@@ -43,6 +45,8 @@ function QuickAction({ to, icon, label }: { to: string; icon: React.ReactNode; l
 
 export function Overview() {
   const { trips, trucks, invoices, expenses, fuelLogs, payroll, drivers } = useStore();
+  const { member } = useAuth();
+  const isAdmin = member?.role === 'owner' || member?.role === 'manager';
   const inr = (n: number) => rupees(n);
 
   const onTrip = trucks.filter((t) => t.status === 'on_trip').length;
@@ -101,8 +105,8 @@ export function Overview() {
   return (
     <PartnerLayout title="Overview" subtitle={`${BRAND.company} · June 2026`}>
       <div className="space-y-6">
-        {/* Your tasks + presence */}
-        <MyDayStrip />
+        {/* Owner/manager see the team; workers see their own day */}
+        {isAdmin ? <TeamMix /> : <MyDayStrip />}
 
         {/* Quick actions */}
         <div className="flex flex-wrap items-center gap-2">

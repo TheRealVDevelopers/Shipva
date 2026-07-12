@@ -23,6 +23,8 @@ export interface Task {
   /** Epoch ms the current running segment began; null/absent when paused. */
   startedAtMs: number | null;
   createdAtMs: number;
+  /** Finish-by deadline (epoch ms), if the assigner set one. */
+  dueAtMs?: number;
   completedAtMs?: number;
 }
 
@@ -38,8 +40,14 @@ function fromSnap(id: string, d: Record<string, unknown>): Task {
     startedAtMs: (d.startedAtMs as number | null) ?? null,
     createdAtMs: (d.createdAtMs as number) ?? 0,
     ...(d.note ? { note: d.note as string } : {}),
+    ...(d.dueAtMs ? { dueAtMs: d.dueAtMs as number } : {}),
     ...(d.completedAtMs ? { completedAtMs: d.completedAtMs as number } : {}),
   };
+}
+
+/** A task is overdue if it has a deadline that has passed and it isn't done. */
+export function isOverdue(t: Task, now = Date.now()): boolean {
+  return t.status !== 'done' && t.dueAtMs != null && t.dueAtMs < now;
 }
 
 /** Live elapsed time including the currently-running segment. */
@@ -54,7 +62,7 @@ export function fmtDuration(ms: number): string {
   return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
 }
 
-export async function createTask(input: { title: string; note?: string; assigneeUid: string; assigneeName: string; createdBy: string }): Promise<void> {
+export async function createTask(input: { title: string; note?: string; assigneeUid: string; assigneeName: string; createdBy: string; dueAtMs?: number }): Promise<void> {
   await addDoc(collection(db, 'orgTasks'), {
     title: input.title.trim(),
     assigneeUid: input.assigneeUid,
@@ -65,6 +73,7 @@ export async function createTask(input: { title: string; note?: string; assignee
     startedAtMs: null,
     createdAtMs: Date.now(),
     ...(input.note?.trim() ? { note: input.note.trim() } : {}),
+    ...(input.dueAtMs ? { dueAtMs: input.dueAtMs } : {}),
   });
 }
 
