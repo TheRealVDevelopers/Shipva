@@ -9,7 +9,7 @@ import { Button } from '../../components/ui/Button.js';
 import { Modal, Field, TextInput, Select, Row } from '../../components/ui/Modal.js';
 import { HBar } from '../../components/ui/Charts.js';
 import { rupees } from '../../lib/format.js';
-import { receivables, type InvoiceStatus } from '../../lib/mocks.js';
+import { type InvoiceStatus } from '../../lib/mocks.js';
 import { useStore, todayLabel } from '../../lib/store.js';
 import { useNotify } from '../../lib/notify.js';
 import { printInvoice } from '../../lib/print.js';
@@ -36,6 +36,7 @@ export function Invoices() {
 
   const paid = invoices.filter((i) => i.status === 'paid').reduce((s, i) => s + i.totalPaise, 0);
   const overdue = invoices.filter((i) => i.status === 'overdue').reduce((s, i) => s + i.totalPaise, 0);
+  const pending = invoices.filter((i) => i.status === 'pending').reduce((s, i) => s + i.totalPaise, 0);
   const outstanding = invoices.filter((i) => i.status !== 'paid').reduce((s, i) => s + i.totalPaise, 0);
   const gstMtd = invoices.reduce((s, i) => s + i.gstPaise, 0);
   const valid = f.client && Number(f.base) > 0;
@@ -104,26 +105,28 @@ export function Invoices() {
           </Card>
 
           <Card>
-            <CardHeader title="Receivables aging" subtitle="Outstanding by age" />
+            <CardHeader title="Receivables" subtitle="Outstanding by status" />
             <CardBody className="space-y-3">
-              {receivables.aging.map((a) => {
-                const color = { success: '#10b981', warning: '#f59e0b', accent: 'var(--sx-accent-500)', danger: '#f43f5e' }[a.tone];
-                return (
-                  <div key={a.bucket}>
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-medium text-neutral-700">{a.bucket}</span>
-                      <span className="font-bold text-neutral-900">{rupees(a.amountPaise)}</span>
-                    </div>
-                    <div className="mt-1"><HBar value={a.amountPaise} max={receivables.outstandingPaise} color={color} /></div>
-                  </div>
-                );
-              })}
+              <div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-medium text-neutral-700">Not yet due</span>
+                  <span className="font-bold text-neutral-900">{rupees(pending)}</span>
+                </div>
+                <div className="mt-1"><HBar value={pending} max={outstanding || 1} color="#f59e0b" /></div>
+              </div>
+              <div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-medium text-neutral-700">Overdue</span>
+                  <span className="font-bold text-neutral-900">{rupees(overdue)}</span>
+                </div>
+                <div className="mt-1"><HBar value={overdue} max={outstanding || 1} color="#f43f5e" /></div>
+              </div>
               <div className="mt-2 flex items-center justify-between border-t border-neutral-100 pt-3 text-sm">
                 <span className="font-semibold text-neutral-700">Total outstanding</span>
-                <span className="font-extrabold text-neutral-900">{rupees(receivables.outstandingPaise)}</span>
+                <span className="font-extrabold text-neutral-900">{rupees(outstanding)}</span>
               </div>
               <div className="rounded-lg bg-emerald-50 px-3 py-2 text-[11px] text-emerald-800 ring-1 ring-inset ring-emerald-100">
-                Paid to date this month: {rupees(paid)}. Send reminders on overdue invoices to speed up collection.
+                Collected so far: {rupees(paid)}. Send reminders on overdue invoices to speed up collection.
               </div>
             </CardBody>
           </Card>

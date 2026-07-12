@@ -7,13 +7,10 @@ import { PartnerLayout } from '../../components/layout/PartnerLayout.js';
 import { Card, CardHeader, CardBody } from '../../components/ui/Card.js';
 import { StatCard } from '../../components/ui/StatCard.js';
 import { Badge, type BadgeTone } from '../../components/ui/Badge.js';
-import { BarPairChart, Donut, RadialGauge, HBar } from '../../components/ui/Charts.js';
+import { BarPairChart, Donut, RadialGauge } from '../../components/ui/Charts.js';
 import { VehicleArt } from '../../components/art.js';
 import { rupees } from '../../lib/format.js';
-import {
-  months6, revenueSeries, expenseSeries, receivables,
-  docAlerts, sparks, type TripStatus,
-} from '../../lib/mocks.js';
+import { months6, revenueSeries, expenseSeries, sparks, type TripStatus } from '../../lib/mocks.js';
 import { useStore } from '../../lib/store.js';
 import { BRAND } from '../../lib/brand.js';
 
@@ -81,6 +78,25 @@ export function Overview() {
     { label: 'Other', value: catTotal(['Loading', 'Misc']), color: 'var(--sx-neutral-400)' },
   ].filter((s) => s.value > 0);
 
+  // Anchor the trend chart's current (last) month to live totals.
+  const revSeries = [...revenueSeries.slice(0, 5), revenue];
+  const expSeries = [...expenseSeries.slice(0, 5), expenseTotal];
+
+  const unpaid = invoices.filter((i) => i.status !== 'paid').sort((a, b) => b.totalPaise - a.totalPaise);
+
+  // Live document-expiry alerts from truck & driver expiry dates (≤60 days).
+  type Alert = { reg: string; doc: string; days: number };
+  const nowMs = Date.now();
+  const mkAlert = (reg: string, doc: string, exp?: string): Alert | null => {
+    if (!exp) return null;
+    const t = Date.parse(exp);
+    return isNaN(t) ? null : { reg, doc, days: Math.round((t - nowMs) / 86400000) };
+  };
+  const liveAlerts: Alert[] = [
+    ...trucks.flatMap((t) => [mkAlert(t.reg, 'Insurance', t.insuranceExpiry), mkAlert(t.reg, 'Fitness', t.fitnessExpiry)]),
+    ...drivers.map((d) => mkAlert(d.name, 'Licence', d.licenseExpiry)),
+  ].filter((x): x is Alert => x !== null && x.days <= 60).sort((a, b) => a.days - b.days).slice(0, 5);
+
   return (
     <PartnerLayout title="Overview" subtitle={`${BRAND.company} · June 2026`}>
       <div className="space-y-6">
@@ -94,9 +110,9 @@ export function Overview() {
 
         {/* Hero KPIs */}
         <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 stagger">
-          <StatCard label="Revenue" value={inr(revenue)} icon={<IndianRupee size={16} />} tone="primary" deltaPct={12} hint="gross freight" spark={sparks.revenue} />
-          <StatCard label="Net profit" value={inr(profit)} icon={<TrendingUp size={16} />} tone="success" deltaPct={8} hint={`${marginPct}% margin`} spark={sparks.profit} />
-          <StatCard label="Outstanding" value={inr(outstanding)} icon={<Wallet size={16} />} tone="danger" deltaPct={-4} hint="receivables" spark={sparks.outstanding} />
+          <StatCard label="Revenue" value={inr(revenue)} icon={<IndianRupee size={16} />} tone="primary" hint="gross freight" spark={sparks.revenue} />
+          <StatCard label="Net profit" value={inr(profit)} icon={<TrendingUp size={16} />} tone="success" hint={`${marginPct}% margin`} spark={sparks.profit} />
+          <StatCard label="Outstanding" value={inr(outstanding)} icon={<Wallet size={16} />} tone="danger" hint="receivables" spark={sparks.outstanding} />
           <StatCard label="Active trips" value={String(activeTrips)} icon={<Navigation size={16} />} tone="accent" hint={`${trips.length} total`} spark={sparks.trips} />
         </section>
 
@@ -146,10 +162,10 @@ export function Overview() {
         {/* Charts row */}
         <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <Card className="lg:col-span-2">
-            <CardHeader title="Revenue vs expense" subtitle="Last 6 months" action={<Badge tone="success"><TrendingUp size={11} /> +9% MoM</Badge>} />
+            <CardHeader title="Revenue vs expense" subtitle="Trend · current month is live" />
             <CardBody>
               <BarPairChart
-                labels={months6} a={revenueSeries} b={expenseSeries}
+                labels={months6} a={revSeries} b={expSeries}
                 aColor="var(--sx-primary-500)" aLabel="Revenue"
                 bColor="var(--sx-accent-500)" bLabel="Expense"
                 format={inr}
@@ -171,22 +187,29 @@ export function Overview() {
 
         {/* Money health row */}
         <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Receivables aging */}
+          {/* Outstanding — live unpaid invoices */}
           <Card>
-            <CardHeader title="Receivables aging" subtitle="Who owes you" action={<Link to="/p/invoices" className="text-xs font-bold text-primary-600">Invoices →</Link>} />
-            <CardBody className="space-y-3">
-              {receivables.aging.map((a) => {
-                const barColor = { success: '#10b981', warning: '#f59e0b', accent: 'var(--sx-accent-500)', danger: '#f43f5e' }[a.tone];
-                return (
-                  <div key={a.bucket}>
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-medium text-neutral-700">{a.bucket}</span>
-                      <span className="font-bold text-neutral-900">{inr(a.amountPaise)}</span>
-                    </div>
-                    <div className="mt-1"><HBar value={a.amountPaise} max={receivables.outstandingPaise} color={barColor} /></div>
+            <CardHeader title="Outstanding" subtitle="Unpaid invoices" action={<Link to="/p/invoices" className="text-xs font-bold text-primary-600">Invoices →</Link>} />
+            <CardBody className="space-y-2.5">
+              {unpaid.length === 0 && <p className="text-sm text-neutral-500">All invoices paid. 🎉</p>}
+              {unpaid.slice(0, 5).map((i) => (
+                <div key={i.no} className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold text-neutral-800">{i.client}</div>
+                    <div className="font-mono text-[10px] text-neutral-400">{i.no}</div>
                   </div>
-                );
-              })}
+                  <div className="flex items-center gap-2">
+                    <Badge tone={i.status === 'overdue' ? 'danger' : 'warning'}>{i.status === 'overdue' ? 'Overdue' : 'Pending'}</Badge>
+                    <span className="text-sm font-bold text-neutral-900">{inr(i.totalPaise)}</span>
+                  </div>
+                </div>
+              ))}
+              {unpaid.length > 0 && (
+                <div className="flex items-center justify-between border-t border-neutral-100 pt-2.5 text-sm">
+                  <span className="font-semibold text-neutral-600">Total outstanding</span>
+                  <span className="font-extrabold text-neutral-900">{inr(outstanding)}</span>
+                </div>
+              )}
             </CardBody>
           </Card>
 
@@ -266,16 +289,17 @@ export function Overview() {
 
             {/* Document expiry alerts */}
             <Card>
-              <CardHeader title="Document alerts" subtitle="Expiring soon" action={<Badge tone="danger">{docAlerts.length}</Badge>} />
+              <CardHeader title="Document alerts" subtitle="Expiring soon" action={<Badge tone={liveAlerts.length ? 'danger' : 'success'}>{liveAlerts.length}</Badge>} />
               <CardBody className="space-y-2">
-                {docAlerts.map((d) => (
-                  <div key={`${d.reg}-${d.doc}`} className={`flex items-center gap-2.5 rounded-lg p-2.5 ring-1 ring-inset ${d.dueInDays <= 7 ? 'bg-rose-50 ring-rose-100' : 'bg-amber-50 ring-amber-100'}`}>
-                    <AlertTriangle size={15} className={d.dueInDays <= 7 ? 'text-rose-500' : 'text-amber-500'} />
+                {liveAlerts.length === 0 && <p className="text-sm text-neutral-500">All documents valid.</p>}
+                {liveAlerts.map((d) => (
+                  <div key={`${d.reg}-${d.doc}`} className={`flex items-center gap-2.5 rounded-lg p-2.5 ring-1 ring-inset ${d.days <= 7 ? 'bg-rose-50 ring-rose-100' : 'bg-amber-50 ring-amber-100'}`}>
+                    <AlertTriangle size={15} className={d.days <= 7 ? 'text-rose-500' : 'text-amber-500'} />
                     <div className="min-w-0 flex-1">
                       <div className="text-xs font-bold text-neutral-800">{d.doc}</div>
                       <div className="font-mono text-[10px] text-neutral-500">{d.reg}</div>
                     </div>
-                    <span className={`text-xs font-extrabold ${d.dueInDays <= 7 ? 'text-rose-600' : 'text-amber-700'}`}>{d.dueInDays}d</span>
+                    <span className={`text-xs font-extrabold ${d.days <= 7 ? 'text-rose-600' : 'text-amber-700'}`}>{d.days < 0 ? 'Expired' : `${d.days}d`}</span>
                   </div>
                 ))}
               </CardBody>
