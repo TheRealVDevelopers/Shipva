@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "partner-web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "-w", "@shipva/partner-web", "--", "--port", "5231"],
+      "port": 5231
+    }
+  ]
+}

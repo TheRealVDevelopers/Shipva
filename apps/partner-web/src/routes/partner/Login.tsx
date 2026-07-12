@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Mail, Lock, ArrowRight, ClipboardList, Users, Wallet, KeyRound, ShieldAlert, LogOut } from 'lucide-react';
+import { Mail, Lock, ArrowRight, ClipboardList, Users, Wallet, KeyRound, ShieldAlert, LogOut, BookOpen } from 'lucide-react';
 import { LogoMark } from '../../components/art.js';
 import { BRAND } from '../../lib/brand.js';
 import { useAuth } from '../../lib/auth.js';
@@ -83,6 +83,10 @@ function SignIn() {
         {busy ? 'Signing in…' : <>Sign in <ArrowRight size={15} /></>}
       </button>
       <p className="mt-4 text-center text-[11px] text-neutral-400">First time? Use the temporary password your admin shared — you'll set your own next.</p>
+      <a href={`${import.meta.env.BASE_URL}guide.html`} target="_blank" rel="noreferrer"
+        className="mt-3 flex items-center justify-center gap-1.5 text-center text-xs font-bold text-primary-600 hover:text-primary-700">
+        <BookOpen size={13} /> Read the user guide — no login needed
+      </a>
     </form>
   );
 }
