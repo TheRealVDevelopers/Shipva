@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { Upload, X, Eye, Cloud, HardDrive } from 'lucide-react';
 import { uploadDocImage } from '../../lib/storage.js';
+import { Lightbox } from './Lightbox.js';
 
 /** Read + downscale an image to a small JPEG blob. */
 function compress(file: File): Promise<Blob> {
@@ -39,7 +40,9 @@ export function ImageUpload({ value, onChange, label = 'Upload image', path }: {
 }) {
   const ref = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
+  const [preview, setPreview] = useState(false);
   const [mode, setMode] = useState<'cloud' | 'local' | null>(value ? (value.startsWith('http') ? 'cloud' : 'local') : null);
+  const title = label.replace(/^upload /i, '').trim() || 'Document';
 
   async function pick(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -65,13 +68,17 @@ export function ImageUpload({ value, onChange, label = 'Upload image', path }: {
       <input ref={ref} type="file" accept="image/*" className="hidden" onChange={pick} />
       {value ? (
         <>
-          <img src={value} alt="document" className="h-11 w-11 rounded-md object-cover ring-1 ring-neutral-200" />
+          <button type="button" onClick={() => setPreview(true)} title="Preview" className="group relative">
+            <img src={value} alt={title} className="h-11 w-11 rounded-md object-cover ring-1 ring-neutral-200 transition group-hover:ring-primary-300" />
+            <span className="absolute inset-0 flex items-center justify-center rounded-md bg-neutral-900/0 text-white opacity-0 transition group-hover:bg-neutral-900/40 group-hover:opacity-100"><Eye size={16} /></span>
+          </button>
           {mode === 'cloud'
             ? <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600"><Cloud size={11} /> Cloud</span>
             : <span className="inline-flex items-center gap-1 text-[10px] font-bold text-neutral-400"><HardDrive size={11} /> Local</span>}
-          <a href={value} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[11px] font-bold text-primary-600 hover:text-primary-700"><Eye size={12} /> View</a>
+          <button type="button" onClick={() => setPreview(true)} className="inline-flex items-center gap-1 text-[11px] font-bold text-primary-600 hover:text-primary-700"><Eye size={12} /> Preview</button>
           <button type="button" onClick={() => ref.current?.click()} className="text-[11px] font-bold text-neutral-500 hover:text-primary-600">Replace</button>
           <button type="button" onClick={() => { onChange(undefined); setMode(null); }} className="rounded-full p-0.5 text-neutral-400 hover:text-rose-500"><X size={13} /></button>
+          {preview && <Lightbox src={value} title={title} onClose={() => setPreview(false)} />}
         </>
       ) : (
         <button type="button" onClick={() => ref.current?.click()} disabled={busy}
