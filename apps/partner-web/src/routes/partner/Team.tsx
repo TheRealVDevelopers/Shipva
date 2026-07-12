@@ -1,7 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Plus, Phone, UserCog, Mail, Check, Copy, KeyRound, Shield, Pencil, ShieldCheck } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import {
+  Plus, Phone, UserCog, Mail, Check, Copy, KeyRound, Shield, Pencil, ShieldCheck,
+  Clock, ListTodo, CalendarClock, Coffee,
+} from 'lucide-react';
 import { PartnerLayout } from '../../components/layout/PartnerLayout.js';
-import { Card, CardHeader, CardBody } from '../../components/ui/Card.js';
+import { Card } from '../../components/ui/Card.js';
 import { Badge, type BadgeTone } from '../../components/ui/Badge.js';
 import { Button } from '../../components/ui/Button.js';
 import { Modal, Field, TextInput, Select, Row } from '../../components/ui/Modal.js';
@@ -11,6 +14,12 @@ import {
   watchMembers, inviteMember, updateMember, pagesForRole, ASSIGNABLE_PAGES, type Member,
 } from '../../lib/members.js';
 import type { FeatureId } from '../../lib/features.js';
+import {
+  watchAllToday, watchActivity, presence, fmtClock, fmtActive, type Activity,
+} from '../../lib/activity.js';
+import {
+  watchTasksFor, createTask, elapsedMs, fmtDuration, type Task,
+} from '../../lib/tasks.js';
 import { useNotify } from '../../lib/notify.js';
 
 const ROLE_TONE: Record<Role, BadgeTone> = { owner: 'success', manager: 'primary', supervisor: 'info', accountant: 'accent' };
@@ -20,15 +29,19 @@ export function Team() {
   const { member: me } = useAuth();
   const { push } = useNotify();
   const [members, setMembers] = useState<Member[]>([]);
+  const [activity, setActivity] = useState<Record<string, Activity>>({});
   const [invite, setInvite] = useState(false);
   const [f, setF] = useState(EMPTY);
   const [busy, setBusy] = useState(false);
   const [created, setCreated] = useState<{ email: string; tempPassword: string } | null>(null);
   const [edit, setEdit] = useState<Member | null>(null);
+  const [assignTo, setAssignTo] = useState<Member | null>(null);
+  const [todayFor, setTodayFor] = useState<Member | null>(null);
 
   const isAdmin = me?.role === 'owner' || me?.role === 'manager';
 
   useEffect(() => watchMembers((list) => setMembers(list.sort((a, b) => a.name.localeCompare(b.name)))), []);
+  useEffect(() => watchAllToday((list) => setActivity(Object.fromEntries(list.map((a) => [a.uid, a])))), []);
 
   const adminRole = f.role === 'owner' || f.role === 'manager';
   function setRole(role: Role) { setF((p) => ({ ...p, role, pages: defaultPages(role) })); }
@@ -89,10 +102,13 @@ export function Team() {
                 </div>
 
                 <div className="mt-3 flex items-center gap-2 text-xs text-neutral-500"><Phone size={12} /> {m.phone || '—'}</div>
-                <div className="mt-1 flex items-center gap-1.5 text-xs text-neutral-500">
+                <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-neutral-500">
                   <Shield size={12} /> Access: <span className="font-semibold text-neutral-700">{pages}</span>
                   {m.mustSetPassword && <Badge tone="warning"><KeyRound size={10} /> Pending first login</Badge>}
                 </div>
+
+                {/* Today's presence */}
+                <ActivityRow activity={activity[m.uid] ?? null} />
 
                 <div className="mt-3 border-t border-neutral-100 pt-3">
                   <div className="flex flex-wrap gap-1.5">
@@ -102,9 +118,11 @@ export function Team() {
                         <span key={p} className="rounded-md bg-neutral-100 px-2 py-0.5 text-[11px] font-medium text-neutral-600">{ASSIGNABLE_PAGES.find((x) => x.id === p)?.label ?? p}</span>
                       ))}
                   </div>
-                  {isAdmin && (
-                    <button onClick={() => setEdit(m)} className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-primary-600 hover:text-primary-700"><Pencil size={12} /> Edit access</button>
-                  )}
+                  <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5">
+                    <button onClick={() => setTodayFor(m)} className="inline-flex items-center gap-1 text-xs font-bold text-neutral-600 hover:text-primary-700"><CalendarClock size={12} /> Today</button>
+                    {isAdmin && <button onClick={() => setAssignTo(m)} className="inline-flex items-center gap-1 text-xs font-bold text-primary-600 hover:text-primary-700"><ListTodo size={12} /> Assign task</button>}
+                    {isAdmin && <button onClick={() => setEdit(m)} className="inline-flex items-center gap-1 text-xs font-bold text-neutral-600 hover:text-primary-700"><Pencil size={12} /> Edit access</button>}
+                  </div>
                 </div>
               </Card>
             );
@@ -142,7 +160,94 @@ export function Team() {
 
       {/* Edit member access */}
       {edit && <EditMember member={edit} onClose={() => setEdit(null)} isSelf={edit.uid === me?.uid} />}
+
+      {/* Assign task */}
+      {assignTo && me && <AssignTask member={assignTo} createdBy={`${me.name} · ${roleLabel(me.role)}`} onClose={() => setAssignTo(null)} />}
+
+      {/* Member's day */}
+      {todayFor && <TodayModal member={todayFor} activity={activity[todayFor.uid] ?? null} onClose={() => setTodayFor(null)} />}
     </PartnerLayout>
+  );
+}
+
+function ActivityRow({ activity }: { activity: Activity | null }) {
+  const pres = presence(activity);
+  const tone: BadgeTone = pres === 'active' ? 'success' : pres === 'break' ? 'warning' : 'neutral';
+  const text = pres === 'active' ? 'Active now' : pres === 'break' ? 'On break' : activity ? 'Idle' : 'Offline today';
+  return (
+    <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-neutral-500">
+      <Badge tone={tone}>{pres === 'break' ? <><Coffee size={10} /> {text}</> : text}</Badge>
+      {activity && (
+        <span className="inline-flex items-center gap-1"><Clock size={11} /> {fmtClock(activity.firstAtMs)} → {activity.onBreak ? 'break' : fmtClock(activity.lastAtMs)} · {fmtActive(activity.activeMs)} active</span>
+      )}
+    </div>
+  );
+}
+
+function AssignTask({ member, createdBy, onClose }: { member: Member; createdBy: string; onClose: () => void }) {
+  const { push } = useNotify();
+  const [title, setTitle] = useState('');
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  async function save() {
+    if (!title.trim() || busy) return;
+    setBusy(true);
+    try {
+      await createTask({ title, note, assigneeUid: member.uid, assigneeName: member.name, createdBy });
+      push({ title: 'Task assigned', body: `${member.name} will see it on their Overview.`, tone: 'success' });
+      onClose();
+    } catch { push({ title: "Couldn't assign", body: 'Please try again.', tone: 'warning' }); }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <Modal open onClose={onClose} title={`Assign task · ${member.name}`} subtitle="Shows at the top of their Overview with a timer" onSubmit={save} submitLabel={busy ? 'Assigning…' : 'Assign task'} submitDisabled={!title.trim() || busy}>
+      <Field label="Task"><TextInput value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Call Bharat Steels about POD" autoFocus /></Field>
+      <Field label="Details" hint="Optional"><TextInput value={note} onChange={(e) => setNote(e.target.value)} placeholder="Get signed POD for LR-24817" /></Field>
+    </Modal>
+  );
+}
+
+function TodayModal({ member, activity, onClose }: { member: Member; activity: Activity | null; onClose: () => void }) {
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [act, setAct] = useState<Activity | null>(activity);
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => watchTasksFor(member.uid, setTasks), [member.uid]);
+  useEffect(() => watchActivity(member.uid, setAct), [member.uid]);
+  useEffect(() => { const id = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(id); }, []);
+
+  const today = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+  const todays = tasks.filter((t) => new Date(t.createdAtMs).toDateString() === new Date().toDateString() || t.status !== 'done');
+  const pres = presence(act);
+
+  return (
+    <Modal open onClose={onClose} title={`${member.name} · today`} subtitle={today} submitLabel="Close" onSubmit={onClose}>
+      <div className="rounded-xl bg-neutral-50 p-3 ring-1 ring-inset ring-neutral-100">
+        <div className="flex items-center gap-2">
+          <Badge tone={pres === 'active' ? 'success' : pres === 'break' ? 'warning' : 'neutral'}>{pres === 'active' ? 'Active now' : pres === 'break' ? 'On break' : 'Offline'}</Badge>
+          <span className="text-xs text-neutral-600">{act ? `${fmtClock(act.firstAtMs)} → ${act.onBreak ? 'break' : fmtClock(act.lastAtMs)}` : 'No activity today'}</span>
+        </div>
+        {act && <div className="mt-1 text-xs text-neutral-500">{fmtActive(act.activeMs)} of active screen time</div>}
+      </div>
+
+      <div className="mt-1 text-[11px] font-bold uppercase tracking-wide text-neutral-400">Tasks</div>
+      {todays.length === 0 && <p className="py-3 text-sm text-neutral-400">No tasks.</p>}
+      <div className="space-y-2">
+        {todays.map((t) => (
+          <div key={t.id} className="flex items-center justify-between gap-2 rounded-lg bg-white px-3 py-2 ring-1 ring-inset ring-neutral-200">
+            <div className="min-w-0">
+              <div className="truncate text-sm font-semibold text-neutral-900">{t.title}</div>
+              <div className="text-[11px] text-neutral-400">{t.status === 'done' ? 'Completed' : t.startedAtMs ? 'In progress' : 'Not started'}</div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-xs font-bold tabular-nums text-neutral-700">{fmtDuration(elapsedMs(t, now))}</span>
+              <Badge tone={t.status === 'done' ? 'success' : t.startedAtMs ? 'primary' : 'neutral'}>{t.status === 'done' ? 'Done' : t.startedAtMs ? 'Running' : 'Todo'}</Badge>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Modal>
   );
 }
 

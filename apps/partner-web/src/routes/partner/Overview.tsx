@@ -9,6 +9,7 @@ import { StatCard } from '../../components/ui/StatCard.js';
 import { Badge, type BadgeTone } from '../../components/ui/Badge.js';
 import { BarPairChart, Donut, RadialGauge } from '../../components/ui/Charts.js';
 import { VehicleArt } from '../../components/art.js';
+import { MyDayStrip } from '../../components/MyDay.js';
 import { rupees } from '../../lib/format.js';
 import { months6, revenueSeries, expenseSeries, sparks, type TripStatus } from '../../lib/mocks.js';
 import { useStore } from '../../lib/store.js';
@@ -100,6 +101,9 @@ export function Overview() {
   return (
     <PartnerLayout title="Overview" subtitle={`${BRAND.company} · June 2026`}>
       <div className="space-y-6">
+        {/* Your tasks + presence */}
+        <MyDayStrip />
+
         {/* Quick actions */}
         <div className="flex flex-wrap items-center gap-2">
           <QuickAction to="/p/trips" icon={<Plus size={13} />} label="New trip / LR" />

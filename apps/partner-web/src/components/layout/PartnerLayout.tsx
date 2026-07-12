@@ -1,4 +1,4 @@
-import { Fragment, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useState, type ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, ClipboardList, Route, Truck, FileCheck2, UserCog, Users, FileText, Fuel, Wallet,
@@ -13,7 +13,23 @@ import { useNotify } from '../../lib/notify.js';
 import { roleLabel } from '../../lib/roles.js';
 import { useAuth } from '../../lib/auth.js';
 import { memberCanAccess } from '../../lib/members.js';
+import { touchActivity } from '../../lib/activity.js';
 import { BRAND } from '../../lib/brand.js';
+
+/** Heartbeat that records screen-time while the tab is visible. */
+function useActivityHeartbeat() {
+  const { member, status } = useAuth();
+  const uid = member?.uid; const name = member?.name;
+  useEffect(() => {
+    if (status !== 'ready' || !uid || !name) return;
+    const beat = () => { if (document.visibilityState === 'visible') void touchActivity(uid, name); };
+    beat();
+    const id = window.setInterval(beat, 60_000);
+    document.addEventListener('visibilitychange', beat);
+    window.addEventListener('focus', beat);
+    return () => { window.clearInterval(id); document.removeEventListener('visibilitychange', beat); window.removeEventListener('focus', beat); };
+  }, [status, uid, name]);
+}
 
 interface NavItem { key: FeatureId; to: string; label: string; icon: LucideIcon; end?: boolean; group?: string; soon?: boolean }
 
@@ -204,6 +220,7 @@ function UserMenu() {
 
 export function PartnerLayout({ title, subtitle, children }: { title: string; subtitle?: string; children: ReactNode }) {
   const [drawer, setDrawer] = useState(false);
+  useActivityHeartbeat();
   return (
     <div className="flex h-screen bg-neutral-50">
       <aside className="hidden md:flex md:w-64 md:flex-col bg-primary-900 text-white">
