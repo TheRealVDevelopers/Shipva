@@ -1,7 +1,7 @@
 import { Fragment, useState, type ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
-  LayoutDashboard, ClipboardList, Truck, FileCheck2, UserCog, Users, FileText, Fuel, Wallet,
+  LayoutDashboard, ClipboardList, Route, Truck, FileCheck2, UserCog, Users, FileText, Fuel, Wallet,
   HandCoins, BarChart3, TrendingUp, PackageSearch, Navigation, BadgeCheck, Building2,
   Settings as SettingsIcon, MessageCircle, MessagesSquare, FileSpreadsheet,
   ShieldCheck, Bell, Menu, X, Volume2, VolumeX, CheckCheck, type LucideIcon,
@@ -17,6 +17,7 @@ interface NavItem { key: FeatureId; to: string; label: string; icon: LucideIcon;
 const NAV: NavItem[] = [
   { key: 'overview', to: '/p', label: 'Overview', icon: LayoutDashboard, end: true },
   { key: 'trips', to: '/p/trips', label: 'Trips & Routes', icon: ClipboardList, group: 'Operations' },
+  { key: 'tours', to: '/p/tours', label: 'Amazon Tours', icon: Route, group: 'Operations' },
   { key: 'fleet', to: '/p/fleet', label: 'Trucks & Drivers', icon: Truck, group: 'Operations' },
   { key: 'documents', to: '/p/documents', label: 'Documents', icon: FileCheck2, group: 'Operations' },
   { key: 'customers', to: '/p/customers', label: 'Customers', icon: Users, group: 'Vendors' },

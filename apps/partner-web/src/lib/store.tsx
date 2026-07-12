@@ -47,6 +47,48 @@ const seedAttached: AttachedTruck[] = [
   { id: 'a3', owner: 'M. Khan (owner-driver)', reg: 'KA51D3321', phone: '+91 90080 22003', balancePaise: 0, trips: 9 },
 ];
 
+/** Amazon relay tour — the client's operational trip format (maps 1:1 to their
+ *  55-column tour sheet). Up to 4 facility stops per tour. */
+export interface TourStop {
+  name: string; amzArrival: string; kmPhoto: boolean; arrivalReport: string;
+  amzDeparture: string; invoicePhoto: boolean; dispatchReport: string; km: string;
+}
+export interface Tour {
+  id: string; date: string; tourId: string; vrId: string; seTracker: string; toll: string;
+  amzEquipmentType: string; seEquipmentType: string; amzStatus: string; sarvaStatus: string;
+  present: string; scheduleAdhoc: string; noLoadLoad: string; advanceAmount: string; paidPending: string;
+  driver: string; vehicleId: string; driverNumber: string; vendorName: string;
+  stops: TourStop[]; totalManualKm: string; amazonRelyKm: string; gpsKm: string; remarks: string;
+}
+const blankStop = (name = ''): TourStop => ({ name, amzArrival: '', kmPhoto: false, arrivalReport: '', amzDeparture: '', invoicePhoto: false, dispatchReport: '', km: '' });
+const seedTours: Tour[] = [
+  {
+    id: 'tr1', date: '12 Jul 2026', tourId: 'T-30FPN1321', vrId: '112ZJHBB9', seTracker: '', toll: '',
+    amzEquipmentType: '10ft Truck', seEquipmentType: '10ft Truck', amzStatus: 'PLANNED', sarvaStatus: 'PLANNED',
+    present: 'PRESENT', scheduleAdhoc: 'SCHEDULE', noLoadLoad: 'Load', advanceAmount: '2500', paidPending: 'Pending',
+    driver: 'Shiva Kumar', vehicleId: 'KA07B5304', driverNumber: '85536 39858', vendorName: 'Prince transport',
+    stops: [
+      { name: 'HKA3', amzArrival: '07:00', kmPhoto: true, arrivalReport: 'OK', amzDeparture: '09:30', invoicePhoto: true, dispatchReport: 'OK', km: '0' },
+      { name: 'TBH2', amzArrival: '11:30', kmPhoto: true, arrivalReport: 'OK', amzDeparture: '12:30', invoicePhoto: true, dispatchReport: 'OK', km: '42' },
+      { name: 'TBL3', amzArrival: '13:00', kmPhoto: false, arrivalReport: '', amzDeparture: '14:00', invoicePhoto: false, dispatchReport: '', km: '18' },
+      { name: 'TBT3', amzArrival: '15:00', kmPhoto: false, arrivalReport: '', amzDeparture: '16:00', invoicePhoto: false, dispatchReport: '', km: '22' },
+    ],
+    totalManualKm: '82', amazonRelyKm: '80', gpsKm: '84', remarks: 'On schedule',
+  },
+  {
+    id: 'tr2', date: '11 Jul 2026', tourId: 'T-30FPN1290', vrId: '119KLMPP2', seTracker: '', toll: '120',
+    amzEquipmentType: '17ft Truck', seEquipmentType: '17ft Truck', amzStatus: 'COMPLETED', sarvaStatus: 'COMPLETED',
+    present: 'PRESENT', scheduleAdhoc: 'SCHEDULE', noLoadLoad: 'Load', advanceAmount: '3200', paidPending: 'Paid',
+    driver: 'Ramesh Yadav', vehicleId: 'KA01C5521', driverNumber: '99020 51001', vendorName: 'Karnataka Roadlines',
+    stops: [
+      { name: 'HKA3', amzArrival: '06:30', kmPhoto: true, arrivalReport: 'OK', amzDeparture: '08:00', invoicePhoto: true, dispatchReport: 'OK', km: '0' },
+      { name: 'TBT3', amzArrival: '10:00', kmPhoto: true, arrivalReport: 'OK', amzDeparture: '11:00', invoicePhoto: true, dispatchReport: 'OK', km: '58' },
+      blankStop(), blankStop(),
+    ],
+    totalManualKm: '58', amazonRelyKm: '56', gpsKm: '59', remarks: '',
+  },
+];
+
 interface StoreShape {
   trips: Trip[];
   invoices: Invoice[];
@@ -58,6 +100,7 @@ interface StoreShape {
   staff: Staff[];
   customers: Customer[];
   attached: AttachedTruck[];
+  tours: Tour[];
 }
 
 interface StoreApi extends StoreShape {
@@ -76,6 +119,7 @@ interface StoreApi extends StoreShape {
   setAttachedAgreement: (id: string, a: Agreement) => void;
   addStaff: (s: Omit<Staff, 'id'>) => void;
   recordOwnerPayment: (id: string, amountPaise: number) => void;
+  addTour: (t: Omit<Tour, 'id'>) => void;
   runPayroll: () => void;
   reset: () => void;
 }
@@ -86,7 +130,7 @@ function seed(): StoreShape {
   return {
     trips: seedTrips, invoices: seedInvoices, expenses: seedExpenses, fuelLogs: seedFuelLogs,
     drivers: seedDrivers, trucks: seedTrucks, payroll: seedPayroll, staff: seedStaff,
-    customers: seedCustomers, attached: seedAttached,
+    customers: seedCustomers, attached: seedAttached, tours: seedTours,
   };
 }
 
@@ -173,6 +217,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setS((p) => ({ ...p, attached: p.attached.map((x) => (x.id === id ? { ...x, balancePaise: Math.max(0, x.balancePaise - amountPaise) } : x)) }));
   }, []);
 
+  const addTour = useCallback((t: Omit<Tour, 'id'>) => {
+    setS((p) => ({ ...p, tours: [{ ...t, id: uid() }, ...p.tours] }));
+  }, []);
+
   const runPayroll = useCallback(() => {
     setS((p) => ({ ...p, payroll: p.payroll.map((l) => ({ ...l, status: 'paid' })) }));
   }, []);
@@ -181,9 +229,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<StoreApi>(() => ({
     ...s, addTrip, updateTripStatus, addInvoice, markInvoicePaid, addExpense, addFuelLog, addCustomer, addDriver, addTruck,
-    setDriverDocs, setTruckDocs, setCustomerAgreement, setAttachedAgreement, addStaff, recordOwnerPayment, runPayroll, reset,
+    setDriverDocs, setTruckDocs, setCustomerAgreement, setAttachedAgreement, addStaff, recordOwnerPayment, addTour, runPayroll, reset,
   }), [s, addTrip, updateTripStatus, addInvoice, markInvoicePaid, addExpense, addFuelLog, addCustomer, addDriver, addTruck,
-    setDriverDocs, setTruckDocs, setCustomerAgreement, setAttachedAgreement, addStaff, recordOwnerPayment, runPayroll, reset]);
+    setDriverDocs, setTruckDocs, setCustomerAgreement, setAttachedAgreement, addStaff, recordOwnerPayment, addTour, runPayroll, reset]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

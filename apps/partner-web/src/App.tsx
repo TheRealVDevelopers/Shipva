@@ -2,6 +2,7 @@ import { Route, Routes, Navigate } from 'react-router-dom';
 import { Login } from './routes/partner/Login.js';
 import { Overview } from './routes/partner/Overview.js';
 import { Trips } from './routes/partner/Trips.js';
+import { Tours } from './routes/partner/Tours.js';
 import { Team } from './routes/partner/Team.js';
 import { Customers } from './routes/partner/Customers.js';
 import { Documents } from './routes/partner/Documents.js';
@@ -37,6 +38,7 @@ export function App() {
       <Route path="/p" element={<Overview />} />
 
       {Gated({ id: 'trips', path: '/p/trips', element: <Trips /> })}
+      {Gated({ id: 'tours', path: '/p/tours', element: <Tours /> })}
       {Gated({ id: 'fleet', path: '/p/fleet', element: <Fleet /> })}
       {Gated({ id: 'documents', path: '/p/documents', element: <Documents /> })}
       {Gated({ id: 'customers', path: '/p/customers', element: <Customers /> })}

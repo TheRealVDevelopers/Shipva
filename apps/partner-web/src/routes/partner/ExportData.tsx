@@ -66,10 +66,10 @@ export function ExportData() {
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary-500 text-white"><Sheet size={18} /></span>
             <div>
               <h3 className="text-sm font-extrabold text-neutral-900">Amazon Tour Sheet <span className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800">styled .xls</span></h3>
-              <p className="mt-0.5 max-w-xl text-xs text-neutral-500">Your operational 55-column format — multi-stop, red status/photo columns, yellow Amazon-Rely-KM. Opens in Excel with the exact styling. Trip fields are filled; the Amazon-specific tracking columns are ready to complete.</p>
+              <p className="mt-0.5 max-w-xl text-xs text-neutral-500">Your operational 55-column format — multi-stop, red status/photo columns, yellow Amazon-Rely-KM. Opens in Excel with the exact styling, fully populated from your Tours.</p>
             </div>
           </div>
-          <Button size="sm" className="shrink-0" onClick={() => exportTourSheet(s.trips, s.drivers, s.trucks)}><Download size={13} /> Export tour sheet</Button>
+          <Button size="sm" className="shrink-0" onClick={() => exportTourSheet(s.tours)}><Download size={13} /> Export tour sheet</Button>
         </Card>
 
         <Card className="flex items-start gap-3 p-5">
