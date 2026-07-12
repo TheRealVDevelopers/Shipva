@@ -18,6 +18,11 @@ export function Payroll() {
   return (
     <PartnerLayout title="Payroll" subtitle="Drivers & staff salaries, bhatta and deductions">
       <div className="space-y-6">
+        <div className="flex items-start gap-3 rounded-xl bg-primary-50 px-5 py-4 text-sm text-primary-900 ring-1 ring-inset ring-primary-100">
+          <Wallet size={18} className="mt-0.5 shrink-0 text-primary-600" />
+          <div><b>How payroll works:</b> each cycle lists every driver &amp; staff member — their <b>base salary</b> + <b>bhatta</b> (trip allowance) − <b>deductions</b> = <b>net pay</b>. Press <b>Run payroll</b> to mark the cycle paid (it's idempotent — running twice never double-pays). Settled cycles show under "Recent payouts".</div>
+        </div>
+
         <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <KpiCard label="Payroll · this cycle" value={rupees(netTotal)} hint={`${payroll.length} people`} tone="primary" />
           <KpiCard label="Pending payout" value={rupees(dueTotal)} hint="to settle" tone="danger" />

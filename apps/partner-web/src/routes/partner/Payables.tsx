@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Truck as TruckIcon, Phone, HandCoins, FileText, FileWarning, Download } from 'lucide-react';
+import { Truck as TruckIcon, Phone, HandCoins, FileText, FileWarning, Download, Plus } from 'lucide-react';
 import { PartnerLayout } from '../../components/layout/PartnerLayout.js';
 import { Card, CardHeader } from '../../components/ui/Card.js';
 import { KpiCard } from '../../components/ui/KpiCard.js';
@@ -15,13 +15,24 @@ import { useNotify } from '../../lib/notify.js';
 
 const AG_EMPTY = { effectiveFrom: '', durationMonths: '24', commission: '', notes: '' };
 
+const OWNER_EMPTY = { owner: '', reg: '', phone: '' };
+
 export function Payables() {
-  const { attached, setAttachedAgreement, recordOwnerPayment } = useStore();
+  const { attached, setAttachedAgreement, recordOwnerPayment, addAttached } = useStore();
   const { push } = useNotify();
   const [agFor, setAgFor] = useState<AttachedTruck | null>(null);
   const [ag, setAg] = useState(AG_EMPTY);
   const [payOpen, setPayOpen] = useState(false);
   const [pay, setPay] = useState({ id: '', amount: '' });
+  const [ownerOpen, setOwnerOpen] = useState(false);
+  const [owner, setOwner] = useState(OWNER_EMPTY);
+
+  function submitOwner() {
+    if (!owner.owner.trim()) return;
+    addAttached({ owner: owner.owner, reg: owner.reg, phone: owner.phone, balancePaise: 0, trips: 0 });
+    push({ title: 'Truck owner added', body: `${owner.owner} added to your market fleet.`, tone: 'success' });
+    setOwner(OWNER_EMPTY); setOwnerOpen(false);
+  }
 
   function submitPayment() {
     const owner = attached.find((a) => a.id === pay.id);
@@ -64,7 +75,10 @@ export function Payables() {
 
         <Card>
           <CardHeader title="Truck-owner ledger" subtitle="Balances owed to attached vehicles"
-            action={<Button size="sm" onClick={() => { setPay({ id: attached.find((a) => a.balancePaise > 0)?.id ?? '', amount: '' }); setPayOpen(true); }}><HandCoins size={13} /> Record payment</Button>} />
+            action={<div className="flex items-center gap-2">
+              <Button size="sm" variant="secondary" onClick={() => setOwnerOpen(true)}><Plus size={13} /> Add owner</Button>
+              <Button size="sm" onClick={() => { setPay({ id: attached.find((a) => a.balancePaise > 0)?.id ?? '', amount: '' }); setPayOpen(true); }}><HandCoins size={13} /> Record payment</Button>
+            </div>} />
           <Table>
             <THead>
               <Tr><Th>Owner</Th><Th>Vehicle</Th><Th className="text-right">Trips</Th><Th className="text-right">Balance</Th><Th>Agreement</Th><Th></Th></Tr>
@@ -107,6 +121,16 @@ export function Payables() {
           </div>
         </Card>
       </div>
+
+      {/* Add truck owner */}
+      <Modal open={ownerOpen} onClose={() => setOwnerOpen(false)} title="Add truck owner" subtitle="A market / attached vehicle owner" onSubmit={submitOwner} submitLabel="Add owner" submitDisabled={!owner.owner.trim()}>
+        <Field label="Owner / transporter name"><TextInput value={owner.owner} onChange={(e) => setOwner({ ...owner, owner: e.target.value })} placeholder="Deccan Freight" /></Field>
+        <Row>
+          <Field label="Vehicle reg"><TextInput value={owner.reg} onChange={(e) => setOwner({ ...owner, reg: e.target.value })} placeholder="KA25B4410" /></Field>
+          <Field label="Phone"><TextInput value={owner.phone} onChange={(e) => setOwner({ ...owner, phone: e.target.value })} placeholder="+91 90080 22001" /></Field>
+        </Row>
+        <p className="text-[11px] text-neutral-400">After adding, use "Create agreement" / "LOI" on their row to formalise the arrangement.</p>
+      </Modal>
 
       {/* Record payment */}
       <Modal open={payOpen} onClose={() => setPayOpen(false)} title="Record payment" subtitle="Pay an attached truck owner" onSubmit={submitPayment} submitLabel="Record payment" submitDisabled={!pay.id || Number(pay.amount) <= 0}>

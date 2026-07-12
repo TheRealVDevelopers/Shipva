@@ -118,6 +118,7 @@ interface StoreApi extends StoreShape {
   setCustomerAgreement: (id: string, a: Agreement) => void;
   setAttachedAgreement: (id: string, a: Agreement) => void;
   addStaff: (s: Omit<Staff, 'id'>) => void;
+  addAttached: (a: Omit<AttachedTruck, 'id'>) => void;
   recordOwnerPayment: (id: string, amountPaise: number) => void;
   addTour: (t: Omit<Tour, 'id'>) => void;
   runPayroll: () => void;
@@ -217,6 +218,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setS((p) => ({ ...p, attached: p.attached.map((x) => (x.id === id ? { ...x, balancePaise: Math.max(0, x.balancePaise - amountPaise) } : x)) }));
   }, []);
 
+  const addAttached = useCallback((a: Omit<AttachedTruck, 'id'>) => {
+    setS((p) => ({ ...p, attached: [{ ...a, id: uid() }, ...p.attached] }));
+  }, []);
+
   const addTour = useCallback((t: Omit<Tour, 'id'>) => {
     setS((p) => ({ ...p, tours: [{ ...t, id: uid() }, ...p.tours] }));
   }, []);
@@ -229,9 +234,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<StoreApi>(() => ({
     ...s, addTrip, updateTripStatus, addInvoice, markInvoicePaid, addExpense, addFuelLog, addCustomer, addDriver, addTruck,
-    setDriverDocs, setTruckDocs, setCustomerAgreement, setAttachedAgreement, addStaff, recordOwnerPayment, addTour, runPayroll, reset,
+    setDriverDocs, setTruckDocs, setCustomerAgreement, setAttachedAgreement, addStaff, addAttached, recordOwnerPayment, addTour, runPayroll, reset,
   }), [s, addTrip, updateTripStatus, addInvoice, markInvoicePaid, addExpense, addFuelLog, addCustomer, addDriver, addTruck,
-    setDriverDocs, setTruckDocs, setCustomerAgreement, setAttachedAgreement, addStaff, recordOwnerPayment, addTour, runPayroll, reset]);
+    setDriverDocs, setTruckDocs, setCustomerAgreement, setAttachedAgreement, addStaff, addAttached, recordOwnerPayment, addTour, runPayroll, reset]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

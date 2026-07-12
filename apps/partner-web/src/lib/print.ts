@@ -34,10 +34,12 @@ const CSS = `
   @media print { body { padding:0; } }
 `;
 
+const BAR = `<div class="__bar" style="position:sticky;top:0;z-index:9;display:flex;gap:10px;justify-content:center;align-items:center;background:#0F3D72;color:#fff;padding:9px;font-family:system-ui,sans-serif;font-size:13px;font-weight:600">Preview<button onclick="window.print()" style="padding:6px 16px;border:0;border-radius:6px;background:#fff;color:#0F3D72;font-weight:700;cursor:pointer">Print / Save as PDF</button></div>`;
+
 function open(title: string, body: string) {
   const w = window.open('', '_blank', 'width=820,height=1000');
-  if (!w) { alert('Please allow pop-ups to print/download.'); return; }
-  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>${CSS}</style></head><body onload="setTimeout(()=>window.print(),150)">${body}</body></html>`);
+  if (!w) { alert('Please allow pop-ups to preview the document.'); return; }
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>${CSS}@media print{.__bar{display:none!important}}</style></head><body>${BAR}${body}</body></html>`);
   w.document.close();
 }
 
