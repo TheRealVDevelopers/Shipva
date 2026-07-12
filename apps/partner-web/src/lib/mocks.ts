@@ -39,6 +39,8 @@ export interface FleetDriver {
   dutyStatus: DutyStatus; kycStatus: KycStatus; ratingAvg: number; tripsToday: number;
   /** Compliance documents — empty/undefined = not provided. */
   aadhaar?: string; licenseNo?: string; licenseExpiry?: string;
+  /** Uploaded document images (compressed data-URLs; real storage with backend). */
+  aadhaarImg?: string | undefined; licenseImg?: string | undefined;
 }
 export const fleetDrivers: FleetDriver[] = [
   { id: 'fd1', name: 'Ramesh Yadav', phone: '+91 99020 51001', vehicleReg: 'KA01C5521', vehicleType: 'truck', dutyStatus: 'on_job', kycStatus: 'verified', ratingAvg: 4.7, tripsToday: 2, aadhaar: '4821 7745 9012', licenseNo: 'KA0120200012345', licenseExpiry: '14 Aug 2031' },
@@ -53,6 +55,8 @@ export interface Truck {
   id: string; reg: string; type: VehicleType; capacityKg: number; status: 'available' | 'on_trip' | 'maintenance'; docsOk: boolean;
   /** Compliance documents — empty/undefined = not submitted. */
   rc?: string; insuranceNo?: string; insuranceExpiry?: string; fitnessNo?: string; fitnessExpiry?: string;
+  /** Uploaded document images (compressed data-URLs; real storage with backend). */
+  rcImg?: string | undefined; insuranceImg?: string | undefined; fitnessImg?: string | undefined;
 }
 export const trucks: Truck[] = [
   { id: 't1', reg: 'KA01C5521', type: 'truck', capacityKg: 7000, status: 'on_trip', docsOk: true, rc: 'RC-KA01C5521', insuranceNo: 'INS-778812', insuranceExpiry: '02 Sep 2026', fitnessNo: 'FIT-4521', fitnessExpiry: '30 Jul 2026' },

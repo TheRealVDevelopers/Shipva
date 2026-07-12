@@ -4,12 +4,13 @@ import {
   LayoutDashboard, ClipboardList, Route, Truck, FileCheck2, UserCog, Users, FileText, Fuel, Wallet,
   HandCoins, BarChart3, TrendingUp, PackageSearch, Navigation, BadgeCheck, Building2,
   Settings as SettingsIcon, MessageCircle, MessagesSquare, FileSpreadsheet,
-  ShieldCheck, Bell, Menu, X, Volume2, VolumeX, CheckCheck, type LucideIcon,
+  Bell, Menu, X, Volume2, VolumeX, CheckCheck, type LucideIcon,
 } from 'lucide-react';
 import { LogoMark } from '../art.js';
 import { subscription } from '../../lib/mocks.js';
 import { FEATURES, type FeatureId } from '../../lib/features.js';
 import { useNotify } from '../../lib/notify.js';
+import { useRole, canAccess, ROLES, type Role } from '../../lib/roles.js';
 import { BRAND, companyInitials } from '../../lib/brand.js';
 
 interface NavItem { key: FeatureId; to: string; label: string; icon: LucideIcon; end?: boolean; group?: string; soon?: boolean }
@@ -38,9 +39,9 @@ const NAV: NavItem[] = [
   { key: 'settings', to: '/p/settings', label: 'Settings', icon: SettingsIcon, group: 'Account' },
 ];
 
-const VISIBLE = NAV.filter((n) => FEATURES[n.key]);
-
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
+  const { role } = useRole();
+  const visible = NAV.filter((n) => FEATURES[n.key] && canAccess(role, n.key));
   let lastGroup: string | undefined;
   return (
     <>
@@ -54,7 +55,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
 
       <nav className="flex-1 overflow-y-auto px-3 py-4">
         <ul className="space-y-0.5">
-          {VISIBLE.map(({ to, label, icon: Icon, end, soon, group }, i) => {
+          {visible.map(({ to, label, icon: Icon, end, soon, group }, i) => {
             const showGroup = group && group !== lastGroup;
             lastGroup = group;
             return (
@@ -165,6 +166,7 @@ function NotificationBell() {
 
 export function PartnerLayout({ title, subtitle, children }: { title: string; subtitle?: string; children: ReactNode }) {
   const [drawer, setDrawer] = useState(false);
+  const { role, setRole } = useRole();
   return (
     <div className="flex h-screen bg-neutral-50">
       <aside className="hidden md:flex md:w-64 md:flex-col bg-primary-900 text-white">
@@ -190,10 +192,14 @@ export function PartnerLayout({ title, subtitle, children }: { title: string; su
               {subtitle && <p className="hidden text-xs text-neutral-500 mt-0.5 sm:block">{subtitle}</p>}
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <span className="hidden lg:inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700 ring-1 ring-inset ring-emerald-200">
-              <ShieldCheck size={12} /> {BRAND.company}
-            </span>
+          <div className="flex items-center gap-2 sm:gap-3">
+            <label className="inline-flex items-center gap-1.5 rounded-lg bg-neutral-100 px-2 py-1.5 text-xs font-bold text-neutral-600" title="Role-based view">
+              <UserCog size={13} className="text-neutral-400" />
+              <span className="hidden text-neutral-400 sm:inline">View:</span>
+              <select value={role} onChange={(e) => setRole(e.target.value as Role)} className="cursor-pointer bg-transparent text-neutral-800 outline-none">
+                {ROLES.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
+              </select>
+            </label>
             <NotificationBell />
             <div className="flex items-center gap-2 pl-2 border-l border-neutral-200">
               <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-500 text-white text-xs font-extrabold">{companyInitials}</div>

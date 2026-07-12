@@ -22,15 +22,15 @@ import { Earnings } from './routes/partner/Earnings.js';
 import { Subscription } from './routes/partner/Subscription.js';
 import { Profile } from './routes/partner/Profile.js';
 import { FEATURES, type FeatureId } from './lib/features.js';
-
-/** Register a /p/* route only when its feature is enabled. Disabled sections
- *  keep their code but their URL falls through to the dashboard. */
-function Gated({ id, path, element }: { id: FeatureId; path: string; element: JSX.Element }) {
-  if (!FEATURES[id]) return null;
-  return <Route path={path} element={element} />;
-}
+import { useRole, canAccess } from './lib/roles.js';
 
 export function App() {
+  const { role } = useRole();
+  /** Register a /p/* route only when its feature is enabled AND the current role
+   *  may access it. Disabled/blocked URLs fall through to the dashboard. */
+  const Gated = ({ id, path, element }: { id: FeatureId; path: string; element: JSX.Element }) =>
+    FEATURES[id] && canAccess(role, id) ? <Route path={path} element={element} /> : null;
+
   return (
     <Routes>
       <Route path="/" element={<Navigate to="/login" replace />} />

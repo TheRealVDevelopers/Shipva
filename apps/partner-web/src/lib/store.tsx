@@ -113,8 +113,8 @@ interface StoreApi extends StoreShape {
   addCustomer: (c: Omit<Customer, 'id' | 'outstandingPaise'>) => void;
   addDriver: (d: Omit<FleetDriver, 'id'>) => void;
   addTruck: (t: Omit<Truck, 'id'>) => void;
-  setDriverDocs: (id: string, docs: Pick<FleetDriver, 'aadhaar' | 'licenseNo' | 'licenseExpiry'>) => void;
-  setTruckDocs: (id: string, docs: Pick<Truck, 'rc' | 'insuranceNo' | 'insuranceExpiry' | 'fitnessNo' | 'fitnessExpiry'>) => void;
+  setDriverDocs: (id: string, docs: Pick<FleetDriver, 'aadhaar' | 'licenseNo' | 'licenseExpiry' | 'aadhaarImg' | 'licenseImg'>) => void;
+  setTruckDocs: (id: string, docs: Pick<Truck, 'rc' | 'insuranceNo' | 'insuranceExpiry' | 'fitnessNo' | 'fitnessExpiry' | 'rcImg' | 'insuranceImg' | 'fitnessImg'>) => void;
   setCustomerAgreement: (id: string, a: Agreement) => void;
   setAttachedAgreement: (id: string, a: Agreement) => void;
   addStaff: (s: Omit<Staff, 'id'>) => void;
@@ -193,11 +193,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setS((p) => ({ ...p, trucks: [{ ...t, id: uid() }, ...p.trucks] }));
   }, []);
 
-  const setDriverDocs = useCallback((id: string, docs: Pick<FleetDriver, 'aadhaar' | 'licenseNo' | 'licenseExpiry'>) => {
+  const setDriverDocs = useCallback((id: string, docs: Pick<FleetDriver, 'aadhaar' | 'licenseNo' | 'licenseExpiry' | 'aadhaarImg' | 'licenseImg'>) => {
     setS((p) => ({ ...p, drivers: p.drivers.map((d) => (d.id === id ? { ...d, ...docs } : d)) }));
   }, []);
 
-  const setTruckDocs = useCallback((id: string, docs: Pick<Truck, 'rc' | 'insuranceNo' | 'insuranceExpiry' | 'fitnessNo' | 'fitnessExpiry'>) => {
+  const setTruckDocs = useCallback((id: string, docs: Pick<Truck, 'rc' | 'insuranceNo' | 'insuranceExpiry' | 'fitnessNo' | 'fitnessExpiry' | 'rcImg' | 'insuranceImg' | 'fitnessImg'>) => {
     setS((p) => ({ ...p, trucks: p.trucks.map((t) => (t.id === id ? { ...t, ...docs } : t)) }));
   }, []);
 

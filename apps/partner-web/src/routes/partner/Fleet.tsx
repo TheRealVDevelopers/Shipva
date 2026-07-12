@@ -8,6 +8,7 @@ import { Button } from '../../components/ui/Button.js';
 import { DutyBadge } from '../../components/ui/StatusBadge.js';
 import { VehicleArt } from '../../components/art.js';
 import { Modal, Field, TextInput, Select, Row } from '../../components/ui/Modal.js';
+import { ImageUpload } from '../../components/ui/ImageUpload.js';
 import { useStore } from '../../lib/store.js';
 import type { FleetDriver, Truck } from '../../lib/mocks.js';
 import type { VehicleType } from '@shipva/shared-types';
@@ -40,19 +41,19 @@ export function Fleet() {
   const [nt, setNt] = useState(TRK_EMPTY);
 
   const [docDriver, setDocDriver] = useState<FleetDriver | null>(null);
-  const [dForm, setDForm] = useState({ aadhaar: '', licenseNo: '', licenseExpiry: '' });
+  const [dForm, setDForm] = useState<{ aadhaar: string; licenseNo: string; licenseExpiry: string; aadhaarImg?: string | undefined; licenseImg?: string | undefined }>({ aadhaar: '', licenseNo: '', licenseExpiry: '' });
   const [docTruck, setDocTruck] = useState<Truck | null>(null);
-  const [tForm, setTForm] = useState({ rc: '', insuranceNo: '', insuranceExpiry: '', fitnessNo: '', fitnessExpiry: '' });
+  const [tForm, setTForm] = useState<{ rc: string; insuranceNo: string; insuranceExpiry: string; fitnessNo: string; fitnessExpiry: string; rcImg?: string | undefined; insuranceImg?: string | undefined; fitnessImg?: string | undefined }>({ rc: '', insuranceNo: '', insuranceExpiry: '', fitnessNo: '', fitnessExpiry: '' });
 
   const driversPending = drivers.filter((d) => driverMissing(d).length > 0).length;
   const trucksPending = trucks.filter((t) => truckMissing(t).length > 0).length;
 
   function openDriverDocs(d: FleetDriver) {
-    setDForm({ aadhaar: d.aadhaar ?? '', licenseNo: d.licenseNo ?? '', licenseExpiry: d.licenseExpiry ?? '' });
+    setDForm({ aadhaar: d.aadhaar ?? '', licenseNo: d.licenseNo ?? '', licenseExpiry: d.licenseExpiry ?? '', aadhaarImg: d.aadhaarImg, licenseImg: d.licenseImg });
     setDocDriver(d);
   }
   function openTruckDocs(t: Truck) {
-    setTForm({ rc: t.rc ?? '', insuranceNo: t.insuranceNo ?? '', insuranceExpiry: t.insuranceExpiry ?? '', fitnessNo: t.fitnessNo ?? '', fitnessExpiry: t.fitnessExpiry ?? '' });
+    setTForm({ rc: t.rc ?? '', insuranceNo: t.insuranceNo ?? '', insuranceExpiry: t.insuranceExpiry ?? '', fitnessNo: t.fitnessNo ?? '', fitnessExpiry: t.fitnessExpiry ?? '', rcImg: t.rcImg, insuranceImg: t.insuranceImg, fitnessImg: t.fitnessImg });
     setDocTruck(t);
   }
 
@@ -184,25 +185,31 @@ export function Fleet() {
       <Modal open={!!docDriver} onClose={() => setDocDriver(null)} title={`Documents · ${docDriver?.name ?? ''}`} subtitle="Aadhaar & driving licence"
         onSubmit={() => { if (docDriver) { setDriverDocs(docDriver.id, dForm); setDocDriver(null); } }} submitLabel="Save documents">
         <Field label="Aadhaar number" hint="12-digit UIDAI number"><TextInput value={dForm.aadhaar} onChange={(e) => setDForm({ ...dForm, aadhaar: e.target.value })} placeholder="4821 7745 9012" /></Field>
+        <Field label="Aadhaar card image"><ImageUpload value={dForm.aadhaarImg} onChange={(v) => setDForm({ ...dForm, aadhaarImg: v })} label="Upload Aadhaar" /></Field>
         <Row>
           <Field label="Driving licence no"><TextInput value={dForm.licenseNo} onChange={(e) => setDForm({ ...dForm, licenseNo: e.target.value })} placeholder="KA0120200012345" /></Field>
           <Field label="Licence expiry"><TextInput value={dForm.licenseExpiry} onChange={(e) => setDForm({ ...dForm, licenseExpiry: e.target.value })} placeholder="14 Aug 2031" /></Field>
         </Row>
-        <p className="text-[11px] text-neutral-400">File uploads (scans) will be enabled with the backend. For now, recording the numbers marks the driver compliant.</p>
+        <Field label="Driving licence image"><ImageUpload value={dForm.licenseImg} onChange={(v) => setDForm({ ...dForm, licenseImg: v })} label="Upload licence" /></Field>
+        <p className="text-[11px] text-neutral-400">Numbers are kept for reference; the image is the actual document. Full-resolution storage arrives with the backend.</p>
       </Modal>
 
       {/* Truck documents */}
       <Modal open={!!docTruck} onClose={() => setDocTruck(null)} title={`Documents · ${docTruck?.reg ?? ''}`} subtitle="RC, insurance & fitness"
         onSubmit={() => { if (docTruck) { setTruckDocs(docTruck.id, tForm); setDocTruck(null); } }} submitLabel="Save documents">
         <Field label="RC number"><TextInput value={tForm.rc} onChange={(e) => setTForm({ ...tForm, rc: e.target.value })} placeholder="RC-KA01C5521" /></Field>
+        <Field label="RC image"><ImageUpload value={tForm.rcImg} onChange={(v) => setTForm({ ...tForm, rcImg: v })} label="Upload RC" /></Field>
         <Row>
           <Field label="Insurance no"><TextInput value={tForm.insuranceNo} onChange={(e) => setTForm({ ...tForm, insuranceNo: e.target.value })} placeholder="INS-778812" /></Field>
           <Field label="Insurance expiry"><TextInput value={tForm.insuranceExpiry} onChange={(e) => setTForm({ ...tForm, insuranceExpiry: e.target.value })} placeholder="02 Sep 2026" /></Field>
         </Row>
+        <Field label="Insurance image"><ImageUpload value={tForm.insuranceImg} onChange={(v) => setTForm({ ...tForm, insuranceImg: v })} label="Upload insurance" /></Field>
         <Row>
           <Field label="Fitness cert no"><TextInput value={tForm.fitnessNo} onChange={(e) => setTForm({ ...tForm, fitnessNo: e.target.value })} placeholder="FIT-4521" /></Field>
           <Field label="Fitness expiry"><TextInput value={tForm.fitnessExpiry} onChange={(e) => setTForm({ ...tForm, fitnessExpiry: e.target.value })} placeholder="30 Jul 2026" /></Field>
         </Row>
+        <Field label="Fitness certificate image"><ImageUpload value={tForm.fitnessImg} onChange={(v) => setTForm({ ...tForm, fitnessImg: v })} label="Upload fitness" /></Field>
+        <p className="text-[11px] text-neutral-400">Numbers are kept for reference; the image is the actual document.</p>
       </Modal>
     </PartnerLayout>
   );
