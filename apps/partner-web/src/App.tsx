@@ -21,20 +21,36 @@ import { Fleet } from './routes/partner/Fleet.js';
 import { Earnings } from './routes/partner/Earnings.js';
 import { Subscription } from './routes/partner/Subscription.js';
 import { Profile } from './routes/partner/Profile.js';
+import { LogoMark } from './components/art.js';
 import { FEATURES, type FeatureId } from './lib/features.js';
-import { useRole, canAccess } from './lib/roles.js';
+import { useAuth } from './lib/auth.js';
+import { memberCanAccess } from './lib/members.js';
+
+function Splash() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-neutral-100">
+      <div className="flex flex-col items-center gap-3 text-neutral-400">
+        <LogoMark className="h-10 w-10 animate-pulse" />
+        <span className="text-sm font-bold">Loading…</span>
+      </div>
+    </div>
+  );
+}
 
 export function App() {
-  const { role } = useRole();
-  /** Register a /p/* route only when its feature is enabled AND the current role
-   *  may access it. Disabled/blocked URLs fall through to the dashboard. */
+  const { status, member } = useAuth();
+
+  if (status === 'loading') return <Splash />;
+  if (status !== 'ready' || !member) return <Login />;
+
+  /** Register a /p/* route only when its feature is enabled AND this member may access it. */
   const Gated = ({ id, path, element }: { id: FeatureId; path: string; element: JSX.Element }) =>
-    FEATURES[id] && canAccess(role, id) ? <Route path={path} element={element} /> : null;
+    FEATURES[id] && memberCanAccess(member, id) ? <Route path={path} element={element} /> : null;
 
   return (
     <Routes>
-      <Route path="/" element={<Navigate to="/login" replace />} />
-      <Route path="/login" element={<Login />} />
+      <Route path="/" element={<Navigate to="/p" replace />} />
+      <Route path="/login" element={<Navigate to="/p" replace />} />
       <Route path="/p" element={<Overview />} />
 
       {Gated({ id: 'trips', path: '/p/trips', element: <Trips /> })}
@@ -55,7 +71,7 @@ export function App() {
       {Gated({ id: 'loads', path: '/p/loads', element: <LoadBoard /> })}
       {Gated({ id: 'jobs', path: '/p/jobs', element: <ActiveJobs /> })}
       {Gated({ id: 'subscription', path: '/p/subscription', element: <Subscription /> })}
-      {Gated({ id: 'profile', path: '/p/profile', element: <Profile /> })}
+      <Route path="/p/profile" element={<Profile />} />
       {Gated({ id: 'settings', path: '/p/settings', element: <Settings /> })}
 
       {/* Disabled sections and unknown URLs land on the dashboard. */}

@@ -1,10 +1,9 @@
 /**
- * Role-based access. For now the role is chosen locally (a "viewing as" switch)
- * and persisted; sections + routes are gated by it. When the backend lands the
- * role comes from the signed-in user's claim instead of this switch — the
- * gating logic (canAccess) stays the same.
+ * Roles & default access. The signed-in user's role now comes from their
+ * `orgMembers` record (see lib/auth + lib/members); this module just defines the
+ * role vocabulary and the default page set each role gets. Per-member overrides
+ * live on the member doc (`pages`).
  */
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import type { FeatureId } from './features.js';
 
 export type Role = 'owner' | 'manager' | 'supervisor' | 'accountant';
@@ -19,7 +18,7 @@ export const ROLES: { id: Role; label: string; blurb: string }[] = [
 const OPS: FeatureId[] = ['overview', 'trips', 'tours', 'fleet', 'messages', 'chat'];
 const MONEY: FeatureId[] = ['overview', 'customers', 'invoices', 'expenses', 'payables', 'payroll', 'reports', 'export', 'messages', 'chat'];
 
-/** Sections each role may access. 'all' = everything that's feature-enabled. */
+/** Default sections each role gets when inviting them. 'all' = everything enabled. */
 export const ROLE_ACCESS: Record<Role, FeatureId[] | 'all'> = {
   owner: 'all',
   manager: 'all',
@@ -27,28 +26,15 @@ export const ROLE_ACCESS: Record<Role, FeatureId[] | 'all'> = {
   accountant: MONEY,
 };
 
+/** Default explicit page list to pre-tick when inviting a non-admin role. */
+export function defaultPages(role: Role): FeatureId[] {
+  const a = ROLE_ACCESS[role];
+  return a === 'all' ? [] : a.filter((p) => p !== 'overview');
+}
+
 export function canAccess(role: Role, id: FeatureId): boolean {
   const a = ROLE_ACCESS[role];
   return a === 'all' ? true : a.includes(id);
 }
 
-const KEY = 'shipva-role-v1';
-
-interface RoleApi { role: Role; setRole: (r: Role) => void }
-const Ctx = createContext<RoleApi | null>(null);
-
-export function RoleProvider({ children }: { children: ReactNode }) {
-  const [role, setRoleState] = useState<Role>(() => {
-    const r = localStorage.getItem(KEY) as Role | null;
-    return r && ROLES.some((x) => x.id === r) ? r : 'owner';
-  });
-  const setRole = useCallback((r: Role) => { setRoleState(r); try { localStorage.setItem(KEY, r); } catch { /* */ } }, []);
-  const value = useMemo(() => ({ role, setRole }), [role, setRole]);
-  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
-}
-
-export function useRole(): RoleApi {
-  const v = useContext(Ctx);
-  if (!v) throw new Error('useRole must be used within RoleProvider');
-  return v;
-}
+export const roleLabel = (role: Role): string => ROLES.find((r) => r.id === role)?.label ?? role;

@@ -10,7 +10,8 @@ import { Modal, Field, TextInput, Select, Row } from '../../components/ui/Modal.
 import { Donut } from '../../components/ui/Charts.js';
 import { rupees } from '../../lib/format.js';
 import { useStore, todayLabel } from '../../lib/store.js';
-import { useRole, ROLES } from '../../lib/roles.js';
+import { roleLabel } from '../../lib/roles.js';
+import { useAuth } from '../../lib/auth.js';
 import { useNotify } from '../../lib/notify.js';
 
 const TABS = ['Expenses', 'Fuel log'] as const;
@@ -25,7 +26,7 @@ const REQ_EMPTY = { kind: 'expense' as 'expense' | 'advance' | 'trip' | 'other',
 
 export function Expenses() {
   const { expenses, fuelLogs, trucks, trips, expenseCategories, requests, addExpense, addFuelLog, addExpenseCategory, addRequest, resolveRequest } = useStore();
-  const { role } = useRole();
+  const { member } = useAuth();
   const { push } = useNotify();
   const [tab, setTab] = useState<(typeof TABS)[number]>('Expenses');
   const [open, setOpen] = useState<null | 'expense' | 'fuel' | 'request'>(null);
@@ -73,7 +74,7 @@ export function Expenses() {
 
   function submitRequest() {
     if (!reqValid) return;
-    const raisedBy = ROLES.find((x) => x.id === role)?.label ?? 'Staff';
+    const raisedBy = member ? `${member.name} · ${roleLabel(member.role)}` : 'Staff';
     addRequest({
       raisedBy, kind: r.kind, title: r.title.trim(),
       ...(r.note.trim() ? { note: r.note.trim() } : {}),

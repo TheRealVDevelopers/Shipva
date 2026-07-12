@@ -4,14 +4,16 @@ import {
   LayoutDashboard, ClipboardList, Route, Truck, FileCheck2, UserCog, Users, FileText, Fuel, Wallet,
   HandCoins, BarChart3, TrendingUp, PackageSearch, Navigation, BadgeCheck, Building2,
   Settings as SettingsIcon, MessageCircle, MessagesSquare, FileSpreadsheet,
-  Bell, Menu, X, Volume2, VolumeX, CheckCheck, type LucideIcon,
+  Bell, Menu, X, Volume2, VolumeX, CheckCheck, LogOut, User as UserIcon, type LucideIcon,
 } from 'lucide-react';
 import { LogoMark } from '../art.js';
 import { subscription } from '../../lib/mocks.js';
 import { FEATURES, type FeatureId } from '../../lib/features.js';
 import { useNotify } from '../../lib/notify.js';
-import { useRole, canAccess, ROLES, type Role } from '../../lib/roles.js';
-import { BRAND, companyInitials } from '../../lib/brand.js';
+import { roleLabel } from '../../lib/roles.js';
+import { useAuth } from '../../lib/auth.js';
+import { memberCanAccess } from '../../lib/members.js';
+import { BRAND } from '../../lib/brand.js';
 
 interface NavItem { key: FeatureId; to: string; label: string; icon: LucideIcon; end?: boolean; group?: string; soon?: boolean }
 
@@ -40,8 +42,8 @@ const NAV: NavItem[] = [
 ];
 
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
-  const { role } = useRole();
-  const visible = NAV.filter((n) => FEATURES[n.key] && canAccess(role, n.key));
+  const { member } = useAuth();
+  const visible = NAV.filter((n) => FEATURES[n.key] && memberCanAccess(member, n.key));
   let lastGroup: string | undefined;
   return (
     <>
@@ -164,9 +166,44 @@ function NotificationBell() {
   );
 }
 
+function UserMenu() {
+  const { member, signOutUser } = useAuth();
+  const [open, setOpen] = useState(false);
+  const initials = (member?.name || 'U').split(' ').map((n) => n[0]).slice(0, 2).join('').toUpperCase();
+  return (
+    <div className="relative pl-2 border-l border-neutral-200">
+      <button onClick={() => setOpen((o) => !o)} className="flex items-center gap-2 rounded-lg p-1 hover:bg-neutral-100">
+        {member?.photoUrl
+          ? <img src={member.photoUrl} alt={member.name} className="h-8 w-8 rounded-full object-cover" />
+          : <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-500 text-xs font-extrabold text-white">{initials}</div>}
+        <div className="hidden text-left sm:block">
+          <div className="text-xs font-extrabold text-neutral-900 leading-none">{member?.name || 'You'}</div>
+          <div className="mt-0.5 text-[10px] text-neutral-500">{member ? roleLabel(member.role) : ''}</div>
+        </div>
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 z-50 mt-2 w-56 overflow-hidden rounded-xl bg-white shadow-lift ring-1 ring-neutral-200">
+            <div className="border-b border-neutral-100 px-4 py-3">
+              <div className="text-sm font-extrabold text-neutral-900">{member?.name}</div>
+              <div className="truncate text-[11px] text-neutral-500">{member?.email}</div>
+            </div>
+            <NavLink to="/p/profile" onClick={() => setOpen(false)} className="flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold text-neutral-700 hover:bg-neutral-50">
+              <UserIcon size={15} className="text-neutral-400" /> My profile
+            </NavLink>
+            <button onClick={() => { setOpen(false); void signOutUser(); }} className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm font-semibold text-rose-600 hover:bg-rose-50">
+              <LogOut size={15} /> Sign out
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function PartnerLayout({ title, subtitle, children }: { title: string; subtitle?: string; children: ReactNode }) {
   const [drawer, setDrawer] = useState(false);
-  const { role, setRole } = useRole();
   return (
     <div className="flex h-screen bg-neutral-50">
       <aside className="hidden md:flex md:w-64 md:flex-col bg-primary-900 text-white">
@@ -193,21 +230,8 @@ export function PartnerLayout({ title, subtitle, children }: { title: string; su
             </div>
           </div>
           <div className="flex items-center gap-2 sm:gap-3">
-            <label className="inline-flex items-center gap-1.5 rounded-lg bg-neutral-100 px-2 py-1.5 text-xs font-bold text-neutral-600" title="Role-based view">
-              <UserCog size={13} className="text-neutral-400" />
-              <span className="hidden text-neutral-400 sm:inline">View:</span>
-              <select value={role} onChange={(e) => setRole(e.target.value as Role)} className="cursor-pointer bg-transparent text-neutral-800 outline-none">
-                {ROLES.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
-              </select>
-            </label>
             <NotificationBell />
-            <div className="flex items-center gap-2 pl-2 border-l border-neutral-200">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-500 text-white text-xs font-extrabold">{companyInitials}</div>
-              <div className="hidden sm:block">
-                <div className="text-xs font-extrabold text-neutral-900 leading-none">{BRAND.company}</div>
-                <div className="text-[10px] text-neutral-500 mt-0.5">Admin · Peenya corridor</div>
-              </div>
-            </div>
+            <UserMenu />
           </div>
         </header>
         <main className="flex-1 overflow-y-auto px-4 py-6 sm:px-6 animate-fade">{children}</main>

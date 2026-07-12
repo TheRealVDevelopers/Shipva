@@ -57,6 +57,42 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // ── Transporter OS (partner-web) team ─────────────────────────────────
+    // Team members carry their own role + page permissions. The bootstrap owner
+    // email may self-create its owner doc on first sign-in; everyone else is
+    // provisioned by an admin. Members can edit their own profile but not their
+    // own role/pages (no self-escalation).
+    function orgMember() { return get(/databases/$(database)/documents/orgMembers/$(request.auth.uid)).data; }
+    function isOrgMember() { return signedIn() && exists(/databases/$(database)/documents/orgMembers/$(request.auth.uid)); }
+    function isOrgAdmin() { return isOrgMember() && orgMember().role in ['owner', 'manager']; }
+    function isBootstrapOwner() { return signedIn() && request.auth.token.email == 'admin@sarvaexpress.in'; }
+
+    match /orgMembers/{uid} {
+      allow read: if isOrgMember() || isBootstrapOwner();
+      allow create: if isOrgAdmin() || (isSelf(uid) && isBootstrapOwner());
+      allow update: if isOrgAdmin()
+        || (isSelf(uid)
+            && request.resource.data.role == resource.data.role
+            && request.resource.data.pages == resource.data.pages);
+      allow delete: if isOrgAdmin();
+    }
+
+    // Assigned tasks — admins manage; an assignee may update their own (status/timer).
+    match /orgTasks/{id} {
+      allow read: if isOrgMember();
+      allow create: if isOrgAdmin();
+      allow update: if isOrgAdmin() || (isOrgMember() && resource.data.assigneeUid == request.auth.uid);
+      allow delete: if isOrgAdmin();
+    }
+
+    // Activity/session logs — each member writes their own; admins read all.
+    match /orgActivity/{id} {
+      allow read: if isOrgMember();
+      allow create: if isOrgMember() && request.resource.data.uid == request.auth.uid;
+      allow update: if isOrgMember() && resource.data.uid == request.auth.uid;
+      allow delete: if isOrgAdmin();
+    }
+
     // Public config (vehicle types, zones, fares) — readable by any signed-in user.
     match /config/{doc} { allow read: if signedIn(); allow write: if false; }
 

@@ -5,7 +5,7 @@ import { getFunctions } from 'firebase/functions';
 import { getStorage } from 'firebase/storage';
 
 /** Firebase init for the partner dashboard. Shared sarvaexpressos project. */
-const firebaseConfig = {
+export const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY ?? 'AIzaSyCjPwC0ii0EQmyo0FTvU6ydJKVrCp7KuPo',
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN ?? 'sarvaexpressos.firebaseapp.com',
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID ?? 'sarvaexpressos',
