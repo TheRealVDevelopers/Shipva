@@ -29,9 +29,10 @@ service firebase.storage {
     // per-tenant auth in Phase B.)
     match /documents/{allPaths=**} {
       allow read: if signedIn();
-      allow write: if signedIn()
+      allow create, update: if signedIn()
         && request.resource.size < 8 * 1024 * 1024
         && request.resource.contentType.matches('image/.*|application/pdf');
+      allow delete: if signedIn();
     }
 
     match /{allPaths=**} {
