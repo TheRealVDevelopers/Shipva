@@ -14,6 +14,7 @@ import {
   type Trip, type Invoice, type Expense, type FuelLog, type FleetDriver, type Truck,
   type PayrollLine, type Staff, type TripStatus,
 } from './mocks.js';
+import { tripSteps, statusFromStep, genVrId } from './trip.js';
 
 /** Vendor agreement — absence means "not created yet". */
 export interface Agreement {
@@ -89,6 +90,17 @@ const seedTours: Tour[] = [
   },
 ];
 
+/** A remembered pickup/drop location, suggested while typing a new trip. */
+export interface SavedPoint { label: string; mapUrl?: string }
+const seedPoints: SavedPoint[] = [
+  { label: 'Peenya', mapUrl: 'https://maps.google.com/?q=Peenya+Industrial+Area+Bengaluru' },
+  { label: 'Whitefield', mapUrl: 'https://maps.google.com/?q=Whitefield+Bengaluru' },
+  { label: 'Electronic City', mapUrl: 'https://maps.google.com/?q=Electronic+City+Bengaluru' },
+  { label: 'JP Nagar', mapUrl: 'https://maps.google.com/?q=JP+Nagar+Bengaluru' },
+  { label: 'KR Puram' }, { label: 'Yelahanka' }, { label: 'Hebbal' }, { label: 'Hosur' },
+  { label: 'Bommasandra' }, { label: 'Nelamangala' },
+];
+
 interface StoreShape {
   trips: Trip[];
   invoices: Invoice[];
@@ -101,11 +113,15 @@ interface StoreShape {
   customers: Customer[];
   attached: AttachedTruck[];
   tours: Tour[];
+  savedPoints: SavedPoint[];
 }
 
 interface StoreApi extends StoreShape {
-  addTrip: (t: Omit<Trip, 'lr'>) => void;
+  addTrip: (t: Omit<Trip, 'lr' | 'vrId'>) => void;
   updateTripStatus: (lr: string, status: TripStatus) => void;
+  /** Advance a trip one step along its live timeline; pass a remark when finishing. */
+  advanceTrip: (lr: string, remark?: string) => void;
+  addSavedPoint: (p: SavedPoint) => void;
   addInvoice: (i: Omit<Invoice, 'no' | 'gstPaise' | 'totalPaise'> & { gstRate?: number }) => void;
   markInvoicePaid: (no: string) => void;
   addExpense: (e: Expense) => void;
@@ -131,7 +147,7 @@ function seed(): StoreShape {
   return {
     trips: seedTrips, invoices: seedInvoices, expenses: seedExpenses, fuelLogs: seedFuelLogs,
     drivers: seedDrivers, trucks: seedTrucks, payroll: seedPayroll, staff: seedStaff,
-    customers: seedCustomers, attached: seedAttached, tours: seedTours,
+    customers: seedCustomers, attached: seedAttached, tours: seedTours, savedPoints: seedPoints,
   };
 }
 
@@ -156,12 +172,43 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     try { localStorage.setItem(KEY, JSON.stringify(s)); } catch { /* quota */ }
   }, [s]);
 
-  const addTrip = useCallback((t: Omit<Trip, 'lr'>) => {
-    setS((p) => ({ ...p, trips: [{ ...t, lr: `LR-${24818 + p.trips.length}` }, ...p.trips] }));
+  const addTrip = useCallback((t: Omit<Trip, 'lr' | 'vrId'>) => {
+    setS((p) => ({ ...p, trips: [{ ...t, lr: `LR-${24818 + p.trips.length}`, vrId: genVrId() }, ...p.trips] }));
   }, []);
 
   const updateTripStatus = useCallback((lr: string, status: TripStatus) => {
     setS((p) => ({ ...p, trips: p.trips.map((t) => (t.lr === lr ? { ...t, status } : t)) }));
+  }, []);
+
+  const advanceTrip = useCallback((lr: string, remark?: string) => {
+    setS((p) => ({
+      ...p,
+      trips: p.trips.map((t) => {
+        if (t.lr !== lr) return t;
+        const steps = tripSteps(t);
+        const next = Math.min((t.stepIndex ?? 0) + 1, steps.length - 1);
+        return {
+          ...t, stepIndex: next, status: statusFromStep(steps, next),
+          ...(remark !== undefined ? { remark } : {}),
+        };
+      }),
+    }));
+  }, []);
+
+  const addSavedPoint = useCallback((sp: SavedPoint) => {
+    const label = sp.label.trim();
+    if (!label) return;
+    setS((p) => {
+      const i = p.savedPoints.findIndex((x) => x.label.toLowerCase() === label.toLowerCase());
+      if (i === -1) return { ...p, savedPoints: [{ ...sp, label }, ...p.savedPoints] };
+      // Known point — fill in a map link if we now have one.
+      if (sp.mapUrl && !p.savedPoints[i]!.mapUrl) {
+        const copy = [...p.savedPoints];
+        copy[i] = { ...copy[i]!, mapUrl: sp.mapUrl };
+        return { ...p, savedPoints: copy };
+      }
+      return p;
+    });
   }, []);
 
   const addInvoice = useCallback((i: Omit<Invoice, 'no' | 'gstPaise' | 'totalPaise'> & { gstRate?: number }) => {
@@ -233,9 +280,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const reset = useCallback(() => setS(seed()), []);
 
   const value = useMemo<StoreApi>(() => ({
-    ...s, addTrip, updateTripStatus, addInvoice, markInvoicePaid, addExpense, addFuelLog, addCustomer, addDriver, addTruck,
+    ...s, addTrip, updateTripStatus, advanceTrip, addSavedPoint, addInvoice, markInvoicePaid, addExpense, addFuelLog, addCustomer, addDriver, addTruck,
     setDriverDocs, setTruckDocs, setCustomerAgreement, setAttachedAgreement, addStaff, addAttached, recordOwnerPayment, addTour, runPayroll, reset,
-  }), [s, addTrip, updateTripStatus, addInvoice, markInvoicePaid, addExpense, addFuelLog, addCustomer, addDriver, addTruck,
+  }), [s, addTrip, updateTripStatus, advanceTrip, addSavedPoint, addInvoice, markInvoicePaid, addExpense, addFuelLog, addCustomer, addDriver, addTruck,
     setDriverDocs, setTruckDocs, setCustomerAgreement, setAttachedAgreement, addStaff, addAttached, recordOwnerPayment, addTour, runPayroll, reset]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

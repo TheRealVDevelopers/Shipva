@@ -3,10 +3,10 @@ import { X } from 'lucide-react';
 import { Button } from './Button.js';
 
 export function Modal({
-  open, onClose, title, subtitle, children, onSubmit, submitLabel = 'Save', submitDisabled,
+  open, onClose, title, subtitle, children, onSubmit, submitLabel = 'Save', submitDisabled, wide,
 }: {
   open: boolean; onClose: () => void; title: string; subtitle?: string; children: ReactNode;
-  onSubmit?: () => void; submitLabel?: string; submitDisabled?: boolean;
+  onSubmit?: () => void; submitLabel?: string; submitDisabled?: boolean; wide?: boolean;
 }) {
   useEffect(() => {
     if (!open) return;
@@ -19,7 +19,7 @@ export function Modal({
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-neutral-900/50 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={onClose}>
       <div
-        className="animate-scale-in flex max-h-[92vh] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl bg-white shadow-lift ring-1 ring-neutral-200 sm:rounded-2xl"
+        className={`animate-scale-in flex max-h-[92vh] w-full ${wide ? 'max-w-2xl' : 'max-w-lg'} flex-col overflow-hidden rounded-t-2xl bg-white shadow-lift ring-1 ring-neutral-200 sm:rounded-2xl`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between border-b border-neutral-100 px-5 py-4">

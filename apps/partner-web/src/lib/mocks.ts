@@ -173,17 +173,41 @@ export const docAlerts: DocAlert[] = [
 ];
 
 export type TripStatus = 'assigned' | 'loading' | 'in_transit' | 'at_drop' | 'pod_pending' | 'closed';
+/** A stop on a trip. First point is always the pickup, last is the final drop,
+ *  anything in between is an intermediate point. `mapUrl` is an optional Google
+ *  Maps link the driver can tap. */
+export interface TripPoint { label: string; mapUrl?: string }
 export interface Trip {
   lr: string; date: string; from: string; to: string; driver: string; vehicleReg: string;
   material: string; weightKg: number; freightPaise: number; status: TripStatus; ewayBill: boolean;
+  /** Auto-generated VR (vehicle-run) ID stamped on every new trip. */
+  vrId?: string;
+  customer?: string;
+  /** Ordered stops (pickup → … → drop). Absent on legacy trips (fall back to from/to). */
+  points?: TripPoint[];
+  /** Progress along the live status timeline (0 = just assigned). */
+  stepIndex?: number;
+  /** Free-text note captured when the trip is finished (e.g. "police checkpost delay"). */
+  remark?: string;
 }
 export const trips: Trip[] = [
-  { lr: 'LR-24817', date: '27 Jun', from: 'Peenya', to: 'Hosur', driver: 'Ramesh Yadav', vehicleReg: 'KA01C5521', material: 'Steel coils', weightKg: 6800, freightPaise: 3400000, status: 'in_transit', ewayBill: true },
-  { lr: 'LR-24816', date: '27 Jun', from: 'Whitefield', to: 'KR Puram', driver: 'Iqbal Sharief', vehicleReg: 'KA09H8810', material: 'Electronics', weightKg: 2400, freightPaise: 1500000, status: 'loading', ewayBill: true },
-  { lr: 'LR-24814', date: '26 Jun', from: 'Bengaluru', to: 'Chennai', driver: 'Sathish Reddy', vehicleReg: 'KA02D9930', material: 'Polymer granules', weightKg: 2200, freightPaise: 4400000, status: 'at_drop', ewayBill: true },
-  { lr: 'LR-24811', date: '26 Jun', from: 'Peenya', to: 'Yelahanka', driver: 'Lokesh M', vehicleReg: 'KA03P7782', material: 'FMCG cartons', weightKg: 1400, freightPaise: 1200000, status: 'pod_pending', ewayBill: false },
-  { lr: 'LR-24805', date: '25 Jun', from: 'Bengaluru', to: 'Hyderabad', driver: 'Iqbal Sharief', vehicleReg: 'KA09H8810', material: 'Machinery', weightKg: 6500, freightPaise: 5800000, status: 'closed', ewayBill: true },
-  { lr: 'LR-24802', date: '24 Jun', from: 'Whitefield', to: 'Mysuru', driver: 'Naveen Kumar', vehicleReg: 'KA51F1207', material: 'Textiles', weightKg: 1500, freightPaise: 1900000, status: 'closed', ewayBill: true },
+  { lr: 'LR-24817', vrId: '204KJ7HB9', date: '27 Jun', from: 'Peenya', to: 'Hosur', driver: 'Ramesh Yadav', vehicleReg: 'KA01C5521', material: 'Steel coils', weightKg: 6800, freightPaise: 3400000, status: 'in_transit', ewayBill: true,
+    customer: 'Bharat Steels', stepIndex: 4,
+    points: [
+      { label: 'Peenya', mapUrl: 'https://maps.google.com/?q=Peenya+Industrial+Area+Bengaluru' },
+      { label: 'Electronic City', mapUrl: 'https://maps.google.com/?q=Electronic+City+Bengaluru' },
+      { label: 'Hosur', mapUrl: 'https://maps.google.com/?q=Hosur+Tamil+Nadu' },
+    ] },
+  { lr: 'LR-24816', vrId: '118PQ2MK4', date: '27 Jun', from: 'Whitefield', to: 'KR Puram', driver: 'Iqbal Sharief', vehicleReg: 'KA09H8810', material: 'Electronics', weightKg: 2400, freightPaise: 1500000, status: 'loading', ewayBill: true,
+    customer: 'Vexa Polymers', stepIndex: 2,
+    points: [
+      { label: 'Whitefield', mapUrl: 'https://maps.google.com/?q=Whitefield+Bengaluru' },
+      { label: 'KR Puram', mapUrl: 'https://maps.google.com/?q=KR+Puram+Bengaluru' },
+    ] },
+  { lr: 'LR-24814', vrId: '093ZC5RT7', date: '26 Jun', from: 'Bengaluru', to: 'Chennai', driver: 'Sathish Reddy', vehicleReg: 'KA02D9930', material: 'Polymer granules', weightKg: 2200, freightPaise: 4400000, status: 'at_drop', ewayBill: true },
+  { lr: 'LR-24811', vrId: '077YB1LX3', date: '26 Jun', from: 'Peenya', to: 'Yelahanka', driver: 'Lokesh M', vehicleReg: 'KA03P7782', material: 'FMCG cartons', weightKg: 1400, freightPaise: 1200000, status: 'pod_pending', ewayBill: false },
+  { lr: 'LR-24805', vrId: '051KA9WD2', date: '25 Jun', from: 'Bengaluru', to: 'Hyderabad', driver: 'Iqbal Sharief', vehicleReg: 'KA09H8810', material: 'Machinery', weightKg: 6500, freightPaise: 5800000, status: 'closed', ewayBill: true, remark: 'Delivered on time, POD collected.' },
+  { lr: 'LR-24802', vrId: '042MN3PP8', date: '24 Jun', from: 'Whitefield', to: 'Mysuru', driver: 'Naveen Kumar', vehicleReg: 'KA51F1207', material: 'Textiles', weightKg: 1500, freightPaise: 1900000, status: 'closed', ewayBill: true },
 ];
 
 export type InvoiceStatus = 'paid' | 'pending' | 'overdue';
