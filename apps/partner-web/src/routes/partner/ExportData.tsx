@@ -1,8 +1,9 @@
-import { Download, FileSpreadsheet } from 'lucide-react';
+import { Download, FileSpreadsheet, Sheet } from 'lucide-react';
 import { PartnerLayout } from '../../components/layout/PartnerLayout.js';
 import { Card } from '../../components/ui/Card.js';
 import { Button } from '../../components/ui/Button.js';
 import { exportRows, rupeeCell, type Cell } from '../../lib/exportExcel.js';
+import { exportTourSheet } from '../../lib/exportTourSheet.js';
 import { useStore } from '../../lib/store.js';
 
 export function ExportData() {
@@ -59,6 +60,18 @@ export function ExportData() {
   return (
     <PartnerLayout title="Data Export" subtitle="Download your data as Excel sheets">
       <div className="space-y-6">
+        {/* Featured — the client's operational tour-sheet format, styled */}
+        <Card className="flex flex-col gap-4 p-5 ring-primary-200 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary-500 text-white"><Sheet size={18} /></span>
+            <div>
+              <h3 className="text-sm font-extrabold text-neutral-900">Amazon Tour Sheet <span className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800">styled .xls</span></h3>
+              <p className="mt-0.5 max-w-xl text-xs text-neutral-500">Your operational 55-column format — multi-stop, red status/photo columns, yellow Amazon-Rely-KM. Opens in Excel with the exact styling. Trip fields are filled; the Amazon-specific tracking columns are ready to complete.</p>
+            </div>
+          </div>
+          <Button size="sm" className="shrink-0" onClick={() => exportTourSheet(s.trips, s.drivers, s.trucks)}><Download size={13} /> Export tour sheet</Button>
+        </Card>
+
         <Card className="flex items-start gap-3 p-5">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600"><FileSpreadsheet size={18} /></span>
           <p className="text-sm text-neutral-600">Each sheet downloads as a <b className="text-neutral-800">.csv</b> that opens directly in Excel or Google Sheets. Money columns are plain numbers so you can total and pivot them.</p>

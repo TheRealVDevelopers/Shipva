@@ -10,6 +10,7 @@ import { Modal, Field, TextInput, Select, Row } from '../../components/ui/Modal.
 import { rupees } from '../../lib/format.js';
 import { useStore, todayLabel, type AttachedTruck } from '../../lib/store.js';
 import { printAgreement } from '../../lib/agreement.js';
+import { printJoiningLetter } from '../../lib/joiningLetter.js';
 import { useNotify } from '../../lib/notify.js';
 
 const AG_EMPTY = { effectiveFrom: '', durationMonths: '24', commission: '', notes: '' };
@@ -86,9 +87,12 @@ export function Payables() {
                       : <Badge tone="danger"><FileWarning size={11} /> Not created</Badge>}
                   </Td>
                   <Td>
-                    {a.agreement
-                      ? <button onClick={() => printAgreement('truck-owner', { name: a.owner, phone: a.phone }, a.agreement!)} className="inline-flex items-center gap-1 text-xs font-bold text-primary-600 hover:text-primary-700"><Download size={12} /> Download</button>
-                      : <Button size="sm" onClick={() => openAgreement(a)}>Create agreement</Button>}
+                    <div className="flex items-center justify-end gap-3">
+                      {a.agreement
+                        ? <button onClick={() => printAgreement('truck-owner', { name: a.owner, phone: a.phone }, a.agreement!)} className="inline-flex items-center gap-1 text-xs font-bold text-primary-600 hover:text-primary-700"><Download size={12} /> Agreement</button>
+                        : <Button size="sm" onClick={() => openAgreement(a)}>Create agreement</Button>}
+                      <button onClick={() => printJoiningLetter({ name: a.owner, phone: a.phone })} className="text-xs font-bold text-neutral-500 hover:text-primary-600" title="Trial joining letter (LOI)">LOI</button>
+                    </div>
                   </Td>
                 </Tr>
               ))}
