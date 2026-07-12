@@ -3,6 +3,7 @@
  * No external assets. Colors pull from CSS vars so they track the theme.
  */
 import type { VehicleType } from '@shipva/shared-types';
+import { BRAND } from '../lib/brand.js';
 
 const BLUE = 'var(--sx-primary-500)';
 const BLUE_D = 'var(--sx-primary-700)';
@@ -150,6 +151,9 @@ export function SearchingArt({ className }: { className?: string }) {
 
 /** Round brand mark. */
 export function LogoMark({ className }: { className?: string }) {
+  if (BRAND.logoSrc) {
+    return <img src={BRAND.logoSrc} alt={BRAND.name} className={`${className ?? ''} object-contain`} />;
+  }
   return (
     <svg className={className} viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg" fill="none">
       <rect width="40" height="40" rx="11" fill={BLUE} />
