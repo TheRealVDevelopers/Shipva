@@ -11,9 +11,9 @@ export function ExportData() {
 
   const datasets: { name: string; desc: string; count: number; run: () => void }[] = [
     {
-      name: 'Trips', desc: 'LRs, routes, freight, status', count: s.trips.length,
-      run: () => exportRows('shipva-trips', ['LR', 'Date', 'From', 'To', 'Driver', 'Vehicle', 'Material', 'Weight (kg)', 'Freight (₹)', 'E-way', 'Status'],
-        s.trips.map((t): Cell[] => [t.lr, t.date, t.from, t.to, t.driver, t.vehicleReg, t.material, t.weightKg, rupeeCell(t.freightPaise), t.ewayBill ? 'Yes' : 'No', t.status])),
+      name: 'Trips', desc: 'LRs, routes, freight, status, handled-by', count: s.trips.length,
+      run: () => exportRows('shipva-trips', ['VR ID', 'LR', 'Date', 'From', 'To', 'Driver', 'Vehicle', 'Material', 'Weight (kg)', 'Freight (₹)', 'E-way', 'Status', 'Handled by'],
+        s.trips.map((t): Cell[] => [t.vrId ?? '', t.lr, t.date, t.from, t.to, t.driver, t.vehicleReg, t.material, t.weightKg, rupeeCell(t.freightPaise), t.ewayBill ? 'Yes' : 'No', t.status, t.ownerName ?? ''])),
     },
     {
       name: 'Invoices', desc: 'GST invoices & totals', count: s.invoices.length,

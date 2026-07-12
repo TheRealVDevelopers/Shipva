@@ -189,6 +189,13 @@ export interface Trip {
   stepIndex?: number;
   /** Free-text note captured when the trip is finished (e.g. "police checkpost delay"). */
   remark?: string;
+  /** Firestore doc id (present once the trip is backed by the backend). */
+  id?: string;
+  /** The supervisor/member who handles this trip. Owner/managers see all; a
+   *  supervisor sees only trips where ownerUid is theirs. */
+  ownerUid?: string;
+  ownerName?: string;
+  createdAtMs?: number;
 }
 export const trips: Trip[] = [
   { lr: 'LR-24817', vrId: '204KJ7HB9', date: '27 Jun', from: 'Peenya', to: 'Hosur', driver: 'Ramesh Yadav', vehicleReg: 'KA01C5521', material: 'Steel coils', weightKg: 6800, freightPaise: 3400000, status: 'in_transit', ewayBill: true,

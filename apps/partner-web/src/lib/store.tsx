@@ -6,15 +6,17 @@
  * Phase B the implementation swaps to Firestore (scoped per transporter tenant)
  * without changing any page that consumes it.
  */
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
-  trips as seedTrips, invoices as seedInvoices, expenses as seedExpenses,
+  invoices as seedInvoices, expenses as seedExpenses,
   fuelLogs as seedFuelLogs, fleetDrivers as seedDrivers, trucks as seedTrucks,
   payroll as seedPayroll, staff as seedStaff,
   type Trip, type Invoice, type Expense, type FuelLog, type FleetDriver, type Truck,
   type PayrollLine, type Staff, type TripStatus,
 } from './mocks.js';
-import { tripSteps, statusFromStep, genVrId } from './trip.js';
+import { tripSteps, statusFromStep } from './trip.js';
+import { watchTrips, addTripDoc, updateTripDoc, seedTripsFor } from './trips.js';
+import { useAuth } from './auth.js';
 
 /** Vendor agreement — absence means "not created yet". */
 export interface Agreement {
@@ -116,7 +118,6 @@ const seedRequests: MoneyRequest[] = [
 const seedCategories = ['Toll', 'RTO/Police', 'Loading', 'Repairs', 'Office', 'Misc'];
 
 interface StoreShape {
-  trips: Trip[];
   invoices: Invoice[];
   expenses: Expense[];
   fuelLogs: FuelLog[];
@@ -133,10 +134,12 @@ interface StoreShape {
 }
 
 interface StoreApi extends StoreShape {
-  addTrip: (t: Omit<Trip, 'lr' | 'vrId'>) => void;
-  updateTripStatus: (lr: string, status: TripStatus) => void;
+  /** Trips are backed by Firestore and scoped to the signed-in member. */
+  trips: Trip[];
+  addTrip: (t: Omit<Trip, 'lr' | 'vrId' | 'id'>, handledBy?: { uid: string; name: string }) => void;
+  updateTripStatus: (id: string, status: TripStatus) => void;
   /** Advance a trip one step along its live timeline; pass a remark when finishing. */
-  advanceTrip: (lr: string, remark?: string) => void;
+  advanceTrip: (id: string, remark?: string) => void;
   addSavedPoint: (p: SavedPoint) => void;
   addInvoice: (i: Omit<Invoice, 'no' | 'gstPaise' | 'totalPaise'> & { gstRate?: number }) => void;
   markInvoicePaid: (no: string) => void;
@@ -164,7 +167,7 @@ const KEY = 'shipva-partner-store-v2';
 
 function seed(): StoreShape {
   return {
-    trips: seedTrips, invoices: seedInvoices, expenses: seedExpenses, fuelLogs: seedFuelLogs,
+    invoices: seedInvoices, expenses: seedExpenses, fuelLogs: seedFuelLogs,
     drivers: seedDrivers, trucks: seedTrucks, payroll: seedPayroll, staff: seedStaff,
     customers: seedCustomers, attached: seedAttached, tours: seedTours, savedPoints: seedPoints,
     expenseCategories: seedCategories, requests: seedRequests,
@@ -187,32 +190,49 @@ const today = () => new Date().toLocaleDateString('en-IN', { day: 'numeric', mon
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [s, setS] = useState<StoreShape>(load);
+  const { member } = useAuth();
+  const [trips, setTrips] = useState<Trip[]>([]);
+  const tripsRef = useRef<Trip[]>([]);
 
   useEffect(() => {
     try { localStorage.setItem(KEY, JSON.stringify(s)); } catch { /* quota */ }
   }, [s]);
 
-  const addTrip = useCallback((t: Omit<Trip, 'lr' | 'vrId'>) => {
-    setS((p) => ({ ...p, trips: [{ ...t, lr: `LR-${24818 + p.trips.length}`, vrId: genVrId() }, ...p.trips] }));
+  // Trips live in Firestore, scoped to the signed-in member (supervisors see
+  // only their own; owner/managers see all). One-time demo seed for the owner.
+  useEffect(() => {
+    if (!member) { setTrips([]); tripsRef.current = []; return; }
+    const scope = { uid: member.uid, role: member.role };
+    let seeded = false;
+    return watchTrips(scope, (list) => {
+      setTrips(list);
+      tripsRef.current = list;
+      if (!seeded && list.length === 0 && member.role === 'owner' && !localStorage.getItem('trips-seeded-v1')) {
+        seeded = true;
+        localStorage.setItem('trips-seeded-v1', '1');
+        void seedTripsFor(scope);
+      }
+    });
+  }, [member?.uid, member?.role]);
+
+  const addTrip = useCallback((t: Omit<Trip, 'lr' | 'vrId' | 'id'>, handledBy?: { uid: string; name: string }) => {
+    if (!member) return;
+    void addTripDoc(t, { uid: member.uid, role: member.role }, handledBy);
+  }, [member?.uid, member?.role]);
+
+  const updateTripStatus = useCallback((id: string, status: TripStatus) => {
+    void updateTripDoc(id, { status });
   }, []);
 
-  const updateTripStatus = useCallback((lr: string, status: TripStatus) => {
-    setS((p) => ({ ...p, trips: p.trips.map((t) => (t.lr === lr ? { ...t, status } : t)) }));
-  }, []);
-
-  const advanceTrip = useCallback((lr: string, remark?: string) => {
-    setS((p) => ({
-      ...p,
-      trips: p.trips.map((t) => {
-        if (t.lr !== lr) return t;
-        const steps = tripSteps(t);
-        const next = Math.min((t.stepIndex ?? 0) + 1, steps.length - 1);
-        return {
-          ...t, stepIndex: next, status: statusFromStep(steps, next),
-          ...(remark !== undefined ? { remark } : {}),
-        };
-      }),
-    }));
+  const advanceTrip = useCallback((id: string, remark?: string) => {
+    const t = tripsRef.current.find((x) => x.id === id);
+    if (!t) return;
+    const steps = tripSteps(t);
+    const next = Math.min((t.stepIndex ?? 0) + 1, steps.length - 1);
+    void updateTripDoc(id, {
+      stepIndex: next, status: statusFromStep(steps, next),
+      ...(remark !== undefined ? { remark } : {}),
+    });
   }, []);
 
   const addSavedPoint = useCallback((sp: SavedPoint) => {
@@ -315,10 +335,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const reset = useCallback(() => setS(seed()), []);
 
   const value = useMemo<StoreApi>(() => ({
-    ...s, addTrip, updateTripStatus, advanceTrip, addSavedPoint, addInvoice, markInvoicePaid, addExpense, addFuelLog,
+    ...s, trips, addTrip, updateTripStatus, advanceTrip, addSavedPoint, addInvoice, markInvoicePaid, addExpense, addFuelLog,
     addExpenseCategory, addRequest, resolveRequest, addCustomer, addDriver, addTruck,
     setDriverDocs, setTruckDocs, setCustomerAgreement, setAttachedAgreement, addStaff, addAttached, recordOwnerPayment, addTour, runPayroll, reset,
-  }), [s, addTrip, updateTripStatus, advanceTrip, addSavedPoint, addInvoice, markInvoicePaid, addExpense, addFuelLog,
+  }), [s, trips, addTrip, updateTripStatus, advanceTrip, addSavedPoint, addInvoice, markInvoicePaid, addExpense, addFuelLog,
     addExpenseCategory, addRequest, resolveRequest, addCustomer, addDriver, addTruck,
     setDriverDocs, setTruckDocs, setCustomerAgreement, setAttachedAgreement, addStaff, addAttached, recordOwnerPayment, addTour, runPayroll, reset]);
 

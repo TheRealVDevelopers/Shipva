@@ -100,6 +100,15 @@ service cloud.firestore {
       allow update, delete: if isOrgAdmin();
     }
 
+    // Trips — scoped by supervisor. Owner/manager see & manage every trip; a
+    // supervisor only sees and edits trips they handle (ownerUid == them).
+    match /orgTrips/{id} {
+      allow read: if isOrgAdmin() || (isOrgMember() && resource.data.ownerUid == request.auth.uid);
+      allow create: if isOrgAdmin() || (isOrgMember() && request.resource.data.ownerUid == request.auth.uid);
+      allow update: if isOrgAdmin() || (isOrgMember() && resource.data.ownerUid == request.auth.uid);
+      allow delete: if isOrgAdmin() || (isOrgMember() && resource.data.ownerUid == request.auth.uid);
+    }
+
     // Public config (vehicle types, zones, fares) — readable by any signed-in user.
     match /config/{doc} { allow read: if signedIn(); allow write: if false; }
 

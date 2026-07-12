@@ -1,19 +1,20 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Plus, FileText, MapPin, Search, Truck, X, Check, ExternalLink, Flag, Navigation,
-  Trash2, Route as RouteIcon,
+  Trash2, Route as RouteIcon, UserPlus, UserCog, ChevronRight,
 } from 'lucide-react';
 import { PartnerLayout } from '../../components/layout/PartnerLayout.js';
 import { Card } from '../../components/ui/Card.js';
 import { KpiCard } from '../../components/ui/KpiCard.js';
-import { Table, THead, Th, TBody, Tr, Td } from '../../components/ui/Table.js';
 import { Badge, type BadgeTone } from '../../components/ui/Badge.js';
 import { Button } from '../../components/ui/Button.js';
 import { Modal, Field, TextInput, Select, Row } from '../../components/ui/Modal.js';
 import { rupees } from '../../lib/format.js';
 import { osCounters, type Trip, type TripPoint, type TripStatus } from '../../lib/mocks.js';
 import { useStore, todayLabel } from '../../lib/store.js';
+import { useAuth } from '../../lib/auth.js';
+import { watchMembers, type Member } from '../../lib/members.js';
 import { useNotify } from '../../lib/notify.js';
 import { printLR } from '../../lib/print.js';
 import { tripSteps, tripPoints, currentStep, progressPct } from '../../lib/trip.js';
@@ -34,46 +35,58 @@ function matchesFilter(status: TripStatus, filter: Filter): boolean {
   if (filter === 'All') return true;
   if (filter === 'Scheduled') return status === 'assigned';
   if (filter === 'Completed') return status === 'closed';
-  return status !== 'assigned' && status !== 'closed'; // Ongoing
+  return status !== 'assigned' && status !== 'closed';
 }
 
-/** A single point row in the new-trip form. */
 interface PointDraft { label: string; mapUrl: string }
 const blankPoint = (): PointDraft => ({ label: '', mapUrl: '' });
 const EMPTY = {
   mode: 'single' as 'single' | 'multi',
-  driver: '', vehicleReg: '', customer: '', material: '', weight: '', freight: '',
+  driver: '', vehicleReg: '', customer: '', material: '', weight: '', freight: '', handledBy: '',
 };
+const NEW_CUST = { name: '', phone: '', city: '' };
+const NEW_DRIVER = { name: '', phone: '', vehicleReg: '' };
 
 export function Trips() {
-  const { trips, drivers, trucks, customers, savedPoints, addTrip, addSavedPoint, advanceTrip } = useStore();
+  const { trips, drivers, trucks, customers, savedPoints, addTrip, addSavedPoint, addCustomer, addDriver, advanceTrip } = useStore();
+  const { member } = useAuth();
+  const isAdmin = member?.role === 'owner' || member?.role === 'manager';
   const { push } = useNotify();
   const [params] = useSearchParams();
+  const [members, setMembers] = useState<Member[]>([]);
   const initialFilter = FILTERS.find((x) => x === params.get('f')) ?? 'All';
   const [filter, setFilter] = useState<Filter>(initialFilter);
   const [q, setQ] = useState('');
   const [open, setOpen] = useState(false);
   const [f, setF] = useState(EMPTY);
   const [pts, setPts] = useState<PointDraft[]>([blankPoint(), blankPoint()]);
-  const [trackLr, setTrackLr] = useState<string | null>(null);
+  const [trackId, setTrackId] = useState<string | null>(null);
+  // inline add
+  const [custAdd, setCustAdd] = useState(false);
+  const [newCust, setNewCust] = useState(NEW_CUST);
+  const [drvAdd, setDrvAdd] = useState(false);
+  const [newDriver, setNewDriver] = useState(NEW_DRIVER);
+
+  useEffect(() => { if (isAdmin) return watchMembers((l) => setMembers(l.filter((m) => m.status === 'active'))); }, [isAdmin]);
 
   const shown = trips
     .filter((t) => matchesFilter(t.status, filter))
-    .filter((t) => (q ? `${t.lr} ${t.vrId ?? ''} ${t.driver} ${t.from} ${t.to} ${t.customer ?? ''}`.toLowerCase().includes(q.toLowerCase()) : true));
+    .filter((t) => (q ? `${t.lr} ${t.vrId ?? ''} ${t.driver} ${t.from} ${t.to} ${t.customer ?? ''} ${t.ownerName ?? ''}`.toLowerCase().includes(q.toLowerCase()) : true));
   const active = trips.filter((t) => t.status !== 'closed').length;
   const freightTotal = trips.reduce((s, t) => s + t.freightPaise, 0);
-  const tracked = trackLr ? trips.find((t) => t.lr === trackLr) ?? null : null;
+  const tracked = trackId ? trips.find((t) => t.id === trackId) ?? null : null;
 
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF({ ...f, [k]: e.target.value });
 
   function resetForm() {
-    setF(EMPTY); setPts([blankPoint(), blankPoint()]);
+    setF({ ...EMPTY, handledBy: member?.uid ?? '' });
+    setPts([blankPoint(), blankPoint()]);
+    setCustAdd(false); setNewCust(NEW_CUST); setDrvAdd(false); setNewDriver(NEW_DRIVER);
   }
   function setMode(mode: 'single' | 'multi') {
     if (mode === 'single' && pts.length > 2) setPts([pts[0]!, pts[pts.length - 1]!]);
     setF({ ...f, mode });
   }
-  /** Update a point row; auto-fill a known map link when the name matches a saved point. */
   function setPoint(i: number, patch: Partial<PointDraft>) {
     setPts((prev) => prev.map((p, idx) => {
       if (idx !== i) return p;
@@ -98,6 +111,23 @@ export function Trips() {
     return `Point ${i}`;
   }
 
+  function saveNewCustomer() {
+    const name = newCust.name.trim();
+    if (!name) return;
+    addCustomer({ name, gstin: '', phone: newCust.phone.trim(), city: newCust.city.trim(), ratePerKmPaise: 0 });
+    setF({ ...f, customer: name });
+    setCustAdd(false); setNewCust(NEW_CUST);
+    push({ title: 'Customer added', body: `${name} added and selected.`, tone: 'success' });
+  }
+  function saveNewDriver() {
+    const name = newDriver.name.trim();
+    if (!name) return;
+    addDriver({ name, phone: newDriver.phone.trim(), vehicleReg: newDriver.vehicleReg.trim(), vehicleType: 'truck', dutyStatus: 'online', kycStatus: 'pending', ratingAvg: 0, tripsToday: 0 });
+    setF({ ...f, driver: name });
+    setDrvAdd(false); setNewDriver(NEW_DRIVER);
+    push({ title: 'Driver added', body: `${name} added and selected.`, tone: 'success' });
+  }
+
   function submit() {
     if (!valid) return;
     const clean = activePts.map((p) => p.label.trim()).filter(Boolean);
@@ -105,6 +135,10 @@ export function Trips() {
       .filter((p) => p.label.trim())
       .map((p) => (p.mapUrl.trim() ? { label: p.label.trim(), mapUrl: p.mapUrl.trim() } : { label: p.label.trim() }));
     points.forEach((p) => addSavedPoint(p));
+    const handler = isAdmin && f.handledBy
+      ? members.find((m) => m.uid === f.handledBy) ?? null
+      : null;
+    const handledBy = handler ? { uid: handler.uid, name: handler.name } : (member ? { uid: member.uid, name: member.name } : undefined);
     addTrip({
       date: todayLabel(), from: clean[0]!, to: clean[clean.length - 1]!,
       driver: f.driver, vehicleReg: f.vehicleReg,
@@ -112,13 +146,20 @@ export function Trips() {
       freightPaise: Math.round(Number(f.freight) * 100), status: 'assigned', ewayBill: false,
       points, stepIndex: 0,
       ...(f.customer ? { customer: f.customer } : {}),
-    });
-    push({ title: 'Trip created', body: `${clean[0]} → ${clean[clean.length - 1]} · ${points.length} points · assigned to ${f.driver}.`, tone: 'success' });
+    }, handledBy);
+    push({ title: 'Trip created', body: `${clean[0]} → ${clean[clean.length - 1]} · assigned to ${f.driver}.`, tone: 'success' });
     resetForm(); setOpen(false);
   }
 
+  function advanceOnCard(t: Trip) {
+    const steps = tripSteps(t); const cur = currentStep(t);
+    if (cur >= steps.length - 1 || !t.id) return;
+    if (cur === steps.length - 2) setTrackId(t.id); // finishing needs a remark
+    else advanceTrip(t.id);
+  }
+
   return (
-    <PartnerLayout title="Trips" subtitle="Consignments, lorry receipts & live tracking">
+    <PartnerLayout title="Trips" subtitle={isAdmin ? 'All routes across your team' : 'Your consignments & live tracking'}>
       <div className="space-y-6">
         <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <KpiCard label="Active trips" value={String(active)} hint="in progress" tone="primary" />
@@ -140,68 +181,75 @@ export function Trips() {
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-2 rounded-lg bg-neutral-50 px-3 py-1.5 ring-1 ring-inset ring-neutral-200">
                 <Search size={13} className="text-neutral-400" />
-                <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search VR / LR / driver / route" className="w-44 bg-transparent text-xs text-neutral-700 outline-none placeholder:text-neutral-400" />
+                <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search VR / LR / route / driver" className="w-44 bg-transparent text-xs text-neutral-700 outline-none placeholder:text-neutral-400" />
               </div>
               <Button size="sm" onClick={() => { resetForm(); setOpen(true); }}><Plus size={13} /> New trip</Button>
             </div>
           </div>
 
-          <Table>
-            <THead>
-              <Tr>
-                <Th>VR ID / LR</Th><Th>Route</Th><Th>Driver · Vehicle</Th>
-                <Th>Live status</Th><Th className="text-right">Freight</Th><Th></Th>
-              </Tr>
-            </THead>
-            <TBody>
-              {shown.map((t) => {
-                const steps = tripSteps(t);
-                const cur = currentStep(t);
-                const pct = progressPct(steps, cur);
-                const stops = tripPoints(t).length;
-                return (
-                  <Tr key={t.lr}>
-                    <Td>
-                      <div className="font-mono text-xs font-extrabold text-primary-700">{t.vrId ?? '—'}</div>
+          {/* Card grid */}
+          <div className="grid grid-cols-1 gap-4 p-4 lg:grid-cols-2">
+            {shown.map((t) => {
+              const steps = tripSteps(t);
+              const cur = currentStep(t);
+              const pct = progressPct(steps, cur);
+              const stops = tripPoints(t).length;
+              const finished = cur >= steps.length - 1;
+              const next = steps[cur + 1];
+              return (
+                <div key={t.id ?? t.lr} className="rounded-xl bg-white p-4 ring-1 ring-inset ring-neutral-200 transition hover:ring-primary-200">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-sm font-extrabold text-primary-700">{t.vrId ?? '—'}</span>
+                        <Badge tone={TRIP_BADGE[t.status].tone}>{steps[cur]?.label ?? TRIP_BADGE[t.status].label}</Badge>
+                      </div>
                       <div className="font-mono text-[11px] text-neutral-400">{t.lr} · {t.date}</div>
-                    </Td>
-                    <Td className="text-neutral-700">
-                      <span className="inline-flex items-center gap-1"><MapPin size={11} className="text-emerald-500" />{t.from}</span>
-                      <span className="mx-1 text-neutral-300">→</span>
-                      <span className="inline-flex items-center gap-1"><MapPin size={11} className="text-rose-500" />{t.to}</span>
-                      {stops > 2 && <div className="text-[11px] text-neutral-400">{stops} points · {stops - 2} stop{stops - 2 > 1 ? 's' : ''}</div>}
-                    </Td>
-                    <Td>
-                      <div className="font-semibold text-neutral-800">{t.driver}</div>
-                      <div className="font-mono text-[11px] text-neutral-400">{t.vehicleReg}</div>
-                    </Td>
-                    <Td>
-                      <Badge tone={TRIP_BADGE[t.status].tone}>{steps[cur]?.label ?? TRIP_BADGE[t.status].label}</Badge>
-                      <div className="mt-1.5 h-1.5 w-28 overflow-hidden rounded-full bg-neutral-100">
-                        <div className="h-full rounded-full bg-primary-500 transition-all" style={{ width: `${pct}%` }} />
-                      </div>
-                    </Td>
-                    <Td className="text-right font-bold text-neutral-900">{rupees(t.freightPaise)}</Td>
-                    <Td>
-                      <div className="flex items-center justify-end gap-3">
-                        <button onClick={() => setTrackLr(t.lr)} className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 hover:text-emerald-700" title="Live tracking timeline">
-                          <Navigation size={12} /> Track
+                    </div>
+                    {isAdmin && t.ownerName && (
+                      <span className="inline-flex items-center gap-1 rounded-md bg-neutral-100 px-2 py-1 text-[11px] font-bold text-neutral-600" title="Handled by">
+                        <UserCog size={11} /> {t.ownerName}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="mt-2.5 flex items-center gap-1.5 text-sm text-neutral-700">
+                    <MapPin size={12} className="text-emerald-500" /><span className="font-semibold">{t.from}</span>
+                    <ChevronRight size={13} className="text-neutral-300" />
+                    <MapPin size={12} className="text-rose-500" /><span className="font-semibold">{t.to}</span>
+                    {stops > 2 && <span className="text-[11px] text-neutral-400">· {stops - 2} stop{stops - 2 > 1 ? 's' : ''}</span>}
+                  </div>
+                  <div className="mt-1 text-xs text-neutral-500">{t.driver} · <span className="font-mono">{t.vehicleReg}</span>{t.customer ? ` · ${t.customer}` : ''}</div>
+
+                  {/* progress */}
+                  <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-neutral-100">
+                    <div className={`h-full rounded-full transition-all ${finished ? 'bg-emerald-500' : 'bg-primary-500'}`} style={{ width: `${pct}%` }} />
+                  </div>
+
+                  <div className="mt-3 flex items-center justify-between gap-2">
+                    <span className="text-sm font-extrabold text-neutral-900">{rupees(t.freightPaise)}</span>
+                    <div className="flex items-center gap-2">
+                      {!finished && next && (
+                        <button onClick={() => advanceOnCard(t)} className="inline-flex items-center gap-1 rounded-lg bg-emerald-500 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-emerald-600" title="Update status">
+                          <Check size={12} /> {cur === steps.length - 2 ? 'Finish' : next.label}
                         </button>
-                        <button onClick={() => printLR(t)} className="inline-flex items-center gap-1 text-xs font-bold text-primary-600 hover:text-primary-700"><FileText size={12} /> LR</button>
-                      </div>
-                    </Td>
-                  </Tr>
-                );
-              })}
-              {shown.length === 0 && (
-                <Tr><Td className="py-8 text-center text-sm text-neutral-400">No trips match.</Td></Tr>
-              )}
-            </TBody>
-          </Table>
+                      )}
+                      <button onClick={() => t.id && setTrackId(t.id)} className="inline-flex items-center gap-1 rounded-lg bg-white px-2.5 py-1.5 text-xs font-bold text-primary-600 ring-1 ring-inset ring-primary-200 hover:bg-primary-50"><Navigation size={12} /> Track</button>
+                      <button onClick={() => printLR(t)} className="inline-flex items-center gap-1 rounded-lg bg-white px-2.5 py-1.5 text-xs font-bold text-neutral-600 ring-1 ring-inset ring-neutral-200 hover:bg-neutral-50"><FileText size={12} /> LR</button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+            {shown.length === 0 && (
+              <div className="col-span-full py-10 text-center text-sm text-neutral-400">
+                {trips.length === 0 ? 'No trips yet — create your first one.' : 'No trips match this filter.'}
+              </div>
+            )}
+          </div>
         </Card>
       </div>
 
-      {/* Shared datalist powers pickup/drop autocomplete from remembered points */}
       <datalist id="saved-points">
         {savedPoints.map((sp) => <option key={sp.label} value={sp.label} />)}
       </datalist>
@@ -209,10 +257,9 @@ export function Trips() {
       {/* New trip */}
       <Modal open={open} onClose={() => setOpen(false)} title="New trip" subtitle="A VR ID is generated automatically" onSubmit={submit} submitLabel="Create trip" submitDisabled={!valid} wide>
         <div className="rounded-xl bg-primary-50 px-4 py-3 text-sm text-primary-900 ring-1 ring-inset ring-primary-100">
-          <span className="font-bold">VR ID</span> is auto-assigned on save · <span className="font-bold">LR</span> number is generated too. Add Google Maps links so the driver can tap to navigate.
+          <span className="font-bold">VR ID</span> &amp; <span className="font-bold">LR</span> are auto-assigned on save. Add Google Maps links so the driver can tap to navigate.
         </div>
 
-        {/* single vs multi */}
         <Field label="Trip type">
           <div className="grid grid-cols-2 gap-2">
             {(['single', 'multi'] as const).map((m) => (
@@ -224,7 +271,6 @@ export function Trips() {
           </div>
         </Field>
 
-        {/* point rows */}
         <div className="space-y-3">
           {activePts.map((p, i) => (
             <div key={i} className="rounded-xl bg-neutral-50 p-3 ring-1 ring-inset ring-neutral-200">
@@ -252,26 +298,68 @@ export function Trips() {
           )}
         </div>
 
-        <Row>
-          <Field label="Driver">
+        {/* Driver + inline add */}
+        <Field label="Driver">
+          <div className="flex items-center gap-2">
             <Select value={f.driver} onChange={set('driver')}>
               <option value="">Select driver</option>
               {drivers.map((d) => <option key={d.id} value={d.name}>{d.name}</option>)}
             </Select>
-          </Field>
-          <Field label="Vehicle">
-            <Select value={f.vehicleReg} onChange={set('vehicleReg')}>
-              <option value="">Select vehicle</option>
-              {trucks.map((t) => <option key={t.id} value={t.reg}>{t.reg}</option>)}
-            </Select>
-          </Field>
-        </Row>
-        <Field label="Customer" hint="Optional — who this consignment is for">
-          <Select value={f.customer} onChange={set('customer')}>
-            <option value="">Select customer</option>
-            {customers.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
+            <button type="button" onClick={() => setDrvAdd((v) => !v)} className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-white px-2.5 py-2 text-xs font-bold text-primary-600 ring-1 ring-inset ring-primary-200 hover:bg-primary-50"><UserPlus size={13} /> New</button>
+          </div>
+        </Field>
+        {drvAdd && (
+          <div className="rounded-xl bg-primary-50/60 p-3 ring-1 ring-inset ring-primary-100">
+            <Row>
+              <Field label="Driver name"><TextInput value={newDriver.name} onChange={(e) => setNewDriver({ ...newDriver, name: e.target.value })} placeholder="Suresh" autoFocus /></Field>
+              <Field label="Phone"><TextInput value={newDriver.phone} onChange={(e) => setNewDriver({ ...newDriver, phone: e.target.value })} placeholder="+91 …" /></Field>
+            </Row>
+            <div className="mt-2 flex items-center gap-2">
+              <TextInput value={newDriver.vehicleReg} onChange={(e) => setNewDriver({ ...newDriver, vehicleReg: e.target.value })} placeholder="Vehicle reg (optional)" className="text-xs" />
+              <button type="button" onClick={saveNewDriver} disabled={!newDriver.name.trim()} className="shrink-0 rounded-lg bg-primary-500 px-3 py-2 text-xs font-bold text-white hover:bg-primary-600 disabled:opacity-50">Add driver</button>
+            </div>
+          </div>
+        )}
+
+        <Field label="Vehicle">
+          <Select value={f.vehicleReg} onChange={set('vehicleReg')}>
+            <option value="">Select vehicle</option>
+            {trucks.map((t) => <option key={t.id} value={t.reg}>{t.reg}</option>)}
           </Select>
         </Field>
+
+        {/* Customer + inline add */}
+        <Field label="Customer" hint="Optional — who this consignment is for">
+          <div className="flex items-center gap-2">
+            <Select value={f.customer} onChange={set('customer')}>
+              <option value="">Select customer</option>
+              {customers.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
+            </Select>
+            <button type="button" onClick={() => setCustAdd((v) => !v)} className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-white px-2.5 py-2 text-xs font-bold text-primary-600 ring-1 ring-inset ring-primary-200 hover:bg-primary-50"><UserPlus size={13} /> New</button>
+          </div>
+        </Field>
+        {custAdd && (
+          <div className="rounded-xl bg-primary-50/60 p-3 ring-1 ring-inset ring-primary-100">
+            <Row>
+              <Field label="Customer name"><TextInput value={newCust.name} onChange={(e) => setNewCust({ ...newCust, name: e.target.value })} placeholder="Acme Traders" autoFocus /></Field>
+              <Field label="City"><TextInput value={newCust.city} onChange={(e) => setNewCust({ ...newCust, city: e.target.value })} placeholder="Hosur" /></Field>
+            </Row>
+            <div className="mt-2 flex items-center gap-2">
+              <TextInput value={newCust.phone} onChange={(e) => setNewCust({ ...newCust, phone: e.target.value })} placeholder="Phone (optional)" className="text-xs" />
+              <button type="button" onClick={saveNewCustomer} disabled={!newCust.name.trim()} className="shrink-0 rounded-lg bg-primary-500 px-3 py-2 text-xs font-bold text-white hover:bg-primary-600 disabled:opacity-50">Add customer</button>
+            </div>
+          </div>
+        )}
+
+        {isAdmin && (
+          <Field label="Handled by" hint="Which team member owns this route">
+            <Select value={f.handledBy} onChange={set('handledBy')}>
+              {members.length === 0 && <option value={member?.uid ?? ''}>{member?.name ?? 'Me'}</option>}
+              {members.map((m) => <option key={m.uid} value={m.uid}>{m.name}{m.uid === member?.uid ? ' (me)' : ''}</option>)}
+            </Select>
+          </Field>
+        )}
+
         <Field label="Material"><TextInput value={f.material} onChange={set('material')} placeholder="Steel coils" /></Field>
         <Row>
           <Field label="Weight (kg)"><TextInput type="number" value={f.weight} onChange={set('weight')} placeholder="6800" /></Field>
@@ -279,15 +367,15 @@ export function Trips() {
         </Row>
       </Modal>
 
-      {tracked && <TrackModal trip={tracked} onClose={() => setTrackLr(null)} onAdvance={advanceTrip} />}
+      {tracked && <TrackModal trip={tracked} onClose={() => setTrackId(null)} onAdvance={advanceTrip} showOwner={isAdmin} />}
     </PartnerLayout>
   );
 }
 
 /* ─── Live tracking timeline ─────────────────────────────────────────────── */
 
-function TrackModal({ trip, onClose, onAdvance }: {
-  trip: Trip; onClose: () => void; onAdvance: (lr: string, remark?: string) => void;
+function TrackModal({ trip, onClose, onAdvance, showOwner }: {
+  trip: Trip; onClose: () => void; onAdvance: (id: string, remark?: string) => void; showOwner: boolean;
 }) {
   const steps = tripSteps(trip);
   const cur = currentStep(trip);
@@ -300,19 +388,17 @@ function TrackModal({ trip, onClose, onAdvance }: {
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-neutral-900/50 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={onClose}>
       <div className="animate-scale-in flex max-h-[92vh] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl bg-white shadow-lift ring-1 ring-neutral-200 sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
-        {/* header */}
         <div className="flex items-start justify-between border-b border-neutral-100 bg-primary-600 px-5 py-4 text-white">
           <div>
             <div className="flex items-center gap-2">
               <Truck size={18} />
               <h3 className="font-mono text-base font-extrabold">{trip.vrId ?? trip.lr}</h3>
             </div>
-            <p className="mt-0.5 text-xs text-primary-100">{trip.driver} · {trip.vehicleReg}{trip.customer ? ` · ${trip.customer}` : ''}</p>
+            <p className="mt-0.5 text-xs text-primary-100">{trip.driver} · {trip.vehicleReg}{trip.customer ? ` · ${trip.customer}` : ''}{showOwner && trip.ownerName ? ` · handled by ${trip.ownerName}` : ''}</p>
           </div>
           <button onClick={onClose} className="rounded-lg p-1.5 text-primary-100 hover:bg-white/10 hover:text-white"><X size={18} /></button>
         </div>
 
-        {/* moving-truck progress bar */}
         <div className="px-5 pt-5">
           <div className="relative h-2 rounded-full bg-neutral-100">
             <div className="h-full rounded-full bg-emerald-500 transition-all duration-500" style={{ width: `${pct}%` }} />
@@ -325,7 +411,6 @@ function TrackModal({ trip, onClose, onAdvance }: {
           </div>
         </div>
 
-        {/* vertical timeline */}
         <div className="flex-1 overflow-y-auto px-5 py-5">
           <ol className="relative">
             {steps.map((s, i) => {
@@ -367,20 +452,19 @@ function TrackModal({ trip, onClose, onAdvance }: {
           )}
         </div>
 
-        {/* action */}
-        {!finished && (
+        {!finished && trip.id && (
           <div className="border-t border-neutral-100 px-5 py-4">
             {nextIsFinish ? (
               <div className="space-y-2.5">
                 <Field label="End-of-trip remark" hint="e.g. delivered fine · police checkpost delay · short payment">
                   <TextInput value={remark} onChange={(e) => setRemark(e.target.value)} placeholder="Add a remark before finishing…" />
                 </Field>
-                <Button className="w-full justify-center" onClick={() => { onAdvance(trip.lr, remark.trim() || undefined); onClose(); }}>
+                <Button className="w-full justify-center" onClick={() => { onAdvance(trip.id!, remark.trim() || undefined); onClose(); }}>
                   <Flag size={14} /> Finish trip
                 </Button>
               </div>
             ) : (
-              <Button className="w-full justify-center" onClick={() => onAdvance(trip.lr)}>
+              <Button className="w-full justify-center" onClick={() => onAdvance(trip.id!)}>
                 <Check size={14} /> Mark reached · {steps[cur + 1]?.label}{steps[cur + 1]?.place ? ` (${steps[cur + 1]!.place})` : ''}
               </Button>
             )}
