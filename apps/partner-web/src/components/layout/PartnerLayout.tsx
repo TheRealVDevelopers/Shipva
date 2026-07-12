@@ -4,7 +4,8 @@ import {
   LayoutDashboard, ClipboardList, Route, Truck, FileCheck2, UserCog, Users, FileText, Fuel, Wallet,
   HandCoins, BarChart3, TrendingUp, PackageSearch, Navigation, BadgeCheck, Building2,
   Settings as SettingsIcon, MessageCircle, MessagesSquare, FileSpreadsheet,
-  Bell, Menu, X, Volume2, VolumeX, CheckCheck, LogOut, User as UserIcon, type LucideIcon,
+  Bell, Menu, X, Volume2, VolumeX, CheckCheck, LogOut, User as UserIcon, BookOpen, ExternalLink,
+  type LucideIcon,
 } from 'lucide-react';
 import { LogoMark } from '../art.js';
 import { subscription } from '../../lib/mocks.js';
@@ -164,6 +165,16 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           })}
         </ul>
       </nav>
+
+      {/* User guide — always visible to everyone */}
+      <a
+        href={`${import.meta.env.BASE_URL}guide.html`}
+        target="_blank" rel="noreferrer" onClick={onNavigate}
+        className="group mx-3 mb-2 flex items-center gap-3 rounded-lg bg-white/[0.06] px-3 py-2.5 text-sm font-bold text-primary-100 ring-1 ring-inset ring-white/10 transition-colors hover:bg-white/10 hover:text-white"
+      >
+        <BookOpen size={17} /> <span className="flex-1">User Guide</span>
+        <ExternalLink size={13} className="opacity-60" />
+      </a>
 
       {FEATURES.subscription && (
         <div className="m-3 rounded-xl bg-white/[0.06] p-3 ring-1 ring-white/10">
