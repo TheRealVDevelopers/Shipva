@@ -17,6 +17,7 @@ import {
 import { tripSteps, statusFromStep } from './trip.js';
 import { watchTrips, addTripDoc, updateTripDoc, seedTripsFor } from './trips.js';
 import { watchToursFs, addTourDoc, updateTourDoc } from './tours.js';
+import { customersCol, driversCol, trucksCol, ownersCol } from './common.js';
 import { useAuth } from './auth.js';
 
 /** Vendor agreement — absence means "not created yet". */
@@ -124,14 +125,10 @@ const seedCategories = ['Toll', 'RTO/Police', 'Loading', 'Repairs', 'Office', 'M
 
 interface StoreShape {
   invoices: Invoice[];
-  expenses: Expense[];
   fuelLogs: FuelLog[];
-  drivers: FleetDriver[];
-  trucks: Truck[];
+  expenses: Expense[];
   payroll: PayrollLine[];
   staff: Staff[];
-  customers: Customer[];
-  attached: AttachedTruck[];
   savedPoints: SavedPoint[];
   expenseCategories: string[];
   requests: MoneyRequest[];
@@ -141,6 +138,11 @@ interface StoreApi extends StoreShape {
   /** Trips & tours are backed by Firestore and scoped to the signed-in member. */
   trips: Trip[];
   tours: Tour[];
+  /** Shared reference data — Firestore-backed, common to the whole org. */
+  customers: Customer[];
+  drivers: FleetDriver[];
+  trucks: Truck[];
+  attached: AttachedTruck[];
   addTrip: (t: Omit<Trip, 'lr' | 'vrId' | 'id'>, handledBy?: { uid: string; name: string; leaderUid?: string }) => void;
   updateTripStatus: (id: string, status: TripStatus) => void;
   /** Advance a trip one step along its live timeline; pass a remark when finishing. */
@@ -174,8 +176,7 @@ const KEY = 'shipva-partner-store-v2';
 function seed(): StoreShape {
   return {
     invoices: seedInvoices, expenses: seedExpenses, fuelLogs: seedFuelLogs,
-    drivers: seedDrivers, trucks: seedTrucks, payroll: seedPayroll, staff: seedStaff,
-    customers: seedCustomers, attached: seedAttached, savedPoints: seedPoints,
+    payroll: seedPayroll, staff: seedStaff, savedPoints: seedPoints,
     expenseCategories: seedCategories, requests: seedRequests,
   };
 }
@@ -183,9 +184,34 @@ function seed(): StoreShape {
 function load(): StoreShape {
   try {
     const raw = localStorage.getItem(KEY);
-    if (raw) return { ...seed(), ...JSON.parse(raw) };
+    if (raw) {
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      // Reference data (customers/drivers/trucks/owners) now lives in Firestore —
+      // don't carry it in the local blob any more.
+      delete parsed.customers; delete parsed.drivers; delete parsed.trucks; delete parsed.attached;
+      return { ...seed(), ...parsed } as StoreShape;
+    }
   } catch { /* ignore corrupt cache */ }
   return seed();
+}
+
+/** The org's reference data as it last existed on THIS device (the owner's local
+ *  additions plus the demo seed). Used exactly once to migrate into the shared
+ *  Firestore collections so nothing the owner already entered disappears. */
+function readLegacyRefData(): { customers: Customer[]; drivers: FleetDriver[]; trucks: Truck[]; attached: AttachedTruck[] } {
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (raw) {
+      const j = JSON.parse(raw) as Partial<{ customers: Customer[]; drivers: FleetDriver[]; trucks: Truck[]; attached: AttachedTruck[] }>;
+      return {
+        customers: j.customers?.length ? j.customers : seedCustomers,
+        drivers: j.drivers?.length ? j.drivers : seedDrivers,
+        trucks: j.trucks?.length ? j.trucks : seedTrucks,
+        attached: j.attached?.length ? j.attached : seedAttached,
+      };
+    }
+  } catch { /* fall through to seed */ }
+  return { customers: seedCustomers, drivers: seedDrivers, trucks: seedTrucks, attached: seedAttached };
 }
 
 const Ctx = createContext<StoreApi | null>(null);
@@ -236,6 +262,41 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const updateTour = useCallback((id: string, patch: Partial<Tour>) => {
     void updateTourDoc(id, patch);
   }, []);
+
+  // ── Shared reference data (customers / drivers / trucks / truck owners) ──────
+  // Firestore-backed and common to the whole org — everyone reads the same lists
+  // and any add shows up for the rest of the team. On the owner's first run we
+  // migrate whatever was in local storage (their additions + the demo seed) into
+  // the shared collections, exactly once (guarded by the empty-collection check
+  // plus a per-collection localStorage flag).
+  const legacyRef = useRef(readLegacyRefData());
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [drivers, setDrivers] = useState<FleetDriver[]>([]);
+  const [trucks, setTrucks] = useState<Truck[]>([]);
+  const [attached, setAttached] = useState<AttachedTruck[]>([]);
+  const attachedRef = useRef<AttachedTruck[]>([]);
+
+  useEffect(() => {
+    if (!member) {
+      setCustomers([]); setDrivers([]); setTrucks([]); setAttached([]); attachedRef.current = [];
+      return;
+    }
+    const isOwner = member.role === 'owner';
+    const legacy = legacyRef.current;
+    const seedOnce = (flag: string, empty: boolean, run: () => Promise<void>) => {
+      if (isOwner && empty && !localStorage.getItem(flag)) {
+        localStorage.setItem(flag, '1');
+        void run();
+      }
+    };
+    const unsubs = [
+      customersCol.watch((l) => { setCustomers(l); seedOnce('ref-customers-seeded-v1', l.length === 0, () => customersCol.seed(legacy.customers)); }),
+      driversCol.watch((l) => { setDrivers(l); seedOnce('ref-drivers-seeded-v1', l.length === 0, () => driversCol.seed(legacy.drivers)); }),
+      trucksCol.watch((l) => { setTrucks(l); seedOnce('ref-trucks-seeded-v1', l.length === 0, () => trucksCol.seed(legacy.trucks)); }),
+      ownersCol.watch((l) => { setAttached(l); attachedRef.current = l; seedOnce('ref-owners-seeded-v1', l.length === 0, () => ownersCol.seed(legacy.attached)); }),
+    ];
+    return () => unsubs.forEach((u) => u());
+  }, [member?.uid, member?.role]);
 
   const addTrip = useCallback((t: Omit<Trip, 'lr' | 'vrId' | 'id'>, handledBy?: { uid: string; name: string; leaderUid?: string }) => {
     if (!member) return;
@@ -306,32 +367,34 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setS((p) => ({ ...p, requests: p.requests.map((r) => (r.id === id ? { ...r, status } : r)) }));
   }, []);
 
+  // Reference-data writes go straight to the shared Firestore collections; the
+  // live snapshot listeners above update every member's view.
   const addCustomer = useCallback((c: Omit<Customer, 'id' | 'outstandingPaise'>) => {
-    setS((p) => ({ ...p, customers: [{ ...c, id: uid(), outstandingPaise: 0 }, ...p.customers] }));
+    void customersCol.add({ ...c, outstandingPaise: 0 });
   }, []);
 
   const addDriver = useCallback((d: Omit<FleetDriver, 'id'>) => {
-    setS((p) => ({ ...p, drivers: [{ ...d, id: uid() }, ...p.drivers] }));
+    void driversCol.add(d);
   }, []);
 
   const addTruck = useCallback((t: Omit<Truck, 'id'>) => {
-    setS((p) => ({ ...p, trucks: [{ ...t, id: uid() }, ...p.trucks] }));
+    void trucksCol.add(t);
   }, []);
 
   const setDriverDocs = useCallback((id: string, docs: Pick<FleetDriver, 'aadhaar' | 'licenseNo' | 'licenseExpiry' | 'aadhaarImg' | 'licenseImg'>) => {
-    setS((p) => ({ ...p, drivers: p.drivers.map((d) => (d.id === id ? { ...d, ...docs } : d)) }));
+    void driversCol.update(id, docs);
   }, []);
 
   const setTruckDocs = useCallback((id: string, docs: Pick<Truck, 'rc' | 'insuranceNo' | 'insuranceExpiry' | 'fitnessNo' | 'fitnessExpiry' | 'rcImg' | 'insuranceImg' | 'fitnessImg'>) => {
-    setS((p) => ({ ...p, trucks: p.trucks.map((t) => (t.id === id ? { ...t, ...docs } : t)) }));
+    void trucksCol.update(id, docs);
   }, []);
 
   const setCustomerAgreement = useCallback((id: string, a: Agreement) => {
-    setS((p) => ({ ...p, customers: p.customers.map((c) => (c.id === id ? { ...c, agreement: a } : c)) }));
+    void customersCol.update(id, { agreement: a });
   }, []);
 
   const setAttachedAgreement = useCallback((id: string, a: Agreement) => {
-    setS((p) => ({ ...p, attached: p.attached.map((x) => (x.id === id ? { ...x, agreement: a } : x)) }));
+    void ownersCol.update(id, { agreement: a });
   }, []);
 
   const addStaff = useCallback((st: Omit<Staff, 'id'>) => {
@@ -339,11 +402,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const recordOwnerPayment = useCallback((id: string, amountPaise: number) => {
-    setS((p) => ({ ...p, attached: p.attached.map((x) => (x.id === id ? { ...x, balancePaise: Math.max(0, x.balancePaise - amountPaise) } : x)) }));
+    const o = attachedRef.current.find((x) => x.id === id);
+    if (!o) return;
+    void ownersCol.update(id, { balancePaise: Math.max(0, o.balancePaise - amountPaise) });
   }, []);
 
   const addAttached = useCallback((a: Omit<AttachedTruck, 'id'>) => {
-    setS((p) => ({ ...p, attached: [{ ...a, id: uid() }, ...p.attached] }));
+    void ownersCol.add(a);
   }, []);
 
   const runPayroll = useCallback(() => {
@@ -353,10 +418,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const reset = useCallback(() => setS(seed()), []);
 
   const value = useMemo<StoreApi>(() => ({
-    ...s, trips, tours, addTrip, updateTripStatus, advanceTrip, addSavedPoint, addInvoice, markInvoicePaid, addExpense, addFuelLog,
+    ...s, trips, tours, customers, drivers, trucks, attached,
+    addTrip, updateTripStatus, advanceTrip, addSavedPoint, addInvoice, markInvoicePaid, addExpense, addFuelLog,
     addExpenseCategory, addRequest, resolveRequest, addCustomer, addDriver, addTruck,
     setDriverDocs, setTruckDocs, setCustomerAgreement, setAttachedAgreement, addStaff, addAttached, recordOwnerPayment, addTour, updateTour, runPayroll, reset,
-  }), [s, trips, tours, addTrip, updateTripStatus, advanceTrip, addSavedPoint, addInvoice, markInvoicePaid, addExpense, addFuelLog,
+  }), [s, trips, tours, customers, drivers, trucks, attached,
+    addTrip, updateTripStatus, advanceTrip, addSavedPoint, addInvoice, markInvoicePaid, addExpense, addFuelLog,
     addExpenseCategory, addRequest, resolveRequest, addCustomer, addDriver, addTruck,
     setDriverDocs, setTruckDocs, setCustomerAgreement, setAttachedAgreement, addStaff, addAttached, recordOwnerPayment, addTour, updateTour, runPayroll, reset]);
 

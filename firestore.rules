@@ -140,6 +140,14 @@ service cloud.firestore {
       allow delete: if isOrgAdmin();
     }
 
+    // Shared reference data — customers, drivers, trucks and truck owners. Common
+    // to the whole org: any member may read and add/edit (so a supervisor's new
+    // customer or driver is visible to everyone); only admins delete.
+    match /orgCustomers/{id} { allow read, create, update: if isOrgMember(); allow delete: if isOrgAdmin(); }
+    match /orgDrivers/{id}   { allow read, create, update: if isOrgMember(); allow delete: if isOrgAdmin(); }
+    match /orgTrucks/{id}    { allow read, create, update: if isOrgMember(); allow delete: if isOrgAdmin(); }
+    match /orgOwners/{id}    { allow read, create, update: if isOrgMember(); allow delete: if isOrgAdmin(); }
+
     // Public config (vehicle types, zones, fares) — readable by any signed-in user.
     match /config/{doc} { allow read: if signedIn(); allow write: if false; }
 
