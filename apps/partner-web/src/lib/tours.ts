@@ -10,22 +10,29 @@ import {
   addDoc, collection, deleteDoc, doc, getDoc, onSnapshot, query, setDoc, updateDoc, where,
 } from 'firebase/firestore';
 import { db } from '../firebase.js';
-import type { Tour, TourStop } from './store.js';
+import type { Tour, TourStop, TourLeg } from './store.js';
 
 interface Scope { uid: string; role: string }
 const isAdmin = (role: string) => role === 'owner' || role === 'manager';
 
+const stripUndef = (o: Record<string, unknown>) => { Object.keys(o).forEach((k) => o[k] === undefined && delete o[k]); return o; };
+
 /** Strip undefined values (Firestore rejects them); recurse into stop objects. */
 function cleanStops(stops: TourStop[]): Record<string, unknown>[] {
-  return stops.map((s) => {
-    const o: Record<string, unknown> = { ...s };
-    Object.keys(o).forEach((k) => o[k] === undefined && delete o[k]);
-    return o;
-  });
+  return stops.map((s) => stripUndef({ ...s }));
+}
+function cleanLegs(legs: TourLeg[]): Record<string, unknown>[] {
+  return legs.map((l) => stripUndef({ ...l, stops: l.stops.map((s) => stripUndef({ ...s })) }));
 }
 function clean<T extends Record<string, unknown>>(obj: T): T {
   Object.keys(obj).forEach((k) => obj[k] === undefined && delete obj[k]);
   return obj;
+}
+/** Every VRID on a tour, from legs (preferred) or the legacy vrIds/vrId fields. */
+function tourVrids(t: { legs?: TourLeg[]; vrIds?: string[]; vrId?: string }): string[] {
+  if (t.legs && t.legs.length) return t.legs.map((l) => l.vrid).filter(Boolean);
+  if (t.vrIds && t.vrIds.length) return t.vrIds;
+  return t.vrId ? [t.vrId] : [];
 }
 
 function fromSnap(id: string, d: Record<string, unknown>): Tour {
@@ -58,6 +65,18 @@ function fromSnap(id: string, d: Record<string, unknown>): Tour {
     ownerUid: (d.ownerUid as string) ?? '',
     ownerName: (d.ownerName as string) ?? '',
     createdAtMs: (d.createdAtMs as number) ?? 0,
+    legs: (d.legs as TourLeg[]) ?? [],
+    ...(d.serviceAt ? { serviceAt: d.serviceAt as string } : {}),
+    ...(d.gpayName ? { gpayName: d.gpayName as string } : {}),
+    ...(d.gpayNumber ? { gpayNumber: d.gpayNumber as string } : {}),
+    ...(d.invoiceGiven != null ? { invoiceGiven: d.invoiceGiven as boolean } : {}),
+    ...(d.kmPhotoImg ? { kmPhotoImg: d.kmPhotoImg as string } : {}),
+    ...(d.invoicePhotoImg ? { invoicePhotoImg: d.invoicePhotoImg as string } : {}),
+    ...(d.gpsPhotoImg ? { gpsPhotoImg: d.gpsPhotoImg as string } : {}),
+    ...(d.expenseAmount ? { expenseAmount: d.expenseAmount as string } : {}),
+    ...(d.expenseNote ? { expenseNote: d.expenseNote as string } : {}),
+    ...(d.sharedVendor != null ? { sharedVendor: d.sharedVendor as boolean } : {}),
+    ...(d.sharedDriver != null ? { sharedDriver: d.sharedDriver as boolean } : {}),
   };
 }
 
@@ -88,19 +107,22 @@ async function registerVrids(vrids: string[], tourId: string, uid: string): Prom
 
 export async function addTourDoc(t: Omit<Tour, 'id'>, scope: Scope, handledBy?: { uid: string; name: string }): Promise<void> {
   const owner = handledBy ?? { uid: scope.uid, name: '' };
-  const ref = await addDoc(collection(db, 'orgTours'), clean({
+  const payload: Record<string, unknown> = {
     ...t,
     stops: cleanStops(t.stops),
     ownerUid: owner.uid,
     ownerName: owner.name,
     createdAtMs: Date.now(),
-  }));
-  await registerVrids(t.vrIds ?? [], ref.id, owner.uid);
+  };
+  if (t.legs) payload.legs = cleanLegs(t.legs);
+  const ref = await addDoc(collection(db, 'orgTours'), clean(payload));
+  await registerVrids(tourVrids(t), ref.id, owner.uid);
 }
 
 export async function updateTourDoc(id: string, patch: Partial<Tour>): Promise<void> {
   const p: Record<string, unknown> = { ...patch };
   if (patch.stops) p.stops = cleanStops(patch.stops);
+  if (patch.legs) p.legs = cleanLegs(patch.legs);
   Object.keys(p).forEach((k) => p[k] === undefined && delete p[k]);
   await updateDoc(doc(db, 'orgTours', id), p);
 }

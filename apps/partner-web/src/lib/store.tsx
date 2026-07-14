@@ -61,6 +61,20 @@ export interface TourStop {
   /** Live check-in / check-out stamps (epoch ms) set as the driver moves. */
   actualArrival?: number; actualDeparture?: number;
 }
+
+/** A stop on a VRID leg. Each VRID (vehicle-run) is its own route. */
+export interface TourLegStop {
+  name: string; location?: string; mapUrl?: string;
+  arrivalAt?: string; departureAt?: string;      // scheduled (datetime-local)
+  actualArrival?: number; actualDeparture?: number; // live check-in/out (epoch ms)
+}
+/** One VRID and the ordered stops it runs. */
+export interface TourLeg {
+  vrid: string;
+  loadType?: string;          // 'Load' | 'No Load' (per leg)
+  stops: TourLegStop[];
+}
+
 export interface Tour {
   id: string; date: string; tourId: string; vrId: string; seTracker: string; toll: string;
   amzEquipmentType: string; seEquipmentType: string; amzStatus: string; sarvaStatus: string;
@@ -71,6 +85,16 @@ export interface Tour {
   vrIds?: string[];
   /** POC (member) who runs this line; owner/managers see all. */
   ownerUid?: string; ownerName?: string; createdAtMs?: number;
+  /** Route-Assign additions. */
+  serviceAt?: string;                 // service date & time (datetime-local)
+  gpayName?: string; gpayNumber?: string;
+  legs?: TourLeg[];                   // per-VRID routes (source of truth for new tours)
+  /** POC operational fields captured during the run. */
+  invoiceGiven?: boolean;
+  kmPhotoImg?: string; invoicePhotoImg?: string; gpsPhotoImg?: string;
+  expenseAmount?: string; expenseNote?: string;
+  /** WhatsApp share status. */
+  sharedVendor?: boolean; sharedDriver?: boolean;
 }
 
 /** A remembered pickup/drop location, suggested while typing a new trip. */

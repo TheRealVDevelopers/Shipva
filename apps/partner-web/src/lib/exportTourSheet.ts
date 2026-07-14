@@ -54,7 +54,25 @@ const COLUMNS: Col[] = [
 
 const esc = (s: string) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-export function exportTourSheet(tours: Tour[]): void {
+const dtShort = (dt?: string) => {
+  if (!dt) return '';
+  const d = new Date(dt);
+  return isNaN(d.getTime()) ? dt : d.toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false });
+};
+
+/** Tours built with VRID legs store stops per-leg — flatten them (up to 4) and
+ *  join the VRIDs so the existing sheet columns keep working. */
+function normalize(t: Tour): Tour {
+  if (!t.legs || t.legs.length === 0) return t;
+  const flat: TourStop[] = t.legs.flatMap((l) => l.stops).slice(0, 4).map((s) => ({
+    name: s.name, amzArrival: dtShort(s.arrivalAt), amzDeparture: dtShort(s.departureAt),
+    kmPhoto: !!t.kmPhotoImg, invoicePhoto: !!t.invoicePhotoImg, arrivalReport: '', dispatchReport: '', km: '',
+  }));
+  return { ...t, stops: flat, vrIds: t.legs.map((l) => l.vrid).filter(Boolean) };
+}
+
+export function exportTourSheet(input: Tour[]): void {
+  const tours = input.map(normalize);
   const thBase = 'font-weight:bold;text-align:center;vertical-align:middle;border:1px solid #808080;padding:4px 6px;font-size:10pt;background:#FFFFFF;';
   const head = COLUMNS.map((c) => {
     const style = thBase + (c.yellow ? 'background:#FFFF00;' : '') + (c.red ? 'color:#FF0000;' : 'color:#000000;');
