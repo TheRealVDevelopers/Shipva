@@ -109,6 +109,23 @@ service cloud.firestore {
       allow delete: if isOrgAdmin() || (isOrgMember() && resource.data.ownerUid == request.auth.uid);
     }
 
+    // Amazon tours — same POC scoping as trips.
+    match /orgTours/{id} {
+      allow read: if isOrgAdmin() || (isOrgMember() && resource.data.ownerUid == request.auth.uid);
+      allow create: if isOrgAdmin() || (isOrgMember() && request.resource.data.ownerUid == request.auth.uid);
+      allow update: if isOrgAdmin() || (isOrgMember() && resource.data.ownerUid == request.auth.uid);
+      allow delete: if isOrgAdmin() || (isOrgMember() && resource.data.ownerUid == request.auth.uid);
+    }
+
+    // VRID registry — company-wide uniqueness. Any member may look one up or
+    // claim a new one (create fails if it already exists); only admins release.
+    match /orgVrids/{vrid} {
+      allow read: if isOrgMember();
+      allow create: if isOrgMember();
+      allow update: if false;
+      allow delete: if isOrgAdmin();
+    }
+
     // Public config (vehicle types, zones, fares) — readable by any signed-in user.
     match /config/{doc} { allow read: if signedIn(); allow write: if false; }
 

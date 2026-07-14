@@ -28,7 +28,7 @@ function stopCols(n: number): Col[] {
 const COLUMNS: Col[] = [
   { label: 'DATE', get: (t) => t.date },
   { label: 'Tour ID', get: (t) => t.tourId },
-  { label: 'vr id', get: (t) => t.vrId },
+  { label: 'vr id', get: (t) => (t.vrIds && t.vrIds.length ? t.vrIds.join(', ') : t.vrId) },
   { label: 'SE Tracker In This Line', get: (t) => t.seTracker },
   { label: 'Facility Sequence', get: (t) => t.stops.map((s) => s.name).filter(Boolean).join(' -> ') },
   { label: 'Toll', get: (t) => t.toll },

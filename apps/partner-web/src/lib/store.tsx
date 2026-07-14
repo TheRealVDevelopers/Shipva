@@ -16,6 +16,7 @@ import {
 } from './mocks.js';
 import { tripSteps, statusFromStep } from './trip.js';
 import { watchTrips, addTripDoc, updateTripDoc, seedTripsFor } from './trips.js';
+import { watchToursFs, addTourDoc, updateTourDoc } from './tours.js';
 import { useAuth } from './auth.js';
 
 /** Vendor agreement — absence means "not created yet". */
@@ -55,6 +56,10 @@ const seedAttached: AttachedTruck[] = [
 export interface TourStop {
   name: string; amzArrival: string; kmPhoto: boolean; arrivalReport: string;
   amzDeparture: string; invoicePhoto: boolean; dispatchReport: string; km: string;
+  /** Route-Assign fields: stop location + scheduled arrival/departure (datetime-local). */
+  location?: string; arrivalAt?: string; departureAt?: string;
+  /** Live check-in / check-out stamps (epoch ms) set as the driver moves. */
+  actualArrival?: number; actualDeparture?: number;
 }
 export interface Tour {
   id: string; date: string; tourId: string; vrId: string; seTracker: string; toll: string;
@@ -62,35 +67,11 @@ export interface Tour {
   present: string; scheduleAdhoc: string; noLoadLoad: string; advanceAmount: string; paidPending: string;
   driver: string; vehicleId: string; driverNumber: string; vendorName: string;
   stops: TourStop[]; totalManualKm: string; amazonRelyKm: string; gpsKm: string; remarks: string;
+  /** All VRIDs on this route (vrId keeps the first for the legacy sheet). */
+  vrIds?: string[];
+  /** POC (member) who runs this line; owner/managers see all. */
+  ownerUid?: string; ownerName?: string; createdAtMs?: number;
 }
-const blankStop = (name = ''): TourStop => ({ name, amzArrival: '', kmPhoto: false, arrivalReport: '', amzDeparture: '', invoicePhoto: false, dispatchReport: '', km: '' });
-const seedTours: Tour[] = [
-  {
-    id: 'tr1', date: '12 Jul 2026', tourId: 'T-30FPN1321', vrId: '112ZJHBB9', seTracker: '', toll: '',
-    amzEquipmentType: '10ft Truck', seEquipmentType: '10ft Truck', amzStatus: 'PLANNED', sarvaStatus: 'PLANNED',
-    present: 'PRESENT', scheduleAdhoc: 'SCHEDULE', noLoadLoad: 'Load', advanceAmount: '2500', paidPending: 'Pending',
-    driver: 'Shiva Kumar', vehicleId: 'KA07B5304', driverNumber: '85536 39858', vendorName: 'Prince transport',
-    stops: [
-      { name: 'HKA3', amzArrival: '07:00', kmPhoto: true, arrivalReport: 'OK', amzDeparture: '09:30', invoicePhoto: true, dispatchReport: 'OK', km: '0' },
-      { name: 'TBH2', amzArrival: '11:30', kmPhoto: true, arrivalReport: 'OK', amzDeparture: '12:30', invoicePhoto: true, dispatchReport: 'OK', km: '42' },
-      { name: 'TBL3', amzArrival: '13:00', kmPhoto: false, arrivalReport: '', amzDeparture: '14:00', invoicePhoto: false, dispatchReport: '', km: '18' },
-      { name: 'TBT3', amzArrival: '15:00', kmPhoto: false, arrivalReport: '', amzDeparture: '16:00', invoicePhoto: false, dispatchReport: '', km: '22' },
-    ],
-    totalManualKm: '82', amazonRelyKm: '80', gpsKm: '84', remarks: 'On schedule',
-  },
-  {
-    id: 'tr2', date: '11 Jul 2026', tourId: 'T-30FPN1290', vrId: '119KLMPP2', seTracker: '', toll: '120',
-    amzEquipmentType: '17ft Truck', seEquipmentType: '17ft Truck', amzStatus: 'COMPLETED', sarvaStatus: 'COMPLETED',
-    present: 'PRESENT', scheduleAdhoc: 'SCHEDULE', noLoadLoad: 'Load', advanceAmount: '3200', paidPending: 'Paid',
-    driver: 'Ramesh Yadav', vehicleId: 'KA01C5521', driverNumber: '99020 51001', vendorName: 'Karnataka Roadlines',
-    stops: [
-      { name: 'HKA3', amzArrival: '06:30', kmPhoto: true, arrivalReport: 'OK', amzDeparture: '08:00', invoicePhoto: true, dispatchReport: 'OK', km: '0' },
-      { name: 'TBT3', amzArrival: '10:00', kmPhoto: true, arrivalReport: 'OK', amzDeparture: '11:00', invoicePhoto: true, dispatchReport: 'OK', km: '58' },
-      blankStop(), blankStop(),
-    ],
-    totalManualKm: '58', amazonRelyKm: '56', gpsKm: '59', remarks: '',
-  },
-];
 
 /** A remembered pickup/drop location, suggested while typing a new trip. */
 export interface SavedPoint { label: string; mapUrl?: string }
@@ -127,15 +108,15 @@ interface StoreShape {
   staff: Staff[];
   customers: Customer[];
   attached: AttachedTruck[];
-  tours: Tour[];
   savedPoints: SavedPoint[];
   expenseCategories: string[];
   requests: MoneyRequest[];
 }
 
 interface StoreApi extends StoreShape {
-  /** Trips are backed by Firestore and scoped to the signed-in member. */
+  /** Trips & tours are backed by Firestore and scoped to the signed-in member. */
   trips: Trip[];
+  tours: Tour[];
   addTrip: (t: Omit<Trip, 'lr' | 'vrId' | 'id'>, handledBy?: { uid: string; name: string }) => void;
   updateTripStatus: (id: string, status: TripStatus) => void;
   /** Advance a trip one step along its live timeline; pass a remark when finishing. */
@@ -158,7 +139,8 @@ interface StoreApi extends StoreShape {
   addStaff: (s: Omit<Staff, 'id'>) => void;
   addAttached: (a: Omit<AttachedTruck, 'id'>) => void;
   recordOwnerPayment: (id: string, amountPaise: number) => void;
-  addTour: (t: Omit<Tour, 'id'>) => void;
+  addTour: (t: Omit<Tour, 'id'>, handledBy?: { uid: string; name: string }) => void;
+  updateTour: (id: string, patch: Partial<Tour>) => void;
   runPayroll: () => void;
   reset: () => void;
 }
@@ -169,7 +151,7 @@ function seed(): StoreShape {
   return {
     invoices: seedInvoices, expenses: seedExpenses, fuelLogs: seedFuelLogs,
     drivers: seedDrivers, trucks: seedTrucks, payroll: seedPayroll, staff: seedStaff,
-    customers: seedCustomers, attached: seedAttached, tours: seedTours, savedPoints: seedPoints,
+    customers: seedCustomers, attached: seedAttached, savedPoints: seedPoints,
     expenseCategories: seedCategories, requests: seedRequests,
   };
 }
@@ -214,6 +196,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
     });
   }, [member?.uid, member?.role]);
+
+  // Tours (Amazon routes) — Firestore-backed with the same POC scoping.
+  const [tours, setTours] = useState<Tour[]>([]);
+  useEffect(() => {
+    if (!member) { setTours([]); return; }
+    return watchToursFs({ uid: member.uid, role: member.role }, setTours);
+  }, [member?.uid, member?.role]);
+
+  const addTour = useCallback((t: Omit<Tour, 'id'>, handledBy?: { uid: string; name: string }) => {
+    if (!member) return;
+    void addTourDoc(t, { uid: member.uid, role: member.role }, handledBy);
+  }, [member?.uid, member?.role]);
+
+  const updateTour = useCallback((id: string, patch: Partial<Tour>) => {
+    void updateTourDoc(id, patch);
+  }, []);
 
   const addTrip = useCallback((t: Omit<Trip, 'lr' | 'vrId' | 'id'>, handledBy?: { uid: string; name: string }) => {
     if (!member) return;
@@ -324,10 +322,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setS((p) => ({ ...p, attached: [{ ...a, id: uid() }, ...p.attached] }));
   }, []);
 
-  const addTour = useCallback((t: Omit<Tour, 'id'>) => {
-    setS((p) => ({ ...p, tours: [{ ...t, id: uid() }, ...p.tours] }));
-  }, []);
-
   const runPayroll = useCallback(() => {
     setS((p) => ({ ...p, payroll: p.payroll.map((l) => ({ ...l, status: 'paid' })) }));
   }, []);
@@ -335,12 +329,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const reset = useCallback(() => setS(seed()), []);
 
   const value = useMemo<StoreApi>(() => ({
-    ...s, trips, addTrip, updateTripStatus, advanceTrip, addSavedPoint, addInvoice, markInvoicePaid, addExpense, addFuelLog,
+    ...s, trips, tours, addTrip, updateTripStatus, advanceTrip, addSavedPoint, addInvoice, markInvoicePaid, addExpense, addFuelLog,
     addExpenseCategory, addRequest, resolveRequest, addCustomer, addDriver, addTruck,
-    setDriverDocs, setTruckDocs, setCustomerAgreement, setAttachedAgreement, addStaff, addAttached, recordOwnerPayment, addTour, runPayroll, reset,
-  }), [s, trips, addTrip, updateTripStatus, advanceTrip, addSavedPoint, addInvoice, markInvoicePaid, addExpense, addFuelLog,
+    setDriverDocs, setTruckDocs, setCustomerAgreement, setAttachedAgreement, addStaff, addAttached, recordOwnerPayment, addTour, updateTour, runPayroll, reset,
+  }), [s, trips, tours, addTrip, updateTripStatus, advanceTrip, addSavedPoint, addInvoice, markInvoicePaid, addExpense, addFuelLog,
     addExpenseCategory, addRequest, resolveRequest, addCustomer, addDriver, addTruck,
-    setDriverDocs, setTruckDocs, setCustomerAgreement, setAttachedAgreement, addStaff, addAttached, recordOwnerPayment, addTour, runPayroll, reset]);
+    setDriverDocs, setTruckDocs, setCustomerAgreement, setAttachedAgreement, addStaff, addAttached, recordOwnerPayment, addTour, updateTour, runPayroll, reset]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

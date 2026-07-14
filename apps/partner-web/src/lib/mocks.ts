@@ -37,6 +37,8 @@ export const counters = {
 export interface FleetDriver {
   id: string; name: string; phone: string; vehicleReg: string; vehicleType: VehicleType;
   dutyStatus: DutyStatus; kycStatus: KycStatus; ratingAvg: number; tripsToday: number;
+  /** Vendor (truck owner) this driver belongs to; empty/undefined = own fleet. */
+  vendor?: string | undefined;
   /** Compliance documents — empty/undefined = not provided. */
   aadhaar?: string; licenseNo?: string; licenseExpiry?: string;
   /** Uploaded document images (compressed data-URLs; real storage with backend). */
@@ -53,17 +55,21 @@ export const fleetDrivers: FleetDriver[] = [
 
 export interface Truck {
   id: string; reg: string; type: VehicleType; capacityKg: number; status: 'available' | 'on_trip' | 'maintenance'; docsOk: boolean;
+  /** Box size — the "vehicle type" Amazon cares about (10ft/14ft/17ft…). */
+  feet?: string | undefined;
+  /** Vendor (truck owner) this vehicle belongs to; empty/undefined = own fleet. */
+  vendor?: string | undefined;
   /** Compliance documents — empty/undefined = not submitted. */
   rc?: string; insuranceNo?: string; insuranceExpiry?: string; fitnessNo?: string; fitnessExpiry?: string;
   /** Uploaded document images (compressed data-URLs; real storage with backend). */
   rcImg?: string | undefined; insuranceImg?: string | undefined; fitnessImg?: string | undefined;
 }
 export const trucks: Truck[] = [
-  { id: 't1', reg: 'KA01C5521', type: 'truck', capacityKg: 7000, status: 'on_trip', docsOk: true, rc: 'RC-KA01C5521', insuranceNo: 'INS-778812', insuranceExpiry: '02 Sep 2026', fitnessNo: 'FIT-4521', fitnessExpiry: '30 Jul 2026' },
-  { id: 't2', reg: 'KA02D9930', type: 'pickup', capacityKg: 2500, status: 'available', docsOk: true, rc: 'RC-KA02D9930', insuranceNo: 'INS-556677', insuranceExpiry: '14 Aug 2026', fitnessNo: 'FIT-2210', fitnessExpiry: '21 Dec 2026' },
-  { id: 't3', reg: 'KA51F1207', type: 'tempo', capacityKg: 1500, status: 'available', docsOk: true, rc: 'RC-KA51F1207', insuranceNo: 'INS-334455', insuranceExpiry: '11 Jan 2027', fitnessNo: 'FIT-9087', fitnessExpiry: '19 Jul 2026' },
-  { id: 't4', reg: 'KA09H8810', type: 'truck', capacityKg: 7000, status: 'on_trip', docsOk: false, rc: 'RC-KA09H8810', insuranceNo: 'INS-221100', insuranceExpiry: '16 Jul 2026' },
-  { id: 't5', reg: 'KA05K2245', type: 'mini_truck', capacityKg: 850, status: 'maintenance', docsOk: false, rc: 'RC-KA05K2245' },
+  { id: 't1', reg: 'KA01C5521', type: 'truck', feet: '17ft Truck', capacityKg: 7000, status: 'on_trip', docsOk: true, rc: 'RC-KA01C5521', insuranceNo: 'INS-778812', insuranceExpiry: '02 Sep 2026', fitnessNo: 'FIT-4521', fitnessExpiry: '30 Jul 2026' },
+  { id: 't2', reg: 'KA02D9930', type: 'pickup', feet: '14ft Truck', capacityKg: 2500, status: 'available', docsOk: true, rc: 'RC-KA02D9930', insuranceNo: 'INS-556677', insuranceExpiry: '14 Aug 2026', fitnessNo: 'FIT-2210', fitnessExpiry: '21 Dec 2026' },
+  { id: 't3', reg: 'KA51F1207', type: 'tempo', feet: '10ft Truck', capacityKg: 1500, status: 'available', docsOk: true, rc: 'RC-KA51F1207', insuranceNo: 'INS-334455', insuranceExpiry: '11 Jan 2027', fitnessNo: 'FIT-9087', fitnessExpiry: '19 Jul 2026' },
+  { id: 't4', reg: 'KA09H8810', type: 'truck', feet: '17ft Truck', capacityKg: 7000, status: 'on_trip', docsOk: false, rc: 'RC-KA09H8810', insuranceNo: 'INS-221100', insuranceExpiry: '16 Jul 2026' },
+  { id: 't5', reg: 'KA05K2245', type: 'mini_truck', feet: '8ft Truck', capacityKg: 850, status: 'maintenance', docsOk: false, rc: 'RC-KA05K2245' },
 ];
 
 export type LoadKind = 'instant' | 'auction' | 'backhaul';
