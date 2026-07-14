@@ -46,7 +46,7 @@ function QuickAction({ to, icon, label }: { to: string; icon: React.ReactNode; l
 export function Overview() {
   const { trips, trucks, invoices, expenses, fuelLogs, payroll, drivers } = useStore();
   const { member } = useAuth();
-  const isAdmin = member?.role === 'owner' || member?.role === 'manager';
+  const isLead = member?.role === 'owner' || member?.role === 'manager' || member?.role === 'team_leader';
   const inr = (n: number) => rupees(n);
 
   const onTrip = trucks.filter((t) => t.status === 'on_trip').length;
@@ -105,8 +105,8 @@ export function Overview() {
   return (
     <PartnerLayout title="Overview" subtitle={`${BRAND.company} · June 2026`}>
       <div className="space-y-6">
-        {/* Owner/manager see the team; workers see their own day */}
-        {isAdmin ? <TeamMix /> : <MyDayStrip />}
+        {/* Owner/manager/team-leader see their team; workers see their own day */}
+        {isLead ? <TeamMix /> : <MyDayStrip />}
 
         {/* Quick actions */}
         <div className="flex flex-wrap items-center gap-2">

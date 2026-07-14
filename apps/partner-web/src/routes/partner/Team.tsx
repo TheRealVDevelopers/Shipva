@@ -11,7 +11,7 @@ import { Modal, Field, TextInput, Select, Row } from '../../components/ui/Modal.
 import { useAuth } from '../../lib/auth.js';
 import { roleLabel, defaultPages, type Role } from '../../lib/roles.js';
 import {
-  watchMembers, inviteMember, updateMember, pagesForRole, ASSIGNABLE_PAGES, type Member,
+  watchMembers, inviteMember, updateMember, pagesForRole, canManageMember, ASSIGNABLE_PAGES, type Member,
 } from '../../lib/members.js';
 import type { FeatureId } from '../../lib/features.js';
 import {
@@ -24,8 +24,8 @@ import { watchWorklogFor, fmtTime, type WorklogEntry } from '../../lib/worklog.j
 import { AssignTaskModal } from '../../components/AssignTaskModal.js';
 import { useNotify } from '../../lib/notify.js';
 
-const ROLE_TONE: Record<Role, BadgeTone> = { owner: 'success', manager: 'primary', supervisor: 'info', accountant: 'accent' };
-const EMPTY = { name: '', email: '', phone: '', role: 'supervisor' as Role, pages: defaultPages('supervisor') };
+const ROLE_TONE: Record<Role, BadgeTone> = { owner: 'success', manager: 'primary', team_leader: 'warning', supervisor: 'info', accountant: 'accent' };
+const EMPTY = { name: '', email: '', phone: '', role: 'supervisor' as Role, pages: defaultPages('supervisor'), leaderUid: '' };
 
 export function Team() {
   const { member: me } = useAuth();
@@ -41,9 +41,18 @@ export function Team() {
   const [todayFor, setTodayFor] = useState<Member | null>(null);
 
   const isAdmin = me?.role === 'owner' || me?.role === 'manager';
+  const isTL = me?.role === 'team_leader';
+  const canManage = isAdmin || isTL;
 
   useEffect(() => watchMembers((list) => setMembers(list.sort((a, b) => a.name.localeCompare(b.name)))), []);
   useEffect(() => watchAllToday((list) => setActivity(Object.fromEntries(list.map((a) => [a.uid, a])))), []);
+
+  // A Team Leader only sees & manages their own POCs; owner/manager see everyone.
+  const leaders = members.filter((m) => m.role === 'team_leader');
+  const leaderName = (uid?: string) => members.find((m) => m.uid === uid)?.name ?? '';
+  const visible = isAdmin ? members : isTL ? members.filter((m) => m.leaderUid === me?.uid || m.uid === me?.uid) : members.filter((m) => m.uid === me?.uid);
+  const inviteRoles: Role[] = isAdmin ? ['manager', 'team_leader', 'supervisor', 'accountant'] : ['supervisor', 'accountant'];
+  const showLeaderPicker = isAdmin && (f.role === 'supervisor' || f.role === 'accountant');
 
   const adminRole = f.role === 'owner' || f.role === 'manager';
   function setRole(role: Role) { setF((p) => ({ ...p, role, pages: defaultPages(role) })); }
@@ -55,7 +64,9 @@ export function Team() {
     if (!f.name.trim() || !f.email.trim() || busy) return;
     setBusy(true);
     try {
-      const { tempPassword } = await inviteMember({ name: f.name, email: f.email, phone: f.phone, role: f.role, pages: f.pages });
+      // A TL's new members are POCs under them; an owner/manager may pick the leader.
+      const leaderUid = isTL ? me?.uid : (showLeaderPicker ? (f.leaderUid || undefined) : undefined);
+      const { tempPassword } = await inviteMember({ name: f.name, email: f.email, phone: f.phone, role: f.role, pages: f.pages, ...(leaderUid ? { leaderUid } : {}) });
       setCreated({ email: f.email.trim(), tempPassword });
       setF(EMPTY); setInvite(false);
       push({ title: 'Member added', body: `${f.name} can now sign in.`, tone: 'success' });
@@ -72,22 +83,23 @@ export function Team() {
           <div className="flex items-center gap-3">
             <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/10"><UserCog size={18} /></span>
             <div>
-              <div className="text-sm font-extrabold">{members.length} team member{members.length === 1 ? '' : 's'}</div>
-              <div className="text-xs text-primary-200">Each person signs in with their own email &amp; password</div>
+              <div className="text-sm font-extrabold">{visible.length} {isTL ? 'POC' : 'team member'}{visible.length === 1 ? '' : 's'}</div>
+              <div className="text-xs text-primary-200">{isTL ? 'Your sub-team — add POCs and assign them routes' : 'Each person signs in with their own email & password'}</div>
             </div>
           </div>
-          {isAdmin && <Button size="sm" variant="secondary" onClick={() => { setF(EMPTY); setInvite(true); }}><Plus size={13} /> Add member</Button>}
+          {canManage && <Button size="sm" variant="secondary" onClick={() => { setF(EMPTY); setInvite(true); }}><Plus size={13} /> {isTL ? 'Add POC' : 'Add member'}</Button>}
         </div>
 
-        {!isAdmin && (
+        {!canManage && (
           <div className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900 ring-1 ring-inset ring-amber-100">
-            Only an owner or manager can add members or change permissions.
+            Only an owner, manager or team leader can add members or change permissions.
           </div>
         )}
 
         <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-          {members.map((m) => {
+          {visible.map((m) => {
             const pages = m.pages === 'all' ? 'Full access' : `${m.pages.filter((p) => p !== 'overview').length} pages`;
+            const canEdit = canManageMember(me, m);
             return (
               <Card key={m.uid} className="p-5">
                 <div className="flex items-start justify-between">
@@ -104,6 +116,7 @@ export function Team() {
                 </div>
 
                 <div className="mt-3 flex items-center gap-2 text-xs text-neutral-500"><Phone size={12} /> {m.phone || '—'}</div>
+                {m.leaderUid && <div className="mt-1 flex items-center gap-1 text-[11px] text-neutral-500"><UserCog size={11} /> Reports to <span className="font-semibold text-neutral-700">{leaderName(m.leaderUid) || 'Team Leader'}</span></div>}
                 <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-neutral-500">
                   <Shield size={12} /> Access: <span className="font-semibold text-neutral-700">{pages}</span>
                   {m.mustSetPassword && <Badge tone="warning"><KeyRound size={10} /> Pending first login</Badge>}
@@ -122,14 +135,14 @@ export function Team() {
                   </div>
                   <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5">
                     <button onClick={() => setTodayFor(m)} className="inline-flex items-center gap-1 text-xs font-bold text-neutral-600 hover:text-primary-700"><CalendarClock size={12} /> Today</button>
-                    {isAdmin && <button onClick={() => setAssignTo(m)} className="inline-flex items-center gap-1 text-xs font-bold text-primary-600 hover:text-primary-700"><ListTodo size={12} /> Assign task</button>}
-                    {isAdmin && <button onClick={() => setEdit(m)} className="inline-flex items-center gap-1 text-xs font-bold text-neutral-600 hover:text-primary-700"><Pencil size={12} /> Edit access</button>}
+                    {canEdit && m.uid !== me?.uid && <button onClick={() => setAssignTo(m)} className="inline-flex items-center gap-1 text-xs font-bold text-primary-600 hover:text-primary-700"><ListTodo size={12} /> Assign task</button>}
+                    {canEdit && <button onClick={() => setEdit(m)} className="inline-flex items-center gap-1 text-xs font-bold text-neutral-600 hover:text-primary-700"><Pencil size={12} /> Edit access</button>}
                   </div>
                 </div>
               </Card>
             );
           })}
-          {members.length === 0 && <Card className="p-8 text-center text-sm text-neutral-400 sm:col-span-2 xl:col-span-3">Loading team…</Card>}
+          {visible.length === 0 && <Card className="p-8 text-center text-sm text-neutral-400 sm:col-span-2 xl:col-span-3">{isTL ? 'No POCs yet — press "Add POC".' : 'Loading team…'}</Card>}
         </section>
       </div>
 
@@ -140,13 +153,22 @@ export function Team() {
           <Field label="Phone"><TextInput value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} placeholder="+91 99011 22001" /></Field>
         </Row>
         <Field label="Email" hint="They'll sign in with this and set their own password"><TextInput type="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} placeholder="prakash@company.com" /></Field>
-        <Field label="Role">
-          <Select value={f.role} onChange={(e) => setRole(e.target.value as Role)}>
-            <option value="manager">Manager — full access</option>
-            <option value="supervisor">Supervisor — operations</option>
-            <option value="accountant">Accountant — money</option>
-          </Select>
-        </Field>
+        <Row>
+          <Field label="Role">
+            <Select value={f.role} onChange={(e) => setRole(e.target.value as Role)}>
+              {inviteRoles.map((r) => <option key={r} value={r}>{roleLabel(r)}{r === 'team_leader' ? ' — runs a sub-team' : r === 'manager' ? ' — full access' : r === 'supervisor' ? ' — operations' : ' — money'}</option>)}
+            </Select>
+          </Field>
+          {showLeaderPicker
+            ? <Field label="Reports to (Team Leader)" hint="Optional — assigns this POC under a leader">
+                <Select value={f.leaderUid} onChange={(e) => setF({ ...f, leaderUid: e.target.value })}>
+                  <option value="">— none (reports to you) —</option>
+                  {leaders.map((l) => <option key={l.uid} value={l.uid}>{l.name}</option>)}
+                </Select>
+              </Field>
+            : <div />}
+        </Row>
+        {isTL && <p className="text-[11px] text-neutral-500">This person becomes a POC under you — you'll assign them routes and see their work.</p>}
         <PageToggles adminRole={adminRole} pages={f.pages} onToggle={togglePage} />
       </Modal>
 
@@ -161,10 +183,10 @@ export function Team() {
       </Modal>
 
       {/* Edit member access */}
-      {edit && <EditMember member={edit} onClose={() => setEdit(null)} isSelf={edit.uid === me?.uid} />}
+      {edit && <EditMember member={edit} onClose={() => setEdit(null)} isSelf={edit.uid === me?.uid} adminEditor={isAdmin} />}
 
       {/* Assign task */}
-      {assignTo && me && <AssignTaskModal members={members} preset={assignTo} createdBy={`${me.name} · ${roleLabel(me.role)}`} onClose={() => setAssignTo(null)} />}
+      {assignTo && me && <AssignTaskModal members={visible} preset={assignTo} createdBy={`${me.name} · ${roleLabel(me.role)}`} onClose={() => setAssignTo(null)} />}
 
       {/* Member's day */}
       {todayFor && <TodayModal member={todayFor} activity={activity[todayFor.uid] ?? null} onClose={() => setTodayFor(null)} />}
@@ -265,7 +287,7 @@ function PageToggles({ adminRole, pages, onToggle }: { adminRole: boolean; pages
   );
 }
 
-function EditMember({ member, onClose, isSelf }: { member: Member; onClose: () => void; isSelf: boolean }) {
+function EditMember({ member, onClose, isSelf, adminEditor }: { member: Member; onClose: () => void; isSelf: boolean; adminEditor: boolean }) {
   const { push } = useNotify();
   const [role, setRoleState] = useState<Role>(member.role);
   const [pages, setPages] = useState<FeatureId[]>(member.pages === 'all' ? defaultPages('supervisor') : member.pages.filter((p) => p !== 'overview'));
@@ -294,8 +316,9 @@ function EditMember({ member, onClose, isSelf }: { member: Member; onClose: () =
       <Row>
         <Field label="Role">
           <Select value={role} onChange={(e) => setRole(e.target.value as Role)}>
-            <option value="owner">Owner — everything</option>
-            <option value="manager">Manager — full access</option>
+            {adminEditor && <option value="owner">Owner — everything</option>}
+            {adminEditor && <option value="manager">Manager — full access</option>}
+            {adminEditor && <option value="team_leader">Team Leader — sub-team</option>}
             <option value="supervisor">Supervisor — operations</option>
             <option value="accountant">Accountant — money</option>
           </Select>

@@ -31,7 +31,9 @@ export function TeamMix() {
   useEffect(() => watchAllTasks(setTasks), []);
   useEffect(() => { const id = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(id); }, []);
 
-  const team = members.filter((m) => m.role !== 'owner' && m.uid !== me?.uid);
+  // Owner/manager see the whole team; a Team Leader sees only their POCs.
+  const isAdmin = me?.role === 'owner' || me?.role === 'manager';
+  const team = members.filter((m) => m.uid !== me?.uid && (isAdmin ? m.role !== 'owner' : m.leaderUid === me?.uid));
 
   return (
     <Card className="overflow-hidden">
@@ -102,7 +104,7 @@ export function TeamMix() {
         })}
       </div>
 
-      {assign && me && <AssignTaskModal members={members} createdBy={`${me.name} · ${roleLabel(me.role)}`} onClose={() => setAssign(false)} />}
+      {assign && me && <AssignTaskModal members={team} createdBy={`${me.name} · ${roleLabel(me.role)}`} onClose={() => setAssign(false)} />}
     </Card>
   );
 }

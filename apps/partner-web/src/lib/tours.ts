@@ -12,7 +12,8 @@ import {
 import { db } from '../firebase.js';
 import type { Tour, TourStop, TourLeg } from './store.js';
 
-interface Scope { uid: string; role: string }
+interface Scope { uid: string; role: string; leaderUid?: string }
+interface Handler { uid: string; name: string; leaderUid?: string }
 const isAdmin = (role: string) => role === 'owner' || role === 'manager';
 
 const stripUndef = (o: Record<string, unknown>) => { Object.keys(o).forEach((k) => o[k] === undefined && delete o[k]); return o; };
@@ -64,6 +65,7 @@ function fromSnap(id: string, d: Record<string, unknown>): Tour {
     vrIds: (d.vrIds as string[]) ?? [],
     ownerUid: (d.ownerUid as string) ?? '',
     ownerName: (d.ownerName as string) ?? '',
+    leaderUid: (d.leaderUid as string) ?? '',
     createdAtMs: (d.createdAtMs as number) ?? 0,
     legs: (d.legs as TourLeg[]) ?? [],
     ...(d.serviceAt ? { serviceAt: d.serviceAt as string } : {}),
@@ -80,11 +82,12 @@ function fromSnap(id: string, d: Record<string, unknown>): Tour {
   };
 }
 
-/** Live subscription, role-scoped: admins all tours, POCs only their own. */
+/** Live subscription, role-scoped: admins see all; a Team Leader sees their
+ *  whole team; a POC sees only their own. */
 export function watchToursFs(scope: Scope, cb: (tours: Tour[]) => void): () => void {
-  const q = isAdmin(scope.role)
-    ? query(collection(db, 'orgTours'))
-    : query(collection(db, 'orgTours'), where('ownerUid', '==', scope.uid));
+  const q = isAdmin(scope.role) ? query(collection(db, 'orgTours'))
+    : scope.role === 'team_leader' ? query(collection(db, 'orgTours'), where('leaderUid', '==', scope.uid))
+      : query(collection(db, 'orgTours'), where('ownerUid', '==', scope.uid));
   return onSnapshot(q, (qs) => {
     cb(qs.docs.map((d) => fromSnap(d.id, d.data())).sort((a, b) => (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0)));
   });
@@ -105,13 +108,14 @@ async function registerVrids(vrids: string[], tourId: string, uid: string): Prom
     setDoc(doc(db, 'orgVrids', vridKey(v)), { vrid: vridKey(v), tourId, uid, createdAtMs: Date.now() })));
 }
 
-export async function addTourDoc(t: Omit<Tour, 'id'>, scope: Scope, handledBy?: { uid: string; name: string }): Promise<void> {
-  const owner = handledBy ?? { uid: scope.uid, name: '' };
+export async function addTourDoc(t: Omit<Tour, 'id'>, scope: Scope, handledBy?: Handler): Promise<void> {
+  const owner = handledBy ?? { uid: scope.uid, name: '', leaderUid: scope.leaderUid };
   const payload: Record<string, unknown> = {
     ...t,
     stops: cleanStops(t.stops),
     ownerUid: owner.uid,
     ownerName: owner.name,
+    leaderUid: owner.leaderUid || owner.uid,
     createdAtMs: Date.now(),
   };
   if (t.legs) payload.legs = cleanLegs(t.legs);

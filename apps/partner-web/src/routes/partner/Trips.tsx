@@ -14,7 +14,7 @@ import { rupees } from '../../lib/format.js';
 import { osCounters, type Trip, type TripPoint, type TripStatus } from '../../lib/mocks.js';
 import { useStore, todayLabel } from '../../lib/store.js';
 import { useAuth } from '../../lib/auth.js';
-import { watchMembers, type Member } from '../../lib/members.js';
+import { watchMembers, teamOf, type Member } from '../../lib/members.js';
 import { useNotify } from '../../lib/notify.js';
 import { printLR } from '../../lib/print.js';
 import { tripSteps, tripPoints, currentStep, progressPct } from '../../lib/trip.js';
@@ -51,6 +51,7 @@ export function Trips() {
   const { trips, drivers, trucks, customers, savedPoints, addTrip, addSavedPoint, addCustomer, addDriver, advanceTrip } = useStore();
   const { member } = useAuth();
   const isAdmin = member?.role === 'owner' || member?.role === 'manager';
+  const canAssign = isAdmin || member?.role === 'team_leader';
   const { push } = useNotify();
   const [params] = useSearchParams();
   const [members, setMembers] = useState<Member[]>([]);
@@ -67,7 +68,9 @@ export function Trips() {
   const [drvAdd, setDrvAdd] = useState(false);
   const [newDriver, setNewDriver] = useState(NEW_DRIVER);
 
-  useEffect(() => { if (isAdmin) return watchMembers((l) => setMembers(l.filter((m) => m.status === 'active'))); }, [isAdmin]);
+  useEffect(() => { if (canAssign) return watchMembers((l) => setMembers(l.filter((m) => m.status === 'active'))); }, [canAssign]);
+  // Owner/manager can hand a trip to anyone; a Team Leader only to their POCs (or themselves).
+  const assignable = isAdmin ? members : members.filter((m) => m.leaderUid === member?.uid || m.uid === member?.uid);
 
   const shown = trips
     .filter((t) => matchesFilter(t.status, filter))
@@ -135,10 +138,12 @@ export function Trips() {
       .filter((p) => p.label.trim())
       .map((p) => (p.mapUrl.trim() ? { label: p.label.trim(), mapUrl: p.mapUrl.trim() } : { label: p.label.trim() }));
     points.forEach((p) => addSavedPoint(p));
-    const handler = isAdmin && f.handledBy
+    const handler = canAssign && f.handledBy
       ? members.find((m) => m.uid === f.handledBy) ?? null
       : null;
-    const handledBy = handler ? { uid: handler.uid, name: handler.name } : (member ? { uid: member.uid, name: member.name } : undefined);
+    const handledBy = handler
+      ? { uid: handler.uid, name: handler.name, leaderUid: teamOf(handler) }
+      : (member ? { uid: member.uid, name: member.name, leaderUid: teamOf(member) } : undefined);
     addTrip({
       date: todayLabel(), from: clean[0]!, to: clean[clean.length - 1]!,
       driver: f.driver, vehicleReg: f.vehicleReg,
@@ -351,11 +356,11 @@ export function Trips() {
           </div>
         )}
 
-        {isAdmin && (
-          <Field label="Handled by" hint="Which team member owns this route">
+        {canAssign && (
+          <Field label="Handled by" hint={isAdmin ? 'Which team member owns this route' : 'Which of your POCs runs this route'}>
             <Select value={f.handledBy} onChange={set('handledBy')}>
-              {members.length === 0 && <option value={member?.uid ?? ''}>{member?.name ?? 'Me'}</option>}
-              {members.map((m) => <option key={m.uid} value={m.uid}>{m.name}{m.uid === member?.uid ? ' (me)' : ''}</option>)}
+              {assignable.length === 0 && <option value={member?.uid ?? ''}>{member?.name ?? 'Me'}</option>}
+              {assignable.map((m) => <option key={m.uid} value={m.uid}>{m.name}{m.uid === member?.uid ? ' (me)' : ''}</option>)}
             </Select>
           </Field>
         )}

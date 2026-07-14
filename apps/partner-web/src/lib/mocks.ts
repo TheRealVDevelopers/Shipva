@@ -201,6 +201,8 @@ export interface Trip {
    *  supervisor sees only trips where ownerUid is theirs. */
   ownerUid?: string;
   ownerName?: string;
+  /** The team (Team Leader's uid) this trip belongs to — a TL sees their team. */
+  leaderUid?: string;
   createdAtMs?: number;
 }
 export const trips: Trip[] = [

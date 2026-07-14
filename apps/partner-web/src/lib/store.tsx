@@ -84,7 +84,7 @@ export interface Tour {
   /** All VRIDs on this route (vrId keeps the first for the legacy sheet). */
   vrIds?: string[];
   /** POC (member) who runs this line; owner/managers see all. */
-  ownerUid?: string; ownerName?: string; createdAtMs?: number;
+  ownerUid?: string; ownerName?: string; leaderUid?: string; createdAtMs?: number;
   /** Route-Assign additions. */
   serviceAt?: string;                 // service date & time (datetime-local)
   gpayName?: string; gpayNumber?: string;
@@ -141,7 +141,7 @@ interface StoreApi extends StoreShape {
   /** Trips & tours are backed by Firestore and scoped to the signed-in member. */
   trips: Trip[];
   tours: Tour[];
-  addTrip: (t: Omit<Trip, 'lr' | 'vrId' | 'id'>, handledBy?: { uid: string; name: string }) => void;
+  addTrip: (t: Omit<Trip, 'lr' | 'vrId' | 'id'>, handledBy?: { uid: string; name: string; leaderUid?: string }) => void;
   updateTripStatus: (id: string, status: TripStatus) => void;
   /** Advance a trip one step along its live timeline; pass a remark when finishing. */
   advanceTrip: (id: string, remark?: string) => void;
@@ -163,7 +163,7 @@ interface StoreApi extends StoreShape {
   addStaff: (s: Omit<Staff, 'id'>) => void;
   addAttached: (a: Omit<AttachedTruck, 'id'>) => void;
   recordOwnerPayment: (id: string, amountPaise: number) => void;
-  addTour: (t: Omit<Tour, 'id'>, handledBy?: { uid: string; name: string }) => void;
+  addTour: (t: Omit<Tour, 'id'>, handledBy?: { uid: string; name: string; leaderUid?: string }) => void;
   updateTour: (id: string, patch: Partial<Tour>) => void;
   runPayroll: () => void;
   reset: () => void;
@@ -208,7 +208,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // only their own; owner/managers see all). One-time demo seed for the owner.
   useEffect(() => {
     if (!member) { setTrips([]); tripsRef.current = []; return; }
-    const scope = { uid: member.uid, role: member.role };
+    const scope = { uid: member.uid, role: member.role, leaderUid: member.leaderUid || member.uid };
     let seeded = false;
     return watchTrips(scope, (list) => {
       setTrips(list);
@@ -225,22 +225,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [tours, setTours] = useState<Tour[]>([]);
   useEffect(() => {
     if (!member) { setTours([]); return; }
-    return watchToursFs({ uid: member.uid, role: member.role }, setTours);
-  }, [member?.uid, member?.role]);
+    return watchToursFs({ uid: member.uid, role: member.role, leaderUid: member.leaderUid || member.uid }, setTours);
+  }, [member?.uid, member?.role, member?.leaderUid]);
 
-  const addTour = useCallback((t: Omit<Tour, 'id'>, handledBy?: { uid: string; name: string }) => {
+  const addTour = useCallback((t: Omit<Tour, 'id'>, handledBy?: { uid: string; name: string; leaderUid?: string }) => {
     if (!member) return;
-    void addTourDoc(t, { uid: member.uid, role: member.role }, handledBy);
-  }, [member?.uid, member?.role]);
+    void addTourDoc(t, { uid: member.uid, role: member.role, leaderUid: member.leaderUid || member.uid }, handledBy);
+  }, [member?.uid, member?.role, member?.leaderUid]);
 
   const updateTour = useCallback((id: string, patch: Partial<Tour>) => {
     void updateTourDoc(id, patch);
   }, []);
 
-  const addTrip = useCallback((t: Omit<Trip, 'lr' | 'vrId' | 'id'>, handledBy?: { uid: string; name: string }) => {
+  const addTrip = useCallback((t: Omit<Trip, 'lr' | 'vrId' | 'id'>, handledBy?: { uid: string; name: string; leaderUid?: string }) => {
     if (!member) return;
-    void addTripDoc(t, { uid: member.uid, role: member.role }, handledBy);
-  }, [member?.uid, member?.role]);
+    void addTripDoc(t, { uid: member.uid, role: member.role, leaderUid: member.leaderUid || member.uid }, handledBy);
+  }, [member?.uid, member?.role, member?.leaderUid]);
 
   const updateTripStatus = useCallback((id: string, status: TripStatus) => {
     void updateTripDoc(id, { status });

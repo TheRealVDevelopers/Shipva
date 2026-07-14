@@ -8,7 +8,7 @@ import { Modal, Field, TextInput, Select, Row } from '../../components/ui/Modal.
 import { ImageUpload } from '../../components/ui/ImageUpload.js';
 import { useStore, todayLabel, type Tour, type TourLeg, type TourLegStop } from '../../lib/store.js';
 import { useAuth } from '../../lib/auth.js';
-import { watchMembers, type Member } from '../../lib/members.js';
+import { watchMembers, teamOf, type Member } from '../../lib/members.js';
 import { vridExists } from '../../lib/tours.js';
 import { exportTourSheet } from '../../lib/exportTourSheet.js';
 import { vendorMessage, driverMessage, waLink } from '../../lib/tourMessages.js';
@@ -49,6 +49,7 @@ export function Tours() {
   const { tours, drivers, trucks, attached, addTour, updateTour } = useStore();
   const { member } = useAuth();
   const isAdmin = member?.role === 'owner' || member?.role === 'manager';
+  const canAssign = isAdmin || member?.role === 'team_leader';
   const { push } = useNotify();
   const [members, setMembers] = useState<Member[]>([]);
   const [q, setQ] = useState('');
@@ -60,7 +61,8 @@ export function Tours() {
   const [legs, setLegs] = useState<LegDraft[]>([blankLeg()]);
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => { if (isAdmin) return watchMembers((l) => setMembers(l.filter((m) => m.status === 'active'))); }, [isAdmin]);
+  useEffect(() => { if (canAssign) return watchMembers((l) => setMembers(l.filter((m) => m.status === 'active'))); }, [canAssign]);
+  const assignable = isAdmin ? members : members.filter((m) => m.leaderUid === member?.uid || m.uid === member?.uid);
 
   const vendorDrivers = useMemo(() => {
     if (!f.vendor) return drivers;
@@ -133,8 +135,10 @@ export function Tours() {
         vrid: l.vrid.trim().toUpperCase(), loadType: l.loadType,
         stops: l.stops.map((s) => ({ name: s.name.trim().toUpperCase(), mapUrl: s.mapUrl.trim(), location: s.mapUrl.trim(), arrivalAt: s.arrivalAt, departureAt: s.departureAt })),
       }));
-      const handler = isAdmin && f.handledBy ? members.find((m) => m.uid === f.handledBy) ?? null : null;
-      const handledBy = handler ? { uid: handler.uid, name: handler.name } : (member ? { uid: member.uid, name: member.name } : undefined);
+      const handler = canAssign && f.handledBy ? members.find((m) => m.uid === f.handledBy) ?? null : null;
+      const handledBy = handler
+        ? { uid: handler.uid, name: handler.name, leaderUid: teamOf(handler) }
+        : (member ? { uid: member.uid, name: member.name, leaderUid: teamOf(member) } : undefined);
       const svc = new Date(f.serviceAt);
       addTour({
         date: isNaN(svc.getTime()) ? todayLabel() : svc.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
@@ -318,11 +322,11 @@ export function Tours() {
           <button type="button" onClick={addLeg} className="flex w-full items-center justify-center gap-1.5 rounded-lg py-2.5 text-xs font-extrabold text-white" style={{ background: INK }}><Plus size={14} /> Add VRID</button>
         </div>
 
-        {isAdmin && (
-          <Field label="Assign to POC" hint="Which team member runs this line — they'll see it on their Tours page">
+        {canAssign && (
+          <Field label="Assign to POC" hint={isAdmin ? "Which team member runs this line — they'll see it on their Tours page" : 'Which of your POCs runs this line'}>
             <Select value={f.handledBy} onChange={(e) => setF({ ...f, handledBy: e.target.value })}>
-              {members.length === 0 && <option value={member?.uid ?? ''}>{member?.name ?? 'Me'}</option>}
-              {members.map((m) => <option key={m.uid} value={m.uid}>{m.name}{m.uid === member?.uid ? ' (me)' : ''}</option>)}
+              {assignable.length === 0 && <option value={member?.uid ?? ''}>{member?.name ?? 'Me'}</option>}
+              {assignable.map((m) => <option key={m.uid} value={m.uid}>{m.name}{m.uid === member?.uid ? ' (me)' : ''}</option>)}
             </Select>
           </Field>
         )}

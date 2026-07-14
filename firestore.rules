@@ -65,15 +65,28 @@ service cloud.firestore {
     function orgMember() { return get(/databases/$(database)/documents/orgMembers/$(request.auth.uid)).data; }
     function isOrgMember() { return signedIn() && exists(/databases/$(database)/documents/orgMembers/$(request.auth.uid)); }
     function isOrgAdmin() { return isOrgMember() && orgMember().role in ['owner', 'manager']; }
+    function isOrgTeamLeader() { return isOrgMember() && orgMember().role == 'team_leader'; }
     function isBootstrapOwner() { return signedIn() && request.auth.token.email == 'admin@sarvaexpress.in'; }
 
     match /orgMembers/{uid} {
       allow read: if isOrgMember() || isBootstrapOwner();
-      allow create: if isOrgAdmin() || (isSelf(uid) && isBootstrapOwner());
+      // Owner/manager create anyone; the bootstrap owner self-creates; a Team
+      // Leader may create POCs (supervisor/accountant) under themselves.
+      allow create: if isOrgAdmin()
+        || (isSelf(uid) && isBootstrapOwner())
+        || (isOrgTeamLeader()
+            && request.resource.data.leaderUid == request.auth.uid
+            && request.resource.data.role in ['supervisor', 'accountant']);
+      // Admin edits anyone; a member edits their own profile (not role/pages); a
+      // Team Leader edits their POCs but can't move them out or elevate them.
       allow update: if isOrgAdmin()
         || (isSelf(uid)
             && request.resource.data.role == resource.data.role
-            && request.resource.data.pages == resource.data.pages);
+            && request.resource.data.pages == resource.data.pages)
+        || (isOrgTeamLeader()
+            && resource.data.leaderUid == request.auth.uid
+            && request.resource.data.leaderUid == resource.data.leaderUid
+            && request.resource.data.role in ['supervisor', 'accountant']);
       allow delete: if isOrgAdmin();
     }
 
@@ -100,21 +113,22 @@ service cloud.firestore {
       allow update, delete: if isOrgAdmin();
     }
 
-    // Trips — scoped by supervisor. Owner/manager see & manage every trip; a
-    // supervisor only sees and edits trips they handle (ownerUid == them).
+    // Trips — POC-scoped with a Team-Leader layer. Owner/manager see & manage
+    // everything; a POC sees trips they own (ownerUid); a Team Leader sees the
+    // whole team (leaderUid == them).
     match /orgTrips/{id} {
-      allow read: if isOrgAdmin() || (isOrgMember() && resource.data.ownerUid == request.auth.uid);
-      allow create: if isOrgAdmin() || (isOrgMember() && request.resource.data.ownerUid == request.auth.uid);
-      allow update: if isOrgAdmin() || (isOrgMember() && resource.data.ownerUid == request.auth.uid);
-      allow delete: if isOrgAdmin() || (isOrgMember() && resource.data.ownerUid == request.auth.uid);
+      allow read: if isOrgAdmin() || (isOrgMember() && (resource.data.ownerUid == request.auth.uid || resource.data.leaderUid == request.auth.uid));
+      allow create: if isOrgAdmin() || (isOrgMember() && (request.resource.data.ownerUid == request.auth.uid || request.resource.data.leaderUid == request.auth.uid));
+      allow update: if isOrgAdmin() || (isOrgMember() && (resource.data.ownerUid == request.auth.uid || resource.data.leaderUid == request.auth.uid));
+      allow delete: if isOrgAdmin() || (isOrgMember() && (resource.data.ownerUid == request.auth.uid || resource.data.leaderUid == request.auth.uid));
     }
 
-    // Amazon tours — same POC scoping as trips.
+    // Amazon tours — same POC + Team-Leader scoping as trips.
     match /orgTours/{id} {
-      allow read: if isOrgAdmin() || (isOrgMember() && resource.data.ownerUid == request.auth.uid);
-      allow create: if isOrgAdmin() || (isOrgMember() && request.resource.data.ownerUid == request.auth.uid);
-      allow update: if isOrgAdmin() || (isOrgMember() && resource.data.ownerUid == request.auth.uid);
-      allow delete: if isOrgAdmin() || (isOrgMember() && resource.data.ownerUid == request.auth.uid);
+      allow read: if isOrgAdmin() || (isOrgMember() && (resource.data.ownerUid == request.auth.uid || resource.data.leaderUid == request.auth.uid));
+      allow create: if isOrgAdmin() || (isOrgMember() && (request.resource.data.ownerUid == request.auth.uid || request.resource.data.leaderUid == request.auth.uid));
+      allow update: if isOrgAdmin() || (isOrgMember() && (resource.data.ownerUid == request.auth.uid || resource.data.leaderUid == request.auth.uid));
+      allow delete: if isOrgAdmin() || (isOrgMember() && (resource.data.ownerUid == request.auth.uid || resource.data.leaderUid == request.auth.uid));
     }
 
     // VRID registry — company-wide uniqueness. Any member may look one up or

@@ -11,7 +11,8 @@ import type { Trip, TripPoint, TripStatus } from './mocks.js';
 import { trips as seedTrips } from './mocks.js';
 import { genVrId } from './trip.js';
 
-interface Scope { uid: string; role: string }
+interface Scope { uid: string; role: string; leaderUid?: string }
+interface Handler { uid: string; name: string; leaderUid?: string }
 const isAdmin = (role: string) => role === 'owner' || role === 'manager';
 
 function fromSnap(id: string, d: Record<string, unknown>): Trip {
@@ -30,6 +31,7 @@ function fromSnap(id: string, d: Record<string, unknown>): Trip {
     ewayBill: (d.ewayBill as boolean) ?? false,
     ownerUid: (d.ownerUid as string) ?? '',
     ownerName: (d.ownerName as string) ?? '',
+    leaderUid: (d.leaderUid as string) ?? '',
     createdAtMs: (d.createdAtMs as number) ?? 0,
     ...(d.vrId ? { vrId: d.vrId as string } : {}),
     ...(d.customer ? { customer: d.customer as string } : {}),
@@ -39,11 +41,12 @@ function fromSnap(id: string, d: Record<string, unknown>): Trip {
   };
 }
 
-/** Live subscription, scoped by role. Admins get all trips; others only theirs. */
+/** Live subscription, scoped by role: admins see all; a Team Leader sees their
+ *  whole team (leaderUid == them); a POC/supervisor sees only their own. */
 export function watchTrips(scope: Scope, cb: (trips: Trip[]) => void): () => void {
-  const q = isAdmin(scope.role)
-    ? query(collection(db, 'orgTrips'))
-    : query(collection(db, 'orgTrips'), where('ownerUid', '==', scope.uid));
+  const q = isAdmin(scope.role) ? query(collection(db, 'orgTrips'))
+    : scope.role === 'team_leader' ? query(collection(db, 'orgTrips'), where('leaderUid', '==', scope.uid))
+      : query(collection(db, 'orgTrips'), where('ownerUid', '==', scope.uid));
   return onSnapshot(q, (qs) => {
     cb(qs.docs.map((d) => fromSnap(d.id, d.data())).sort((a, b) => (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0)));
   });
@@ -60,14 +63,15 @@ function clean<T extends Record<string, unknown>>(obj: T): T {
   return obj;
 }
 
-export async function addTripDoc(t: Omit<Trip, 'lr' | 'vrId' | 'id'>, scope: Scope, handledBy?: { uid: string; name: string }): Promise<void> {
-  const owner = handledBy ?? { uid: scope.uid, name: '' };
+export async function addTripDoc(t: Omit<Trip, 'lr' | 'vrId' | 'id'>, scope: Scope, handledBy?: Handler): Promise<void> {
+  const owner = handledBy ?? { uid: scope.uid, name: '', leaderUid: scope.leaderUid };
   await addDoc(collection(db, 'orgTrips'), clean({
     ...t,
     lr: genLr(),
     vrId: genVrId(),
     ownerUid: owner.uid,
     ownerName: owner.name,
+    leaderUid: owner.leaderUid || owner.uid,
     createdAtMs: Date.now(),
   }));
 }
@@ -84,6 +88,7 @@ export async function seedTripsFor(scope: Scope): Promise<void> {
       ...t,
       ownerUid: scope.uid,
       ownerName: scope.role === 'owner' ? 'Owner' : '',
+      leaderUid: scope.uid,
       createdAtMs: base - i * 1000,
     }))));
 }

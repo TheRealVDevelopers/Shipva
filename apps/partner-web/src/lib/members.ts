@@ -43,8 +43,26 @@ export interface Member {
   pages: FeatureId[] | 'all';
   photoUrl?: string;
   status: 'active' | 'disabled';
+  /** The Team Leader this member reports to (a POC's TL). Empty for owner/
+   *  manager/team-leader who report to the owner. */
+  leaderUid?: string;
   /** Forces the "set your own password" screen on first sign-in. */
   mustSetPassword?: boolean;
+}
+
+/** The "team" a member belongs to for trip/tour scoping: their Team Leader's
+ *  uid, or their own uid if they lead a team (TL) or run the org (owner). */
+export function teamOf(m: { uid: string; leaderUid?: string }): string {
+  return m.leaderUid && m.leaderUid.trim() ? m.leaderUid : m.uid;
+}
+
+/** Can `me` manage `target` (edit / assign tasks / see in Team)?  Owner &
+ *  manager manage everyone; a Team Leader manages only their own POCs. */
+export function canManageMember(me: Member | null, target: Member): boolean {
+  if (!me) return false;
+  if (me.role === 'owner' || me.role === 'manager') return true;
+  if (me.role === 'team_leader') return target.leaderUid === me.uid;
+  return false;
 }
 
 /** The one email allowed to bootstrap itself as owner (matches firestore.rules). */
@@ -73,6 +91,7 @@ function memberFromSnap(uid: string, data: Record<string, unknown>): Member {
     status: (data.status as Member['status']) ?? 'active',
     ...(data.phone ? { phone: data.phone as string } : {}),
     ...(data.photoUrl ? { photoUrl: data.photoUrl as string } : {}),
+    ...(data.leaderUid ? { leaderUid: data.leaderUid as string } : {}),
     ...(data.mustSetPassword ? { mustSetPassword: true } : {}),
   };
 }
@@ -100,7 +119,7 @@ export function watchMembers(cb: (members: Member[]) => void): () => void {
 }
 
 export interface InviteInput {
-  email: string; name: string; phone?: string; role: Role; pages: FeatureId[];
+  email: string; name: string; phone?: string; role: Role; pages: FeatureId[]; leaderUid?: string;
 }
 
 function genTempPassword(): string {
@@ -126,6 +145,7 @@ export async function inviteMember(input: InviteInput): Promise<{ uid: string; t
       pages: pagesForRole(input.role, input.pages),
       status: 'active', mustSetPassword: true, createdAt: serverTimestamp(),
       ...(input.phone?.trim() ? { phone: input.phone.trim() } : {}),
+      ...(input.leaderUid ? { leaderUid: input.leaderUid } : {}),
     });
     return { uid, tempPassword };
   } finally {
@@ -141,6 +161,7 @@ export async function updateMember(uid: string, patch: Partial<Member>): Promise
   if (patch.pages !== undefined) data.pages = patch.pages;
   if (patch.photoUrl !== undefined) data.photoUrl = patch.photoUrl;
   if (patch.status !== undefined) data.status = patch.status;
+  if (patch.leaderUid !== undefined) data.leaderUid = patch.leaderUid;
   if (patch.mustSetPassword !== undefined) data.mustSetPassword = patch.mustSetPassword;
   await updateDoc(doc(db, 'orgMembers', uid), data);
 }
