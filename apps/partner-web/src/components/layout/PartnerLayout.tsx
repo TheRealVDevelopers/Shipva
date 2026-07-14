@@ -93,14 +93,14 @@ function useTeamTaskAlerts() {
 interface NavItem { key: FeatureId; to: string; label: string; icon: LucideIcon; end?: boolean; group?: string; soon?: boolean }
 
 const NAV: NavItem[] = [
-  { key: 'overview', to: '/p', label: 'Overview', icon: LayoutDashboard, end: true },
-  { key: 'trips', to: '/p/trips', label: 'Trips & Routes', icon: ClipboardList, group: 'Operations' },
+  { key: 'overview', to: '/p', label: 'Dashboard', icon: LayoutDashboard, end: true },
+  { key: 'trips', to: '/p/trips', label: 'Trips', icon: ClipboardList, group: 'Operations' },
   { key: 'tours', to: '/p/tours', label: 'Amazon Tours', icon: Route, group: 'Operations' },
   { key: 'fleet', to: '/p/fleet', label: 'Trucks & Drivers', icon: Truck, group: 'Operations' },
   { key: 'documents', to: '/p/documents', label: 'Documents', icon: FileCheck2, group: 'Operations' },
-  { key: 'customers', to: '/p/customers', label: 'Customers', icon: Users, group: 'Vendors' },
+  { key: 'customers', to: '/p/customers', label: 'Transporters', icon: Users, group: 'Vendors' },
   { key: 'payables', to: '/p/payables', label: 'Truck Owners', icon: HandCoins, group: 'Vendors' },
-  { key: 'invoices', to: '/p/invoices', label: 'Invoices', icon: FileText, group: 'Accounts' },
+  { key: 'invoices', to: '/p/invoices', label: 'Vendor Payments', icon: FileText, group: 'Accounts' },
   { key: 'expenses', to: '/p/expenses', label: 'Expenses & Fuel', icon: Fuel, group: 'Accounts' },
   { key: 'payroll', to: '/p/payroll', label: 'Payroll', icon: Wallet, group: 'Accounts' },
   { key: 'reports', to: '/p/reports', label: 'Reports', icon: BarChart3, group: 'Accounts' },

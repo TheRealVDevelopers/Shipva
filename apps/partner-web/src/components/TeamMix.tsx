@@ -41,7 +41,7 @@ export function TeamMix() {
         <div className="flex items-center gap-2.5">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-500 text-white"><Users size={18} /></div>
           <div>
-            <div className="text-sm font-extrabold text-neutral-900">Team mix</div>
+            <div className="text-sm font-extrabold text-neutral-900">Team Members</div>
             <div className="text-[11px] text-neutral-500">Who's online, what they're on, and what's overdue</div>
           </div>
         </div>

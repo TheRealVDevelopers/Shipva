@@ -6,7 +6,7 @@ import { KpiCard } from '../../components/ui/KpiCard.js';
 import { Table, THead, Th, TBody, Tr, Td } from '../../components/ui/Table.js';
 import { Badge } from '../../components/ui/Badge.js';
 import { Button } from '../../components/ui/Button.js';
-import { Modal, Field, TextInput, Select, Row } from '../../components/ui/Modal.js';
+import { Modal, Field, TextInput, DateInput, Select, Row } from '../../components/ui/Modal.js';
 import { rupees } from '../../lib/format.js';
 import { useStore, todayLabel, type AttachedTruck } from '../../lib/store.js';
 import { printAgreement } from '../../lib/agreement.js';
@@ -147,7 +147,7 @@ export function Payables() {
       <Modal open={!!agFor} onClose={() => setAgFor(null)} title={`Agreement · ${agFor?.owner ?? ''}`} subtitle="Vehicle attachment terms"
         onSubmit={() => saveAgreement(true)} submitLabel="Create & download">
         <Row>
-          <Field label="Effective from"><TextInput value={ag.effectiveFrom} onChange={(e) => setAg({ ...ag, effectiveFrom: e.target.value })} placeholder="01 Jul 2026" /></Field>
+          <Field label="Effective from" required><DateInput value={ag.effectiveFrom} onChange={(v) => setAg({ ...ag, effectiveFrom: v })} /></Field>
           <Field label="Duration (months)"><TextInput type="number" value={ag.durationMonths} onChange={(e) => setAg({ ...ag, durationMonths: e.target.value })} placeholder="24" /></Field>
         </Row>
         <Field label="Commission (%)" hint="Your margin retained per trip"><TextInput type="number" value={ag.commission} onChange={(e) => setAg({ ...ag, commission: e.target.value })} placeholder="8" /></Field>

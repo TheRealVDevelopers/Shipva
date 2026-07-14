@@ -103,15 +103,15 @@ export function Overview() {
   ].filter((x): x is Alert => x !== null && x.days <= 60).sort((a, b) => a.days - b.days).slice(0, 5);
 
   return (
-    <PartnerLayout title="Overview" subtitle={`${BRAND.company} · June 2026`}>
+    <PartnerLayout title="Dashboard" subtitle={`${BRAND.company} · June 2026`}>
       <div className="space-y-6">
         {/* Owner/manager/team-leader see their team; workers see their own day */}
         {isLead ? <TeamMix /> : <MyDayStrip />}
 
         {/* Quick actions */}
         <div className="flex flex-wrap items-center gap-2">
-          <QuickAction to="/p/trips" icon={<Plus size={13} />} label="New trip / LR" />
-          <QuickAction to="/p/invoices" icon={<FileText size={13} />} label="Raise invoice" />
+          <QuickAction to="/p/trips" icon={<Plus size={13} />} label="New Trip" />
+          <QuickAction to="/p/invoices" icon={<FileText size={13} />} label="Add MIS" />
           <QuickAction to="/p/fleet" icon={<Users size={13} />} label="Add driver" />
           <QuickAction to="/p/expenses" icon={<Fuel size={13} />} label="Log fuel" />
         </div>
@@ -129,14 +129,14 @@ export function Overview() {
           <CardHeader title="Trips by status" subtitle="Where every trip stands right now" action={<Link to="/p/trips" className="text-xs font-bold text-primary-600">All trips →</Link>} />
           <CardBody>
             <div className="grid grid-cols-3 gap-3">
-              <Link to="/p/trips?f=Scheduled" className="rounded-xl bg-sky-50 p-4 ring-1 ring-inset ring-sky-100 transition hover:-translate-y-0.5">
+              <Link to="/p/trips?f=Upcoming" className="rounded-xl bg-sky-50 p-4 ring-1 ring-inset ring-sky-100 transition hover:-translate-y-0.5">
                 <div className="text-2xl font-extrabold text-sky-700">{scheduled}</div>
-                <div className="text-xs font-bold text-sky-600">Scheduled</div>
+                <div className="text-xs font-bold text-sky-600">Upcoming</div>
                 <div className="mt-0.5 text-[10px] text-neutral-500">assigned, not started</div>
               </Link>
-              <Link to="/p/trips?f=Ongoing" className="rounded-xl bg-primary-50 p-4 ring-1 ring-inset ring-primary-100 transition hover:-translate-y-0.5">
+              <Link to="/p/trips?f=In Transit" className="rounded-xl bg-primary-50 p-4 ring-1 ring-inset ring-primary-100 transition hover:-translate-y-0.5">
                 <div className="text-2xl font-extrabold text-primary-700">{ongoing}</div>
-                <div className="text-xs font-bold text-primary-600">Ongoing</div>
+                <div className="text-xs font-bold text-primary-600">In Transit</div>
                 <div className="mt-0.5 text-[10px] text-neutral-500">loading → in transit → POD</div>
               </Link>
               <Link to="/p/trips?f=Completed" className="rounded-xl bg-emerald-50 p-4 ring-1 ring-inset ring-emerald-100 transition hover:-translate-y-0.5">

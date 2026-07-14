@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { Button } from './Button.js';
+import { isoToLabel, labelToIso } from '../../lib/format.js';
 
 export function Modal({
   open, onClose, title, subtitle, children, onSubmit, submitLabel = 'Save', submitDisabled, wide,
@@ -45,12 +46,21 @@ export function Modal({
   );
 }
 
-export function Field({ label, children, hint }: { label: string; children: ReactNode; hint?: string }) {
+/** A labelled form field. `required` marks it with a red asterisk; `error`
+ *  shows the validation message in place of the hint. */
+export function Field({ label, children, hint, required, error }: {
+  label: string; children: ReactNode;
+  hint?: string | undefined; required?: boolean | undefined; error?: string | undefined;
+}) {
   return (
     <label className="block">
-      <span className="text-xs font-bold text-neutral-700">{label}</span>
+      <span className="text-xs font-bold text-neutral-700">
+        {label}{required && <span className="ml-0.5 text-rose-500" aria-hidden="true">*</span>}
+      </span>
       <div className="mt-1">{children}</div>
-      {hint && <p className="mt-1 text-[11px] text-neutral-400">{hint}</p>}
+      {error
+        ? <p className="mt-1 text-[11px] font-semibold text-rose-600">{error}</p>
+        : hint && <p className="mt-1 text-[11px] text-neutral-400">{hint}</p>}
     </label>
   );
 }
@@ -59,6 +69,22 @@ const inputCls = 'w-full rounded-lg bg-white px-3 py-2 text-sm text-neutral-900 
 
 export function TextInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props} className={`${inputCls} ${props.className ?? ''}`} />;
+}
+
+/** Native calendar picker that reads & writes a readable label ("01 Jul 2026"),
+ *  so stored dates stay human-readable in documents and exports. */
+export function DateInput({ value, onChange, ...rest }: {
+  value: string; onChange: (label: string) => void;
+} & Omit<React.InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'type'>) {
+  return (
+    <input
+      {...rest}
+      type="date"
+      value={labelToIso(value)}
+      onChange={(e) => onChange(isoToLabel(e.target.value))}
+      className={`${inputCls} ${rest.className ?? ''}`}
+    />
+  );
 }
 
 export function Select({ children, ...props }: React.SelectHTMLAttributes<HTMLSelectElement>) {

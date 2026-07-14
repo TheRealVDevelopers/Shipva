@@ -69,10 +69,10 @@ export function Team() {
       const { tempPassword } = await inviteMember({ name: f.name, email: f.email, phone: f.phone, role: f.role, pages: f.pages, ...(leaderUid ? { leaderUid } : {}) });
       setCreated({ email: f.email.trim(), tempPassword });
       setF(EMPTY); setInvite(false);
-      push({ title: 'Member added', body: `${f.name} can now sign in.`, tone: 'success' });
+      push({ title: 'Employee added', body: `${f.name} can now sign in.`, tone: 'success' });
     } catch (ex) {
       const code = (ex as { code?: string })?.code ?? '';
-      push({ title: "Couldn't add member", body: code.includes('email-already-in-use') ? 'That email already has an account.' : 'Please try again.', tone: 'warning' });
+      push({ title: "Couldn't add employee", body: code.includes('email-already-in-use') ? 'That email already has an account.' : 'Please try again.', tone: 'warning' });
     } finally { setBusy(false); }
   }
 
@@ -83,16 +83,16 @@ export function Team() {
           <div className="flex items-center gap-3">
             <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/10"><UserCog size={18} /></span>
             <div>
-              <div className="text-sm font-extrabold">{visible.length} {isTL ? 'POC' : 'team member'}{visible.length === 1 ? '' : 's'}</div>
+              <div className="text-sm font-extrabold">{visible.length} {isTL ? 'POC' : 'employee'}{visible.length === 1 ? '' : 's'}</div>
               <div className="text-xs text-primary-200">{isTL ? 'Your sub-team — add POCs and assign them routes' : 'Each person signs in with their own email & password'}</div>
             </div>
           </div>
-          {canManage && <Button size="sm" variant="secondary" onClick={() => { setF(EMPTY); setInvite(true); }}><Plus size={13} /> {isTL ? 'Add POC' : 'Add member'}</Button>}
+          {canManage && <Button size="sm" variant="secondary" onClick={() => { setF(EMPTY); setInvite(true); }}><Plus size={13} /> {isTL ? 'Add POC' : 'Add Employee'}</Button>}
         </div>
 
         {!canManage && (
           <div className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900 ring-1 ring-inset ring-amber-100">
-            Only an owner, manager or team leader can add members or change permissions.
+            Only an owner, manager or team leader can add employees or change permissions.
           </div>
         )}
 
@@ -147,7 +147,7 @@ export function Team() {
       </div>
 
       {/* Invite */}
-      <Modal open={invite} onClose={() => setInvite(false)} title="Add team member" subtitle="Creates a login and assigns page access" onSubmit={submitInvite} submitLabel={busy ? 'Creating…' : 'Create account'} submitDisabled={!f.name.trim() || !f.email.trim() || busy} wide>
+      <Modal open={invite} onClose={() => setInvite(false)} title={isTL ? 'Add POC' : 'Add Employee'} subtitle="Creates a login and assigns page access" onSubmit={submitInvite} submitLabel={busy ? 'Creating…' : 'Create account'} submitDisabled={!f.name.trim() || !f.email.trim() || busy} wide>
         <Row>
           <Field label="Full name"><TextInput value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="Prakash Nayak" /></Field>
           <Field label="Phone"><TextInput value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} placeholder="+91 99011 22001" /></Field>
@@ -173,7 +173,7 @@ export function Team() {
       </Modal>
 
       {/* Show temp password after creating */}
-      <Modal open={!!created} onClose={() => setCreated(null)} title="Account created" subtitle="Share these one-time details with the member" submitLabel="Done" onSubmit={() => setCreated(null)}>
+      <Modal open={!!created} onClose={() => setCreated(null)} title="Account created" subtitle="Share these one-time details with the employee" submitLabel="Done" onSubmit={() => setCreated(null)}>
         <div className="space-y-3">
           <p className="text-sm text-neutral-600">They sign in with the temporary password below, then set their own password on first login.</p>
           <CopyRow label="Email" value={created?.email ?? ''} />

@@ -27,6 +27,39 @@ export function dateTime(iso: string): string {
   });
 }
 
+/** "2026-07-01" → "01 Jul 2026". Empty in, empty out. */
+export function isoToLabel(iso: string): string {
+  if (!iso) return '';
+  const d = new Date(`${iso}T00:00:00`);
+  return Number.isNaN(d.getTime())
+    ? ''
+    : d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+/** "01 Jul 2026" (or "1 Jul") → "2026-07-01", for an <input type="date">.
+ *  Labels without a year are assumed to be in the current year. */
+export function labelToIso(label: string): string {
+  const s = label.trim();
+  if (!s) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const d = new Date(/\d{4}/.test(s) ? s : `${s} ${new Date().getFullYear()}`);
+  if (Number.isNaN(d.getTime())) return '';
+  // Use local parts — toISOString() would shift the day across timezones.
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/** Today as "2026-07-14" in local time (never use toISOString() — it's UTC and
+ *  shifts the day for IST). */
+export function todayIso(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/** Today as a readable label — "14 Jul 2026". */
+export const todayFullLabel = (): string => isoToLabel(todayIso());
+
 /** ISO string + reference epoch (ms) → "2h ago" / "just now". */
 export function relativeTime(iso: string, now: number): string {
   const diffMs = now - new Date(iso).getTime();

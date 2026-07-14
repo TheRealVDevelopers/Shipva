@@ -9,10 +9,14 @@ import { Card } from '../../components/ui/Card.js';
 import { KpiCard } from '../../components/ui/KpiCard.js';
 import { Badge, type BadgeTone } from '../../components/ui/Badge.js';
 import { Button } from '../../components/ui/Button.js';
-import { Modal, Field, TextInput, Select, Row } from '../../components/ui/Modal.js';
-import { rupees } from '../../lib/format.js';
+import { Modal, Field, TextInput, DateInput, Select, Row } from '../../components/ui/Modal.js';
+import { rupees, todayFullLabel } from '../../lib/format.js';
+import {
+  nameError, phoneError, aadhaarError, licenceError, vehicleRegError,
+  requiredError, positiveError, normalizePhone, allClear,
+} from '../../lib/validate.js';
 import { osCounters, type Trip, type TripPoint, type TripStatus } from '../../lib/mocks.js';
-import { useStore, todayLabel } from '../../lib/store.js';
+import { useStore } from '../../lib/store.js';
 import { useAuth } from '../../lib/auth.js';
 import { watchMembers, teamOf, type Member } from '../../lib/members.js';
 import { useNotify } from '../../lib/notify.js';
@@ -28,24 +32,24 @@ const TRIP_BADGE: Record<TripStatus, { label: string; tone: BadgeTone }> = {
   closed: { label: 'Closed', tone: 'success' },
 };
 
-const FILTERS = ['All', 'Scheduled', 'Ongoing', 'Completed'] as const;
+const FILTERS = ['All', 'Upcoming', 'In Transit', 'Completed'] as const;
 type Filter = (typeof FILTERS)[number];
 
 function matchesFilter(status: TripStatus, filter: Filter): boolean {
   if (filter === 'All') return true;
-  if (filter === 'Scheduled') return status === 'assigned';
+  if (filter === 'Upcoming') return status === 'assigned';       // assigned, not started
   if (filter === 'Completed') return status === 'closed';
-  return status !== 'assigned' && status !== 'closed';
+  return status !== 'assigned' && status !== 'closed';           // In Transit: loading → POD
 }
 
 interface PointDraft { label: string; mapUrl: string }
 const blankPoint = (): PointDraft => ({ label: '', mapUrl: '' });
 const EMPTY = {
   mode: 'single' as 'single' | 'multi',
-  driver: '', vehicleReg: '', customer: '', material: '', weight: '', freight: '', handledBy: '',
+  date: '', driver: '', vehicleReg: '', customer: '', material: '', weight: '', freight: '', handledBy: '',
 };
 const NEW_CUST = { name: '', phone: '', city: '' };
-const NEW_DRIVER = { name: '', phone: '', vehicleReg: '' };
+const NEW_DRIVER = { name: '', phone: '', vehicleReg: '', aadhaar: '', licenseNo: '' };
 
 export function Trips() {
   const { trips, drivers, trucks, customers, savedPoints, addTrip, addSavedPoint, addCustomer, addDriver, advanceTrip } = useStore();
@@ -62,11 +66,14 @@ export function Trips() {
   const [f, setF] = useState(EMPTY);
   const [pts, setPts] = useState<PointDraft[]>([blankPoint(), blankPoint()]);
   const [trackId, setTrackId] = useState<string | null>(null);
+  const [tried, setTried] = useState(false);
   // inline add
   const [custAdd, setCustAdd] = useState(false);
   const [newCust, setNewCust] = useState(NEW_CUST);
+  const [custTried, setCustTried] = useState(false);
   const [drvAdd, setDrvAdd] = useState(false);
   const [newDriver, setNewDriver] = useState(NEW_DRIVER);
+  const [drvTried, setDrvTried] = useState(false);
 
   useEffect(() => { if (canAssign) return watchMembers((l) => setMembers(l.filter((m) => m.status === 'active'))); }, [canAssign]);
   // Owner/manager can hand a trip to anyone; a Team Leader only to their POCs (or themselves).
@@ -82,9 +89,11 @@ export function Trips() {
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF({ ...f, [k]: e.target.value });
 
   function resetForm() {
-    setF({ ...EMPTY, handledBy: member?.uid ?? '' });
+    setF({ ...EMPTY, date: todayFullLabel(), handledBy: member?.uid ?? '' });
     setPts([blankPoint(), blankPoint()]);
-    setCustAdd(false); setNewCust(NEW_CUST); setDrvAdd(false); setNewDriver(NEW_DRIVER);
+    setTried(false);
+    setCustAdd(false); setNewCust(NEW_CUST); setCustTried(false);
+    setDrvAdd(false); setNewDriver(NEW_DRIVER); setDrvTried(false);
   }
   function setMode(mode: 'single' | 'multi') {
     if (mode === 'single' && pts.length > 2) setPts([pts[0]!, pts[pts.length - 1]!]);
@@ -105,8 +114,20 @@ export function Trips() {
   const removeStop = (i: number) => setPts((prev) => prev.filter((_, idx) => idx !== i));
 
   const activePts = f.mode === 'single' ? pts.slice(0, 2) : pts;
-  const valid = activePts[0]?.label.trim() && activePts[activePts.length - 1]?.label.trim()
-    && f.driver && f.vehicleReg && Number(f.freight) > 0;
+
+  // Every field is mandatory before a trip can be saved. Errors only surface
+  // once the user has tried to save, so the form doesn't open covered in red.
+  const errs = {
+    date: requiredError(f.date, 'Trip date'),
+    driver: requiredError(f.driver, 'Driver'),
+    vehicleReg: requiredError(f.vehicleReg, 'Vehicle'),
+    customer: requiredError(f.customer, 'Transporter'),
+    material: requiredError(f.material, 'Material'),
+    weight: positiveError(f.weight, 'Weight'),
+    freight: positiveError(f.freight, 'Freight'),
+  };
+  const pointsOk = activePts.every((p) => p.label.trim());
+  const valid = allClear(errs) && pointsOk;
 
   function pointLabel(i: number, total: number): string {
     if (i === 0) return 'Pickup point';
@@ -114,24 +135,46 @@ export function Trips() {
     return `Point ${i}`;
   }
 
+  // Inline "new transporter" — company name, city and phone are all required.
+  const custErrs = {
+    name: requiredError(newCust.name, 'Transporter name'),
+    city: nameError(newCust.city, { label: 'City' }),
+    phone: phoneError(newCust.phone),
+  };
   function saveNewCustomer() {
+    setCustTried(true);
+    if (!allClear(custErrs)) return;
     const name = newCust.name.trim();
-    if (!name) return;
-    addCustomer({ name, gstin: '', phone: newCust.phone.trim(), city: newCust.city.trim(), ratePerKmPaise: 0 });
+    addCustomer({ name, gstin: '', phone: normalizePhone(newCust.phone), city: newCust.city.trim(), ratePerKmPaise: 0 });
     setF({ ...f, customer: name });
-    setCustAdd(false); setNewCust(NEW_CUST);
-    push({ title: 'Customer added', body: `${name} added and selected.`, tone: 'success' });
+    setCustAdd(false); setNewCust(NEW_CUST); setCustTried(false);
+    push({ title: 'Transporter added', body: `${name} added and selected.`, tone: 'success' });
   }
+
+  // Inline "new driver" — the client requires Aadhaar + driving licence up front.
+  const drvErrs = {
+    name: nameError(newDriver.name, { label: 'Driver name' }),
+    phone: phoneError(newDriver.phone),
+    aadhaar: aadhaarError(newDriver.aadhaar),
+    licenseNo: licenceError(newDriver.licenseNo),
+    vehicleReg: vehicleRegError(newDriver.vehicleReg, { required: false }),
+  };
   function saveNewDriver() {
+    setDrvTried(true);
+    if (!allClear(drvErrs)) return;
     const name = newDriver.name.trim();
-    if (!name) return;
-    addDriver({ name, phone: newDriver.phone.trim(), vehicleReg: newDriver.vehicleReg.trim(), vehicleType: 'truck', dutyStatus: 'online', kycStatus: 'pending', ratingAvg: 0, tripsToday: 0 });
+    addDriver({
+      name, phone: normalizePhone(newDriver.phone), vehicleReg: newDriver.vehicleReg.trim().toUpperCase(),
+      vehicleType: 'truck', dutyStatus: 'online', kycStatus: 'pending', ratingAvg: 0, tripsToday: 0,
+      aadhaar: newDriver.aadhaar.trim(), licenseNo: newDriver.licenseNo.trim().toUpperCase(),
+    });
     setF({ ...f, driver: name });
-    setDrvAdd(false); setNewDriver(NEW_DRIVER);
+    setDrvAdd(false); setNewDriver(NEW_DRIVER); setDrvTried(false);
     push({ title: 'Driver added', body: `${name} added and selected.`, tone: 'success' });
   }
 
   function submit() {
+    setTried(true);
     if (!valid) return;
     const clean = activePts.map((p) => p.label.trim()).filter(Boolean);
     const points: TripPoint[] = activePts
@@ -145,12 +188,11 @@ export function Trips() {
       ? { uid: handler.uid, name: handler.name, leaderUid: teamOf(handler) }
       : (member ? { uid: member.uid, name: member.name, leaderUid: teamOf(member) } : undefined);
     addTrip({
-      date: todayLabel(), from: clean[0]!, to: clean[clean.length - 1]!,
+      date: f.date, from: clean[0]!, to: clean[clean.length - 1]!,
       driver: f.driver, vehicleReg: f.vehicleReg,
-      material: f.material || 'General goods', weightKg: Number(f.weight) || 0,
+      material: f.material.trim(), weightKg: Number(f.weight),
       freightPaise: Math.round(Number(f.freight) * 100), status: 'assigned', ewayBill: false,
-      points, stepIndex: 0,
-      ...(f.customer ? { customer: f.customer } : {}),
+      points, stepIndex: 0, customer: f.customer,
     }, handledBy);
     push({ title: 'Trip created', body: `${clean[0]} → ${clean[clean.length - 1]} · assigned to ${f.driver}.`, tone: 'success' });
     resetForm(); setOpen(false);
@@ -188,7 +230,7 @@ export function Trips() {
                 <Search size={13} className="text-neutral-400" />
                 <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search VR / LR / route / driver" className="w-44 bg-transparent text-xs text-neutral-700 outline-none placeholder:text-neutral-400" />
               </div>
-              <Button size="sm" onClick={() => { resetForm(); setOpen(true); }}><Plus size={13} /> New trip</Button>
+              <Button size="sm" onClick={() => { resetForm(); setOpen(true); }}><Plus size={13} /> New Trip</Button>
             </div>
           </div>
 
@@ -260,10 +302,19 @@ export function Trips() {
       </datalist>
 
       {/* New trip */}
-      <Modal open={open} onClose={() => setOpen(false)} title="New trip" subtitle="A VR ID is generated automatically" onSubmit={submit} submitLabel="Create trip" submitDisabled={!valid} wide>
+      <Modal open={open} onClose={() => setOpen(false)} title="New Trip" subtitle="A VR ID is generated automatically" onSubmit={submit} submitLabel="Create trip" wide>
         <div className="rounded-xl bg-primary-50 px-4 py-3 text-sm text-primary-900 ring-1 ring-inset ring-primary-100">
           <span className="font-bold">VR ID</span> &amp; <span className="font-bold">LR</span> are auto-assigned on save. Add Google Maps links so the driver can tap to navigate.
         </div>
+        {tried && !valid && (
+          <div className="rounded-lg bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 ring-1 ring-inset ring-rose-100">
+            Every field marked <span className="text-rose-500">*</span> is required — fill the highlighted ones to save.
+          </div>
+        )}
+
+        <Field label="Trip date" required error={tried ? errs.date : undefined}>
+          <DateInput value={f.date} onChange={(v) => setF({ ...f, date: v })} />
+        </Field>
 
         <Field label="Trip type">
           <div className="grid grid-cols-2 gap-2">
@@ -282,14 +333,15 @@ export function Trips() {
               <div className="mb-1.5 flex items-center justify-between">
                 <span className="inline-flex items-center gap-1.5 text-xs font-bold text-neutral-700">
                   <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-black text-white ${i === 0 ? 'bg-emerald-500' : i === activePts.length - 1 ? 'bg-rose-500' : 'bg-primary-500'}`}>{i + 1}</span>
-                  {pointLabel(i, activePts.length)}
+                  {pointLabel(i, activePts.length)}<span className="text-rose-500" aria-hidden="true">*</span>
                 </span>
                 {f.mode === 'multi' && activePts.length > 2 && (
                   <button type="button" onClick={() => removeStop(i)} className="text-neutral-400 hover:text-rose-500" title="Remove this point"><Trash2 size={14} /></button>
                 )}
               </div>
               <TextInput list="saved-points" value={p.label} onChange={(e) => setPoint(i, { label: e.target.value })}
-                placeholder={i === 0 ? 'e.g. JP Nagar (type to see saved points)' : 'Location name'} />
+                placeholder={i === 0 ? 'e.g. JP Nagar (type to see saved points)' : 'Location name'}
+                className={tried && !p.label.trim() ? 'ring-2 ring-rose-300' : ''} />
               <div className="mt-2 flex items-center gap-2">
                 <MapPin size={13} className="shrink-0 text-neutral-400" />
                 <TextInput value={p.mapUrl} onChange={(e) => setPoint(i, { mapUrl: e.target.value })} placeholder="Paste Google Maps link (optional)" className="text-xs" />
@@ -304,7 +356,7 @@ export function Trips() {
         </div>
 
         {/* Driver + inline add */}
-        <Field label="Driver">
+        <Field label="Driver" required error={tried ? errs.driver : undefined}>
           <div className="flex items-center gap-2">
             <Select value={f.driver} onChange={set('driver')}>
               <option value="">Select driver</option>
@@ -314,44 +366,65 @@ export function Trips() {
           </div>
         </Field>
         {drvAdd && (
-          <div className="rounded-xl bg-primary-50/60 p-3 ring-1 ring-inset ring-primary-100">
+          <div className="space-y-3 rounded-xl bg-primary-50/60 p-3 ring-1 ring-inset ring-primary-100">
+            <p className="text-[11px] font-bold text-primary-800">New driver — Aadhaar &amp; driving licence are required.</p>
             <Row>
-              <Field label="Driver name"><TextInput value={newDriver.name} onChange={(e) => setNewDriver({ ...newDriver, name: e.target.value })} placeholder="Suresh" autoFocus /></Field>
-              <Field label="Phone"><TextInput value={newDriver.phone} onChange={(e) => setNewDriver({ ...newDriver, phone: e.target.value })} placeholder="+91 …" /></Field>
+              <Field label="Driver name" required error={drvTried ? drvErrs.name : undefined}>
+                <TextInput value={newDriver.name} onChange={(e) => setNewDriver({ ...newDriver, name: e.target.value })} placeholder="Suresh" autoFocus />
+              </Field>
+              <Field label="Phone" required error={drvTried ? drvErrs.phone : undefined}>
+                <TextInput inputMode="numeric" maxLength={10} value={newDriver.phone} onChange={(e) => setNewDriver({ ...newDriver, phone: e.target.value })} placeholder="9876543210" />
+              </Field>
             </Row>
-            <div className="mt-2 flex items-center gap-2">
-              <TextInput value={newDriver.vehicleReg} onChange={(e) => setNewDriver({ ...newDriver, vehicleReg: e.target.value })} placeholder="Vehicle reg (optional)" className="text-xs" />
-              <button type="button" onClick={saveNewDriver} disabled={!newDriver.name.trim()} className="shrink-0 rounded-lg bg-primary-500 px-3 py-2 text-xs font-bold text-white hover:bg-primary-600 disabled:opacity-50">Add driver</button>
+            <Row>
+              <Field label="Aadhaar" required error={drvTried ? drvErrs.aadhaar : undefined}>
+                <TextInput inputMode="numeric" value={newDriver.aadhaar} onChange={(e) => setNewDriver({ ...newDriver, aadhaar: e.target.value })} placeholder="4821 7745 9012" />
+              </Field>
+              <Field label="Driving licence" required error={drvTried ? drvErrs.licenseNo : undefined}>
+                <TextInput value={newDriver.licenseNo} onChange={(e) => setNewDriver({ ...newDriver, licenseNo: e.target.value.toUpperCase() })} placeholder="KA0120200012345" />
+              </Field>
+            </Row>
+            <div className="flex items-end gap-2">
+              <Field label="Vehicle number" hint="Optional" error={drvTried ? drvErrs.vehicleReg : undefined}>
+                <TextInput value={newDriver.vehicleReg} onChange={(e) => setNewDriver({ ...newDriver, vehicleReg: e.target.value.toUpperCase() })} placeholder="KA01AB1234" />
+              </Field>
+              <button type="button" onClick={saveNewDriver} className="mb-0.5 shrink-0 rounded-lg bg-primary-500 px-3 py-2 text-xs font-bold text-white hover:bg-primary-600">Add driver</button>
             </div>
           </div>
         )}
 
-        <Field label="Vehicle">
+        <Field label="Vehicle" required error={tried ? errs.vehicleReg : undefined}>
           <Select value={f.vehicleReg} onChange={set('vehicleReg')}>
             <option value="">Select vehicle</option>
             {trucks.map((t) => <option key={t.id} value={t.reg}>{t.reg}</option>)}
           </Select>
         </Field>
 
-        {/* Customer + inline add */}
-        <Field label="Customer" hint="Optional — who this consignment is for">
+        {/* Transporter + inline add */}
+        <Field label="Transporter" required error={tried ? errs.customer : undefined}>
           <div className="flex items-center gap-2">
             <Select value={f.customer} onChange={set('customer')}>
-              <option value="">Select customer</option>
+              <option value="">Select transporter</option>
               {customers.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
             </Select>
             <button type="button" onClick={() => setCustAdd((v) => !v)} className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-white px-2.5 py-2 text-xs font-bold text-primary-600 ring-1 ring-inset ring-primary-200 hover:bg-primary-50"><UserPlus size={13} /> New</button>
           </div>
         </Field>
         {custAdd && (
-          <div className="rounded-xl bg-primary-50/60 p-3 ring-1 ring-inset ring-primary-100">
+          <div className="space-y-3 rounded-xl bg-primary-50/60 p-3 ring-1 ring-inset ring-primary-100">
             <Row>
-              <Field label="Customer name"><TextInput value={newCust.name} onChange={(e) => setNewCust({ ...newCust, name: e.target.value })} placeholder="Acme Traders" autoFocus /></Field>
-              <Field label="City"><TextInput value={newCust.city} onChange={(e) => setNewCust({ ...newCust, city: e.target.value })} placeholder="Hosur" /></Field>
+              <Field label="Transporter name" required error={custTried ? custErrs.name : undefined}>
+                <TextInput value={newCust.name} onChange={(e) => setNewCust({ ...newCust, name: e.target.value })} placeholder="Acme Traders" autoFocus />
+              </Field>
+              <Field label="City" required error={custTried ? custErrs.city : undefined}>
+                <TextInput value={newCust.city} onChange={(e) => setNewCust({ ...newCust, city: e.target.value })} placeholder="Hosur" />
+              </Field>
             </Row>
-            <div className="mt-2 flex items-center gap-2">
-              <TextInput value={newCust.phone} onChange={(e) => setNewCust({ ...newCust, phone: e.target.value })} placeholder="Phone (optional)" className="text-xs" />
-              <button type="button" onClick={saveNewCustomer} disabled={!newCust.name.trim()} className="shrink-0 rounded-lg bg-primary-500 px-3 py-2 text-xs font-bold text-white hover:bg-primary-600 disabled:opacity-50">Add customer</button>
+            <div className="flex items-end gap-2">
+              <Field label="Phone" required error={custTried ? custErrs.phone : undefined}>
+                <TextInput inputMode="numeric" maxLength={10} value={newCust.phone} onChange={(e) => setNewCust({ ...newCust, phone: e.target.value })} placeholder="9876543210" />
+              </Field>
+              <button type="button" onClick={saveNewCustomer} className="mb-0.5 shrink-0 rounded-lg bg-primary-500 px-3 py-2 text-xs font-bold text-white hover:bg-primary-600">Add transporter</button>
             </div>
           </div>
         )}
@@ -365,10 +438,16 @@ export function Trips() {
           </Field>
         )}
 
-        <Field label="Material"><TextInput value={f.material} onChange={set('material')} placeholder="Steel coils" /></Field>
+        <Field label="Material" required error={tried ? errs.material : undefined}>
+          <TextInput value={f.material} onChange={set('material')} placeholder="Steel coils" />
+        </Field>
         <Row>
-          <Field label="Weight (kg)"><TextInput type="number" value={f.weight} onChange={set('weight')} placeholder="6800" /></Field>
-          <Field label="Freight (₹)"><TextInput type="number" value={f.freight} onChange={set('freight')} placeholder="5200" /></Field>
+          <Field label="Weight (kg)" required error={tried ? errs.weight : undefined}>
+            <TextInput type="number" value={f.weight} onChange={set('weight')} placeholder="6800" />
+          </Field>
+          <Field label="Freight (₹)" required error={tried ? errs.freight : undefined}>
+            <TextInput type="number" value={f.freight} onChange={set('freight')} placeholder="5200" />
+          </Field>
         </Row>
       </Modal>
 

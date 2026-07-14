@@ -6,7 +6,7 @@ import { KpiCard } from '../../components/ui/KpiCard.js';
 import { Table, THead, Th, TBody, Tr, Td } from '../../components/ui/Table.js';
 import { Badge } from '../../components/ui/Badge.js';
 import { Button } from '../../components/ui/Button.js';
-import { Modal, Field, TextInput, Row } from '../../components/ui/Modal.js';
+import { Modal, Field, TextInput, DateInput, Row } from '../../components/ui/Modal.js';
 import { rupees } from '../../lib/format.js';
 import { useStore, todayLabel, type Customer } from '../../lib/store.js';
 import { printAgreement } from '../../lib/agreement.js';
@@ -50,10 +50,10 @@ export function Customers() {
   }
 
   return (
-    <PartnerLayout title="Customers" subtitle="Consignors, agreements, rate contracts & dues">
+    <PartnerLayout title="Transporters" subtitle="Consignors, agreements, rate contracts & dues">
       <div className="space-y-6">
         <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <KpiCard label="Customers" value={String(customers.length)} hint="on file" tone="primary" icon={<Building2 size={14} />} />
+          <KpiCard label="Transporters" value={String(customers.length)} hint="on file" tone="primary" icon={<Building2 size={14} />} />
           <KpiCard label="Agreements pending" value={String(noAgreement)} hint="not created yet" tone="danger" icon={<FileWarning size={14} />} />
           <KpiCard label="Total dues" value={rupees(outstanding)} hint="receivable" tone="accent" />
           <KpiCard label="Rate contracts" value={String(customers.filter((c) => c.ratePerKmPaise > 0).length)} hint="agreed ₹/km" tone="success" icon={<Receipt size={14} />} />
@@ -61,8 +61,8 @@ export function Customers() {
 
         <Card>
           <div className="flex items-center justify-between border-b border-neutral-100 px-5 py-3">
-            <h3 className="text-sm font-semibold text-neutral-800">Customer directory</h3>
-            <Button size="sm" onClick={() => setOpen(true)}><Plus size={13} /> Add customer</Button>
+            <h3 className="text-sm font-semibold text-neutral-800">Transporter directory</h3>
+            <Button size="sm" onClick={() => setOpen(true)}><Plus size={13} /> Add transporter</Button>
           </div>
           <Table>
             <THead>
@@ -103,8 +103,8 @@ export function Customers() {
         </Card>
       </div>
 
-      {/* Add customer */}
-      <Modal open={open} onClose={() => setOpen(false)} title="Add customer" subtitle="A consignor you bill" onSubmit={submit} submitLabel="Add customer" submitDisabled={!valid}>
+      {/* Add transporter */}
+      <Modal open={open} onClose={() => setOpen(false)} title="Add transporter" subtitle="A consignor you bill" onSubmit={submit} submitLabel="Add transporter" submitDisabled={!valid}>
         <Field label="Company name"><TextInput value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="Bharat Steels" /></Field>
         <Row>
           <Field label="GSTIN"><TextInput value={f.gstin} onChange={(e) => setF({ ...f, gstin: e.target.value })} placeholder="29ABCDE1234F1Z5" /></Field>
@@ -120,7 +120,7 @@ export function Customers() {
       <Modal open={!!agFor} onClose={() => setAgFor(null)} title={`Agreement · ${agFor?.name ?? ''}`} subtitle="Fill the terms, then download"
         onSubmit={() => saveAgreement(true)} submitLabel="Create & download">
         <Row>
-          <Field label="Effective from"><TextInput value={ag.effectiveFrom} onChange={(e) => setAg({ ...ag, effectiveFrom: e.target.value })} placeholder="01 Jul 2026" /></Field>
+          <Field label="Effective from" required><DateInput value={ag.effectiveFrom} onChange={(v) => setAg({ ...ag, effectiveFrom: v })} /></Field>
           <Field label="Duration (months)"><TextInput type="number" value={ag.durationMonths} onChange={(e) => setAg({ ...ag, durationMonths: e.target.value })} placeholder="12" /></Field>
         </Row>
         <Field label="Freight rate (₹/km)" hint="Optional"><TextInput type="number" value={ag.rate} onChange={(e) => setAg({ ...ag, rate: e.target.value })} placeholder="42" /></Field>

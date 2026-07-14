@@ -57,7 +57,7 @@ export function Invoices() {
   }
 
   return (
-    <PartnerLayout title="Invoices" subtitle="GST billing & receivables">
+    <PartnerLayout title="Vendor Payments" subtitle="GST billing & receivables">
       <div className="space-y-6">
         <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <KpiCard label="Outstanding" value={rupees(outstanding)} hint="to collect" tone="danger" />
@@ -68,7 +68,7 @@ export function Invoices() {
 
         <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <Card className="lg:col-span-2">
-            <CardHeader title="Invoices" subtitle="GST-compliant, per trip/client" action={<Button size="sm" onClick={() => setOpen(true)}><Plus size={13} /> New invoice</Button>} />
+            <CardHeader title="Vendor Payments" subtitle="GST-compliant, per trip/client" action={<Button size="sm" onClick={() => setOpen(true)}><Plus size={13} /> Add MIS</Button>} />
             <Table>
               <THead>
                 <Tr>
@@ -133,10 +133,10 @@ export function Invoices() {
         </section>
       </div>
 
-      <Modal open={open} onClose={() => setOpen(false)} title="New invoice" subtitle="GST is auto-calculated" onSubmit={submit} submitLabel="Create invoice" submitDisabled={!valid}>
-        <Field label="Client">
+      <Modal open={open} onClose={() => setOpen(false)} title="Add MIS" subtitle="GST is auto-calculated" onSubmit={submit} submitLabel="Add MIS" submitDisabled={!valid}>
+        <Field label="Transporter">
           <Select value={f.client} onChange={(e) => setF({ ...f, client: e.target.value })}>
-            <option value="">Select client</option>
+            <option value="">Select transporter</option>
             {customers.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
           </Select>
         </Field>
