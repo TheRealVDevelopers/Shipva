@@ -117,10 +117,14 @@ export function Trips() {
 
   // Every field is mandatory before a trip can be saved. Errors only surface
   // once the user has tried to save, so the form doesn't open covered in red.
+  // A truck may only go on a trip once an owner/manager has verified its papers.
+  const vehicleNotVerified = !!f.vehicleReg && !trucks.find((t) => t.reg === f.vehicleReg)?.verified;
+  const unverifiedTrucks = trucks.filter((t) => !t.verified).length;
   const errs = {
     date: requiredError(f.date, 'Trip date'),
     driver: requiredError(f.driver, 'Driver'),
-    vehicleReg: requiredError(f.vehicleReg, 'Vehicle'),
+    vehicleReg: requiredError(f.vehicleReg, 'Vehicle')
+      || (vehicleNotVerified ? "This truck's documents aren't verified yet" : ''),
     customer: requiredError(f.customer, 'Transporter'),
     material: requiredError(f.material, 'Material'),
     weight: positiveError(f.weight, 'Weight'),
@@ -393,10 +397,15 @@ export function Trips() {
           </div>
         )}
 
-        <Field label="Vehicle" required error={tried ? errs.vehicleReg : undefined}>
+        <Field label="Vehicle" required error={tried ? errs.vehicleReg : undefined}
+          hint={unverifiedTrucks > 0 ? `${unverifiedTrucks} truck${unverifiedTrucks === 1 ? '' : 's'} can't be picked until their documents are verified in Trucks & Drivers.` : undefined}>
           <Select value={f.vehicleReg} onChange={set('vehicleReg')}>
             <option value="">Select vehicle</option>
-            {trucks.map((t) => <option key={t.id} value={t.reg}>{t.reg}</option>)}
+            {trucks.map((t) => (
+              <option key={t.id} value={t.reg} disabled={!t.verified}>
+                {t.reg}{t.verified ? '' : ' — documents not verified'}
+              </option>
+            ))}
           </Select>
         </Field>
 

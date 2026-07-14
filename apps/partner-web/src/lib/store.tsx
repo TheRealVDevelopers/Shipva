@@ -158,8 +158,13 @@ interface StoreApi extends StoreShape {
   addCustomer: (c: Omit<Customer, 'id' | 'outstandingPaise'>) => void;
   addDriver: (d: Omit<FleetDriver, 'id'>) => void;
   addTruck: (t: Omit<Truck, 'id'>) => void;
-  setDriverDocs: (id: string, docs: Pick<FleetDriver, 'aadhaar' | 'licenseNo' | 'licenseExpiry' | 'aadhaarImg' | 'licenseImg'>) => void;
+  setDriverDocs: (id: string, docs: Pick<FleetDriver, 'aadhaar' | 'licenseNo' | 'licenseExpiry' | 'pan' | 'aadhaarImg' | 'licenseImg' | 'panImg'>) => void;
   setTruckDocs: (id: string, docs: Pick<Truck, 'rc' | 'insuranceNo' | 'insuranceExpiry' | 'fitnessNo' | 'fitnessExpiry' | 'rcImg' | 'insuranceImg' | 'fitnessImg'>) => void;
+  /** Edit / remove fleet records (delete is owner-manager only, per rules). */
+  updateDriver: (id: string, patch: Partial<FleetDriver>) => void;
+  updateTruck: (id: string, patch: Partial<Truck>) => void;
+  deleteDriver: (id: string) => void;
+  deleteTruck: (id: string) => void;
   setCustomerAgreement: (id: string, a: Agreement) => void;
   setAttachedAgreement: (id: string, a: Agreement) => void;
   addStaff: (s: Omit<Staff, 'id'>) => void;
@@ -381,13 +386,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     void trucksCol.add(t);
   }, []);
 
-  const setDriverDocs = useCallback((id: string, docs: Pick<FleetDriver, 'aadhaar' | 'licenseNo' | 'licenseExpiry' | 'aadhaarImg' | 'licenseImg'>) => {
+  const setDriverDocs = useCallback((id: string, docs: Pick<FleetDriver, 'aadhaar' | 'licenseNo' | 'licenseExpiry' | 'pan' | 'aadhaarImg' | 'licenseImg' | 'panImg'>) => {
     void driversCol.update(id, docs);
   }, []);
 
   const setTruckDocs = useCallback((id: string, docs: Pick<Truck, 'rc' | 'insuranceNo' | 'insuranceExpiry' | 'fitnessNo' | 'fitnessExpiry' | 'rcImg' | 'insuranceImg' | 'fitnessImg'>) => {
     void trucksCol.update(id, docs);
   }, []);
+
+  const updateDriver = useCallback((id: string, patch: Partial<FleetDriver>) => { void driversCol.update(id, patch); }, []);
+  const updateTruck = useCallback((id: string, patch: Partial<Truck>) => { void trucksCol.update(id, patch); }, []);
+  const deleteDriver = useCallback((id: string) => { void driversCol.remove(id); }, []);
+  const deleteTruck = useCallback((id: string) => { void trucksCol.remove(id); }, []);
 
   const setCustomerAgreement = useCallback((id: string, a: Agreement) => {
     void customersCol.update(id, { agreement: a });
@@ -421,11 +431,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     ...s, trips, tours, customers, drivers, trucks, attached,
     addTrip, updateTripStatus, advanceTrip, addSavedPoint, addInvoice, markInvoicePaid, addExpense, addFuelLog,
     addExpenseCategory, addRequest, resolveRequest, addCustomer, addDriver, addTruck,
-    setDriverDocs, setTruckDocs, setCustomerAgreement, setAttachedAgreement, addStaff, addAttached, recordOwnerPayment, addTour, updateTour, runPayroll, reset,
+    setDriverDocs, setTruckDocs, updateDriver, updateTruck, deleteDriver, deleteTruck,
+    setCustomerAgreement, setAttachedAgreement, addStaff, addAttached, recordOwnerPayment, addTour, updateTour, runPayroll, reset,
   }), [s, trips, tours, customers, drivers, trucks, attached,
     addTrip, updateTripStatus, advanceTrip, addSavedPoint, addInvoice, markInvoicePaid, addExpense, addFuelLog,
     addExpenseCategory, addRequest, resolveRequest, addCustomer, addDriver, addTruck,
-    setDriverDocs, setTruckDocs, setCustomerAgreement, setAttachedAgreement, addStaff, addAttached, recordOwnerPayment, addTour, updateTour, runPayroll, reset]);
+    setDriverDocs, setTruckDocs, updateDriver, updateTruck, deleteDriver, deleteTruck,
+    setCustomerAgreement, setAttachedAgreement, addStaff, addAttached, recordOwnerPayment, addTour, updateTour, runPayroll, reset]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

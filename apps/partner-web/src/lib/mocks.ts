@@ -40,9 +40,11 @@ export interface FleetDriver {
   /** Vendor (truck owner) this driver belongs to; empty/undefined = own fleet. */
   vendor?: string | undefined;
   /** Compliance documents — empty/undefined = not provided. */
-  aadhaar?: string; licenseNo?: string; licenseExpiry?: string;
+  aadhaar?: string; licenseNo?: string; licenseExpiry?: string; pan?: string;
   /** Uploaded document images (compressed data-URLs; real storage with backend). */
-  aadhaarImg?: string | undefined; licenseImg?: string | undefined;
+  aadhaarImg?: string | undefined; licenseImg?: string | undefined; panImg?: string | undefined;
+  /** Set by an owner/manager once they've checked the documents. */
+  verified?: boolean | undefined; verifiedBy?: string | undefined; verifiedOn?: string | undefined;
 }
 export const fleetDrivers: FleetDriver[] = [
   { id: 'fd1', name: 'Ramesh Yadav', phone: '+91 99020 51001', vehicleReg: 'KA01C5521', vehicleType: 'truck', dutyStatus: 'on_job', kycStatus: 'verified', ratingAvg: 4.7, tripsToday: 2, aadhaar: '4821 7745 9012', licenseNo: 'KA0120200012345', licenseExpiry: '14 Aug 2031' },
@@ -63,6 +65,9 @@ export interface Truck {
   rc?: string; insuranceNo?: string; insuranceExpiry?: string; fitnessNo?: string; fitnessExpiry?: string;
   /** Uploaded document images (compressed data-URLs; real storage with backend). */
   rcImg?: string | undefined; insuranceImg?: string | undefined; fitnessImg?: string | undefined;
+  /** Set by an owner/manager once they've checked the documents. A truck can't
+   *  be assigned to a trip until this is true. */
+  verified?: boolean | undefined; verifiedBy?: string | undefined; verifiedOn?: string | undefined;
 }
 export const trucks: Truck[] = [
   { id: 't1', reg: 'KA01C5521', type: 'truck', feet: '17ft Truck', capacityKg: 7000, status: 'on_trip', docsOk: true, rc: 'RC-KA01C5521', insuranceNo: 'INS-778812', insuranceExpiry: '02 Sep 2026', fitnessNo: 'FIT-4521', fitnessExpiry: '30 Jul 2026' },

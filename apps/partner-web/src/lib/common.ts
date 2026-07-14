@@ -6,7 +6,7 @@
  * member may read/create/update; only admins delete. See firestore.rules.
  */
 import {
-  addDoc, collection, doc, onSnapshot, query, updateDoc,
+  addDoc, collection, deleteDoc, doc, onSnapshot, query, updateDoc,
 } from 'firebase/firestore';
 import { db } from '../firebase.js';
 import type { FleetDriver, Truck } from './mocks.js';
@@ -48,6 +48,10 @@ function sharedCollection<T extends { id: string }>(name: string) {
     /** Patch a record in place. */
     async update(id: string, patch: Partial<T>): Promise<void> {
       await updateDoc(doc(db, name, id), clean({ ...(patch as Record<string, unknown>) }));
+    },
+    /** Delete a record. Rules allow this for owner/manager only. */
+    async remove(id: string): Promise<void> {
+      await deleteDoc(doc(db, name, id));
     },
     /** One-time bulk seed (owner) — preserves listed order via descending stamps. */
     async seed(items: T[]): Promise<void> {
