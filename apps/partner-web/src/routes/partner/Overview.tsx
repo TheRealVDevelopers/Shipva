@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import {
   IndianRupee, TrendingUp, Wallet, Navigation, Fuel, AlertTriangle, ArrowRight,
@@ -13,7 +14,7 @@ import { MyDayStrip } from '../../components/MyDay.js';
 import { TeamMix } from '../../components/TeamMix.js';
 import { useAuth } from '../../lib/auth.js';
 import { rupees } from '../../lib/format.js';
-import { months6, revenueSeries, expenseSeries, sparks, type TripStatus } from '../../lib/mocks.js';
+import { type TripStatus } from '../../lib/mocks.js';
 import { useStore } from '../../lib/store.js';
 import { BRAND } from '../../lib/brand.js';
 
@@ -83,9 +84,29 @@ export function Overview() {
     { label: 'Other', value: catTotal(['Loading', 'Misc']), color: 'var(--sx-neutral-400)' },
   ].filter((s) => s.value > 0);
 
-  // Anchor the trend chart's current (last) month to live totals.
-  const revSeries = [...revenueSeries.slice(0, 5), revenue];
-  const expSeries = [...expenseSeries.slice(0, 5), expenseTotal];
+  // Real last-6-month trend. This used to splice five months of invented
+  // history onto one live figure, which made a brand-new account look like a
+  // going concern. Revenue is bucketed from the trips' own timestamps; nothing
+  // is drawn for a month that has no data.
+  const { monthLabels, revSeries, expSeries } = useMemo(() => {
+    const now = new Date();
+    const buckets = Array.from({ length: 6 }, (_, i) => {
+      const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
+      return { label: d.toLocaleDateString('en-IN', { month: 'short' }), y: d.getFullYear(), m: d.getMonth() };
+    });
+    const inBucket = (ms: number | undefined, b: { y: number; m: number }) => {
+      if (!ms) return false;
+      const d = new Date(ms);
+      return d.getFullYear() === b.y && d.getMonth() === b.m;
+    };
+    return {
+      monthLabels: buckets.map((b) => b.label),
+      revSeries: buckets.map((b) => trips.filter((t) => inBucket(t.createdAtMs, b)).reduce((s, t) => s + t.freightPaise, 0)),
+      // Expenses/fuel/payroll carry no timestamp yet (they're still local and
+      // move to Firestore next), so only the current month can be placed.
+      expSeries: buckets.map((_, i) => (i === 5 ? expenseTotal : 0)),
+    };
+  }, [trips, expenseTotal]);
 
   const unpaid = invoices.filter((i) => i.status !== 'paid').sort((a, b) => b.totalPaise - a.totalPaise);
 
@@ -118,10 +139,12 @@ export function Overview() {
 
         {/* Hero KPIs */}
         <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 stagger">
-          <StatCard label="Revenue" value={inr(revenue)} icon={<IndianRupee size={16} />} tone="primary" hint="gross freight" spark={sparks.revenue} />
-          <StatCard label="Net profit" value={inr(profit)} icon={<TrendingUp size={16} />} tone="success" hint={`${marginPct}% margin`} spark={sparks.profit} />
-          <StatCard label="Outstanding" value={inr(outstanding)} icon={<Wallet size={16} />} tone="danger" hint="receivables" spark={sparks.outstanding} />
-          <StatCard label="Active trips" value={String(activeTrips)} icon={<Navigation size={16} />} tone="accent" hint={`${trips.length} total`} spark={sparks.trips} />
+          {/* No sparklines: the old ones were hardcoded demo curves that bore no
+              relation to the figure above them. */}
+          <StatCard label="Revenue" value={inr(revenue)} icon={<IndianRupee size={16} />} tone="primary" hint="gross freight" />
+          <StatCard label="Net profit" value={inr(profit)} icon={<TrendingUp size={16} />} tone="success" hint={`${marginPct}% margin`} />
+          <StatCard label="Outstanding" value={inr(outstanding)} icon={<Wallet size={16} />} tone="danger" hint="receivables" />
+          <StatCard label="Active trips" value={String(activeTrips)} icon={<Navigation size={16} />} tone="accent" hint={`${trips.length} total`} />
         </section>
 
         {/* Trips by status — one-glance view of where every trip stands */}
@@ -173,7 +196,7 @@ export function Overview() {
             <CardHeader title="Revenue vs expense" subtitle="Trend · current month is live" />
             <CardBody>
               <BarPairChart
-                labels={months6} a={revSeries} b={expSeries}
+                labels={monthLabels} a={revSeries} b={expSeries}
                 aColor="var(--sx-primary-500)" aLabel="Revenue"
                 bColor="var(--sx-accent-500)" bLabel="Expense"
                 format={inr}

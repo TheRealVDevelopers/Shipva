@@ -15,7 +15,7 @@ import {
   nameError, phoneError, aadhaarError, licenceError, vehicleRegError,
   requiredError, positiveError, normalizePhone, allClear,
 } from '../../lib/validate.js';
-import { osCounters, isVerified, type Trip, type TripPoint, type TripStatus } from '../../lib/mocks.js';
+import { isVerified, type Trip, type TripPoint, type TripStatus } from '../../lib/mocks.js';
 import { useStore, stageOf, type Customer } from '../../lib/store.js';
 import { useAuth } from '../../lib/auth.js';
 import { watchMembers, teamOf, type Member } from '../../lib/members.js';
@@ -80,6 +80,9 @@ export function Trips() {
     .filter((t) => (q ? `${t.lr} ${t.vrId ?? ''} ${t.driver} ${t.from} ${t.to} ${t.customer ?? ''} ${t.ownerName ?? ''}`.toLowerCase().includes(q.toLowerCase()) : true));
   const active = trips.filter((t) => t.status !== 'closed').length;
   const freightTotal = trips.reduce((s, t) => s + t.freightPaise, 0);
+  // Real month-to-date count — this used to be a hardcoded demo number.
+  const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).getTime();
+  const tripsMtd = trips.filter((t) => (t.createdAtMs ?? 0) >= monthStart).length;
   const tracked = trackId ? trips.find((t) => t.id === trackId) ?? null : null;
 
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF({ ...f, [k]: e.target.value });
@@ -199,7 +202,7 @@ export function Trips() {
       <div className="space-y-6">
         <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <KpiCard label="Active trips" value={String(active)} hint="in progress" tone="primary" />
-          <KpiCard label="Trips · MTD" value={String(osCounters.tripsMtd)} hint="this month" tone="accent" />
+          <KpiCard label="Trips · MTD" value={String(tripsMtd)} hint="this month" tone="accent" />
           <KpiCard label="Freight billed" value={rupees(freightTotal)} hint="recent" tone="success" />
           <KpiCard label="POD pending" value={String(trips.filter((t) => t.status === 'pod_pending').length)} hint="need proof" tone="danger" />
         </section>

@@ -27,7 +27,7 @@ export function Payroll() {
           <KpiCard label="Payroll · this cycle" value={rupees(netTotal)} hint={`${payroll.length} people`} tone="primary" />
           <KpiCard label="Pending payout" value={rupees(dueTotal)} hint="to settle" tone="danger" />
           <KpiCard label="Bhatta (allowance)" value={rupees(bhattaTotal)} hint="trip allowances" tone="accent" />
-          <KpiCard label="Last settled" value={rupees(payouts[0]!.amountPaise)} hint={payouts[0]!.on} tone="success" />
+          <KpiCard label="Last settled" value={payouts[0] ? rupees(payouts[0].amountPaise) : '—'} hint={payouts[0]?.on ?? 'nothing settled yet'} tone="success" />
         </section>
 
         <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -70,6 +70,9 @@ export function Payroll() {
           <Card>
             <CardHeader title="Recent payouts" subtitle="Settled cycles" action={<Wallet size={15} className="text-primary-500" />} />
             <CardBody className="space-y-2.5">
+              {payouts.length === 0 && (
+                <p className="py-6 text-center text-xs text-neutral-400">No settled cycles yet — run payroll and they'll appear here.</p>
+              )}
               {payouts.map((p) => (
                 <div key={p.id} className="flex items-center justify-between rounded-lg bg-neutral-50 px-3 py-2.5 ring-1 ring-inset ring-neutral-100">
                   <div>

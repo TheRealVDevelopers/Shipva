@@ -46,14 +46,7 @@ export interface FleetDriver {
   /** Set by an owner/manager once they've checked the documents. */
   verified?: boolean | undefined; verifiedBy?: string | undefined; verifiedOn?: string | undefined;
 }
-export const fleetDrivers: FleetDriver[] = [
-  { id: 'fd1', name: 'Ramesh Yadav', phone: '+91 99020 51001', vehicleReg: 'KA01C5521', vehicleType: 'truck', dutyStatus: 'on_job', kycStatus: 'verified', ratingAvg: 4.7, tripsToday: 2, aadhaar: '4821 7745 9012', licenseNo: 'KA0120200012345', licenseExpiry: '14 Aug 2031' },
-  { id: 'fd2', name: 'Sathish Reddy', phone: '+91 99020 51002', vehicleReg: 'KA02D9930', vehicleType: 'pickup', dutyStatus: 'online', kycStatus: 'verified', ratingAvg: 4.5, tripsToday: 3, aadhaar: '7712 3390 1188', licenseNo: 'KA0220190098765', licenseExpiry: '02 Mar 2029' },
-  { id: 'fd3', name: 'Naveen Kumar', phone: '+91 99020 51003', vehicleReg: 'KA51F1207', vehicleType: 'tempo', dutyStatus: 'online', kycStatus: 'verified', ratingAvg: 4.8, tripsToday: 1, aadhaar: '5590 2211 8834', licenseNo: 'KA5120210044556', licenseExpiry: '19 Nov 2030' },
-  { id: 'fd4', name: 'Iqbal Sharief', phone: '+91 99020 51004', vehicleReg: 'KA09H8810', vehicleType: 'truck', dutyStatus: 'on_job', kycStatus: 'verified', ratingAvg: 4.4, tripsToday: 1, aadhaar: '3321 9087 4455' },
-  { id: 'fd5', name: 'Babu Rao', phone: '+91 99020 51005', vehicleReg: 'KA05K2245', vehicleType: 'mini_truck', dutyStatus: 'offline', kycStatus: 'pending', ratingAvg: 0, tripsToday: 0 },
-  { id: 'fd6', name: 'Lokesh M', phone: '+91 99020 51006', vehicleReg: 'KA03P7782', vehicleType: 'tempo', dutyStatus: 'online', kycStatus: 'verified', ratingAvg: 4.6, tripsToday: 4, licenseNo: 'KA0320200077889', licenseExpiry: '08 Jul 2028' },
-];
+// Demo drivers removed — the org is live, drivers come from Firestore only.
 
 export interface Truck {
   id: string; reg: string; type: VehicleType; capacityKg: number; status: 'available' | 'on_trip' | 'maintenance'; docsOk: boolean;
@@ -69,13 +62,7 @@ export interface Truck {
    *  be assigned to a trip until this is true. */
   verified?: boolean | undefined; verifiedBy?: string | undefined; verifiedOn?: string | undefined;
 }
-export const trucks: Truck[] = [
-  { id: 't1', reg: 'KA01C5521', type: 'truck', feet: '17ft Truck', capacityKg: 7000, status: 'on_trip', docsOk: true, rc: 'RC-KA01C5521', insuranceNo: 'INS-778812', insuranceExpiry: '02 Sep 2026', fitnessNo: 'FIT-4521', fitnessExpiry: '30 Jul 2026' },
-  { id: 't2', reg: 'KA02D9930', type: 'pickup', feet: '14ft Truck', capacityKg: 2500, status: 'available', docsOk: true, rc: 'RC-KA02D9930', insuranceNo: 'INS-556677', insuranceExpiry: '14 Aug 2026', fitnessNo: 'FIT-2210', fitnessExpiry: '21 Dec 2026' },
-  { id: 't3', reg: 'KA51F1207', type: 'tempo', feet: '10ft Truck', capacityKg: 1500, status: 'available', docsOk: true, rc: 'RC-KA51F1207', insuranceNo: 'INS-334455', insuranceExpiry: '11 Jan 2027', fitnessNo: 'FIT-9087', fitnessExpiry: '19 Jul 2026' },
-  { id: 't4', reg: 'KA09H8810', type: 'truck', feet: '17ft Truck', capacityKg: 7000, status: 'on_trip', docsOk: false, rc: 'RC-KA09H8810', insuranceNo: 'INS-221100', insuranceExpiry: '16 Jul 2026' },
-  { id: 't5', reg: 'KA05K2245', type: 'mini_truck', feet: '8ft Truck', capacityKg: 850, status: 'maintenance', docsOk: false, rc: 'RC-KA05K2245' },
-];
+// Demo trucks removed — the org is live, trucks come from Firestore only.
 
 /**
  * Was this record's paperwork signed off? Trucks and drivers that predate the
@@ -121,11 +108,9 @@ export const earnings: EarningRow[] = [
   { id: 'GN-8049', from: 'Bengaluru', to: 'Hyderabad', driverName: 'Iqbal Sharief', vehicleType: 'truck', payoutPaise: 2640000, date: '22 Jun' },
 ];
 
-export const payouts = [
-  { id: 'PO-204', period: '16–22 Jun', amountPaise: 4820000, status: 'settled', on: '23 Jun' },
-  { id: 'PO-198', period: '9–15 Jun', amountPaise: 5140000, status: 'settled', on: '16 Jun' },
-  { id: 'PO-191', period: '2–8 Jun', amountPaise: 3960000, status: 'settled', on: '9 Jun' },
-];
+// Demo payout history removed — settled cycles will appear here once payroll is
+// actually run. Consumers must handle this being empty.
+export const payouts: { id: string; period: string; amountPaise: number; status: string; on: string }[] = [];
 
 /* ===================== Transporter OS datasets ===================== */
 
@@ -219,59 +204,23 @@ export interface Trip {
   leaderUid?: string;
   createdAtMs?: number;
 }
-export const trips: Trip[] = [
-  { lr: 'LR-24817', vrId: '204KJ7HB9', date: '27 Jun', from: 'Peenya', to: 'Hosur', driver: 'Ramesh Yadav', vehicleReg: 'KA01C5521', material: 'Steel coils', weightKg: 6800, freightPaise: 3400000, status: 'in_transit', ewayBill: true,
-    customer: 'Bharat Steels', stepIndex: 4,
-    points: [
-      { label: 'Peenya', mapUrl: 'https://maps.google.com/?q=Peenya+Industrial+Area+Bengaluru' },
-      { label: 'Electronic City', mapUrl: 'https://maps.google.com/?q=Electronic+City+Bengaluru' },
-      { label: 'Hosur', mapUrl: 'https://maps.google.com/?q=Hosur+Tamil+Nadu' },
-    ] },
-  { lr: 'LR-24816', vrId: '118PQ2MK4', date: '27 Jun', from: 'Whitefield', to: 'KR Puram', driver: 'Iqbal Sharief', vehicleReg: 'KA09H8810', material: 'Electronics', weightKg: 2400, freightPaise: 1500000, status: 'loading', ewayBill: true,
-    customer: 'Vexa Polymers', stepIndex: 2,
-    points: [
-      { label: 'Whitefield', mapUrl: 'https://maps.google.com/?q=Whitefield+Bengaluru' },
-      { label: 'KR Puram', mapUrl: 'https://maps.google.com/?q=KR+Puram+Bengaluru' },
-    ] },
-  { lr: 'LR-24814', vrId: '093ZC5RT7', date: '26 Jun', from: 'Bengaluru', to: 'Chennai', driver: 'Sathish Reddy', vehicleReg: 'KA02D9930', material: 'Polymer granules', weightKg: 2200, freightPaise: 4400000, status: 'at_drop', ewayBill: true },
-  { lr: 'LR-24811', vrId: '077YB1LX3', date: '26 Jun', from: 'Peenya', to: 'Yelahanka', driver: 'Lokesh M', vehicleReg: 'KA03P7782', material: 'FMCG cartons', weightKg: 1400, freightPaise: 1200000, status: 'pod_pending', ewayBill: false },
-  { lr: 'LR-24805', vrId: '051KA9WD2', date: '25 Jun', from: 'Bengaluru', to: 'Hyderabad', driver: 'Iqbal Sharief', vehicleReg: 'KA09H8810', material: 'Machinery', weightKg: 6500, freightPaise: 5800000, status: 'closed', ewayBill: true, remark: 'Delivered on time, POD collected.' },
-  { lr: 'LR-24802', vrId: '042MN3PP8', date: '24 Jun', from: 'Whitefield', to: 'Mysuru', driver: 'Naveen Kumar', vehicleReg: 'KA51F1207', material: 'Textiles', weightKg: 1500, freightPaise: 1900000, status: 'closed', ewayBill: true },
-];
+// The demo trips that used to live here were removed when the org went live —
+// real trips only. Nothing should fabricate business records.
 
 export type InvoiceStatus = 'paid' | 'pending' | 'overdue';
 export interface Invoice {
   no: string; client: string; date: string; dueDate: string;
   basePaise: number; gstPaise: number; totalPaise: number; status: InvoiceStatus;
 }
-export const invoices: Invoice[] = [
-  { no: 'INV-1042', client: 'Bharat Steels', date: '26 Jun', dueDate: '11 Jul', basePaise: 3400000, gstPaise: 612000, totalPaise: 4012000, status: 'pending' },
-  { no: 'INV-1041', client: 'Vexa Polymers', date: '25 Jun', dueDate: '10 Jul', basePaise: 4400000, gstPaise: 792000, totalPaise: 5192000, status: 'pending' },
-  { no: 'INV-1038', client: 'FreshCo Dairy', date: '22 Jun', dueDate: '7 Jul', basePaise: 5800000, gstPaise: 1044000, totalPaise: 6844000, status: 'paid' },
-  { no: 'INV-1035', client: 'Leela Stores', date: '18 Jun', dueDate: '3 Jul', basePaise: 1200000, gstPaise: 216000, totalPaise: 1416000, status: 'overdue' },
-  { no: 'INV-1030', client: 'Deccan Freight', date: '12 Jun', dueDate: '27 Jun', basePaise: 1900000, gstPaise: 342000, totalPaise: 2242000, status: 'overdue' },
-  { no: 'INV-1028', client: 'Bharat Steels', date: '10 Jun', dueDate: '25 Jun', basePaise: 2800000, gstPaise: 504000, totalPaise: 3304000, status: 'paid' },
-];
+// Demo invoices removed — real billing only.
 
 export interface Expense { date: string; tripLr: string; category: string; amountPaise: number; note: string }
-export const expenses: Expense[] = [
-  { date: '27 Jun', tripLr: 'LR-24817', category: 'Toll', amountPaise: 42000, note: 'NICE Road + Hosur' },
-  { date: '27 Jun', tripLr: 'LR-24817', category: 'Loading', amountPaise: 25000, note: 'Peenya hamali' },
-  { date: '26 Jun', tripLr: 'LR-24814', category: 'Toll', amountPaise: 118000, note: 'BLR–Chennai NH' },
-  { date: '26 Jun', tripLr: 'LR-24811', category: 'RTO/Police', amountPaise: 15000, note: 'Checkpost' },
-  { date: '25 Jun', tripLr: 'LR-24805', category: 'Repairs', amountPaise: 86000, note: 'Tyre replacement' },
-  { date: '24 Jun', tripLr: 'LR-24802', category: 'Misc', amountPaise: 12000, note: 'Driver bhatta top-up' },
-];
+// Demo expenses removed.
 
 export interface FuelLog {
   date: string; reg: string; km: number; litres: number; ratePaise: number; costPaise: number; expectedPaise: number; ok: boolean;
 }
-export const fuelLogs: FuelLog[] = [
-  { date: '27 Jun', reg: 'KA01C5521', km: 96, litres: 34, ratePaise: 9200, costPaise: 312800, expectedPaise: 294400, ok: true },
-  { date: '26 Jun', reg: 'KA02D9930', km: 348, litres: 41, ratePaise: 9200, costPaise: 377200, expectedPaise: 358800, ok: true },
-  { date: '25 Jun', reg: 'KA09H8810', km: 575, litres: 82, ratePaise: 9200, costPaise: 754400, expectedPaise: 644000, ok: false },
-  { date: '24 Jun', reg: 'KA51F1207', km: 142, litres: 20, ratePaise: 9200, costPaise: 184000, expectedPaise: 174800, ok: true },
-];
+// Demo fuel logs removed.
 
 export interface VehicleDoc { reg: string; doc: string; expires: string; dueInDays: number }
 export const vehicleDocs: VehicleDoc[] = [
@@ -289,21 +238,10 @@ export const vehicleDocs: VehicleDoc[] = [
 
 export type StaffRole = 'manager' | 'supervisor' | 'accountant';
 export interface Staff { id: string; name: string; role: StaffRole; phone: string; since: string; scope: string }
-export const staff: Staff[] = [
-  { id: 's1', name: 'Prakash Nayak', role: 'manager', phone: '+91 99011 22001', since: 'Jan 2025', scope: 'All operations' },
-  { id: 's2', name: 'Sunil D.', role: 'supervisor', phone: '+91 99011 22002', since: 'Mar 2025', scope: 'Peenya pool' },
-  { id: 's3', name: 'Farhan A.', role: 'supervisor', phone: '+91 99011 22003', since: 'Jun 2025', scope: 'Hosur pool' },
-  { id: 's4', name: 'Lakshmi R.', role: 'accountant', phone: '+91 99011 22004', since: 'Feb 2025', scope: 'Billing & payroll' },
-];
+// Demo staff removed — real people live in orgMembers (Team & Roles).
 
 export type PayStatus = 'paid' | 'due';
 export interface PayrollLine {
   id: string; name: string; role: string; basePaise: number; bhattaPaise: number; deductionsPaise: number; netPaise: number; status: PayStatus;
 }
-export const payroll: PayrollLine[] = [
-  { id: 'p1', name: 'Ramesh Yadav', role: 'Driver', basePaise: 1800000, bhattaPaise: 620000, deductionsPaise: 150000, netPaise: 2270000, status: 'due' },
-  { id: 'p2', name: 'Sathish Reddy', role: 'Driver', basePaise: 1800000, bhattaPaise: 540000, deductionsPaise: 90000, netPaise: 2250000, status: 'due' },
-  { id: 'p3', name: 'Naveen Kumar', role: 'Driver', basePaise: 1700000, bhattaPaise: 480000, deductionsPaise: 60000, netPaise: 2120000, status: 'paid' },
-  { id: 'p4', name: 'Sunil D.', role: 'Supervisor', basePaise: 2600000, bhattaPaise: 0, deductionsPaise: 120000, netPaise: 2480000, status: 'due' },
-  { id: 'p5', name: 'Lakshmi R.', role: 'Accountant', basePaise: 2400000, bhattaPaise: 0, deductionsPaise: 110000, netPaise: 2290000, status: 'paid' },
-];
+// Demo payroll removed.

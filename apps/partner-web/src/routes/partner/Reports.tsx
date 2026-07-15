@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { IndianRupee, TrendingUp, Wallet, Percent } from 'lucide-react';
 import { PartnerLayout } from '../../components/layout/PartnerLayout.js';
 import { Card, CardHeader, CardBody } from '../../components/ui/Card.js';
@@ -6,7 +7,6 @@ import { Table, THead, Th, TBody, Tr, Td } from '../../components/ui/Table.js';
 import { BarPairChart, Donut, HBar } from '../../components/ui/Charts.js';
 import { VehicleArt } from '../../components/art.js';
 import { rupees } from '../../lib/format.js';
-import { months6, revenueSeries, expenseSeries } from '../../lib/mocks.js';
 import { useStore } from '../../lib/store.js';
 
 export function Reports() {
@@ -19,8 +19,26 @@ export function Reports() {
   const expenseTotal = expenses.reduce((s, e) => s + e.amountPaise, 0) + fuelActual + payrollTotal;
   const profit = revenue - expenseTotal;
   const marginPct = revenue > 0 ? Math.round((profit / revenue) * 100) : 0;
-  const revSeries = [...revenueSeries.slice(0, 5), revenue];
-  const expSeries = [...expenseSeries.slice(0, 5), expenseTotal];
+  // Real last-6-month buckets — this used to splice in five months of invented
+  // history. Revenue comes from the trips' own timestamps; expenses aren't
+  // timestamped yet (they move to Firestore next), so only this month is placed.
+  const { monthLabels, revSeries, expSeries } = useMemo(() => {
+    const now = new Date();
+    const buckets = Array.from({ length: 6 }, (_, i) => {
+      const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
+      return { label: d.toLocaleDateString('en-IN', { month: 'short' }), y: d.getFullYear(), m: d.getMonth() };
+    });
+    const inBucket = (ms: number | undefined, b: { y: number; m: number }) => {
+      if (!ms) return false;
+      const d = new Date(ms);
+      return d.getFullYear() === b.y && d.getMonth() === b.m;
+    };
+    return {
+      monthLabels: buckets.map((b) => b.label),
+      revSeries: buckets.map((b) => trips.filter((t) => inBucket(t.createdAtMs, b)).reduce((s, t) => s + t.freightPaise, 0)),
+      expSeries: buckets.map((_, i) => (i === 5 ? expenseTotal : 0)),
+    };
+  }, [trips, expenseTotal]);
   const catTotal = (labels: string[]) => expenses.filter((e) => labels.includes(e.category)).reduce((s, e) => s + e.amountPaise, 0);
   const costSegments = [
     { label: 'Fuel', value: fuelActual, color: 'var(--sx-accent-500)' },
@@ -60,7 +78,7 @@ export function Reports() {
           <Card className="lg:col-span-2">
             <CardHeader title="Profit & loss" subtitle="Trend · current month is live" />
             <CardBody>
-              <BarPairChart labels={months6} a={revSeries} b={expSeries} aLabel="Revenue" bLabel="Expense" aColor="var(--sx-primary-500)" bColor="var(--sx-accent-500)" format={inr} />
+              <BarPairChart labels={monthLabels} a={revSeries} b={expSeries} aLabel="Revenue" bLabel="Expense" aColor="var(--sx-primary-500)" bColor="var(--sx-accent-500)" format={inr} />
             </CardBody>
           </Card>
           <Card>

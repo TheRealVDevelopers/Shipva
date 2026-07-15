@@ -7,15 +7,11 @@
  * without changing any page that consumes it.
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import {
-  invoices as seedInvoices, expenses as seedExpenses,
-  fuelLogs as seedFuelLogs, fleetDrivers as seedDrivers, trucks as seedTrucks,
-  payroll as seedPayroll, staff as seedStaff,
-  type Trip, type Invoice, type Expense, type FuelLog, type FleetDriver, type Truck,
-  type PayrollLine, type Staff, type TripStatus,
+import type {
+  Trip, Invoice, Expense, FuelLog, FleetDriver, Truck, PayrollLine, Staff, TripStatus,
 } from './mocks.js';
 import { tripSteps, statusFromStep } from './trip.js';
-import { watchTrips, addTripDoc, updateTripDoc, seedTripsFor } from './trips.js';
+import { watchTrips, addTripDoc, updateTripDoc } from './trips.js';
 import { watchToursFs, addTourDoc, updateTourDoc } from './tours.js';
 import { customersCol, driversCol, trucksCol, ownersCol } from './common.js';
 import { useAuth } from './auth.js';
@@ -108,12 +104,6 @@ export const STAGE_LABEL: Record<OnboardStage, string> = {
   active: 'Onboarded',
   rejected: 'Rejected',
 };
-const seedCustomers: Customer[] = [
-  { id: 'c1', name: 'Bharat Steels', gstin: '29AABCB1111C1Z9', phone: '+91 98450 10001', city: 'Hosur', ratePerKmPaise: 4200, outstandingPaise: 1180000, agreement: { createdOn: '12 Jun 2026', effectiveFrom: '01 Jun 2026', durationMonths: 12, ratePerKmPaise: 4200 } },
-  { id: 'c2', name: 'Vexa Polymers', gstin: '29AACCV2222D1Z8', phone: '+91 98450 10002', city: 'Chennai', ratePerKmPaise: 3800, outstandingPaise: 1357000 },
-  { id: 'c3', name: 'FreshCo Dairy', gstin: '36AADCF3333E1Z7', phone: '+91 98450 10003', city: 'Hyderabad', ratePerKmPaise: 5100, outstandingPaise: 0 },
-  { id: 'c4', name: 'Leela Stores', gstin: '29AAECL4444F1Z6', phone: '+91 98450 10004', city: 'Bengaluru', ratePerKmPaise: 3200, outstandingPaise: 113280 },
-];
 
 /** Whether an owner's identity documents have been checked. Separate from
  *  `stage`: KYC is "are these papers real", stage is "have they signed". */
@@ -171,11 +161,6 @@ export interface AttachedTruck {
  *  them as onboarded rather than freezing their ledger. */
 export const ownerStageOf = (a: AttachedTruck): OnboardStage => a.stage ?? 'active';
 export const kycOf = (a: AttachedTruck): KycState => a.kycStatus ?? 'pending';
-const seedAttached: AttachedTruck[] = [
-  { id: 'a1', owner: 'Deccan Freight', reg: 'KA25B4410', phone: '+91 90080 22001', balancePaise: 420000, trips: 6, agreement: { createdOn: '05 May 2026', effectiveFrom: '01 May 2026', durationMonths: 24, commissionPct: 8 } },
-  { id: 'a2', owner: 'Sri Sai Carriers', reg: 'AP16C7788', phone: '+91 90080 22002', balancePaise: 185000, trips: 3 },
-  { id: 'a3', owner: 'M. Khan (owner-driver)', reg: 'KA51D3321', phone: '+91 90080 22003', balancePaise: 0, trips: 9 },
-];
 
 /** Amazon relay tour — the client's operational trip format (maps 1:1 to their
  *  55-column tour sheet). Up to 4 facility stops per tour. */
@@ -225,15 +210,6 @@ export interface Tour {
 
 /** A remembered pickup/drop location, suggested while typing a new trip. */
 export interface SavedPoint { label: string; mapUrl?: string }
-const seedPoints: SavedPoint[] = [
-  { label: 'Peenya', mapUrl: 'https://maps.google.com/?q=Peenya+Industrial+Area+Bengaluru' },
-  { label: 'Whitefield', mapUrl: 'https://maps.google.com/?q=Whitefield+Bengaluru' },
-  { label: 'Electronic City', mapUrl: 'https://maps.google.com/?q=Electronic+City+Bengaluru' },
-  { label: 'JP Nagar', mapUrl: 'https://maps.google.com/?q=JP+Nagar+Bengaluru' },
-  { label: 'KR Puram' }, { label: 'Yelahanka' }, { label: 'Hebbal' }, { label: 'Hosur' },
-  { label: 'Bommasandra' }, { label: 'Nelamangala' },
-];
-
 /** A money/approval request a worker raises for the accountant to action. */
 export interface MoneyRequest {
   id: string; createdOn: string; raisedBy: string;
@@ -241,12 +217,9 @@ export interface MoneyRequest {
   title: string; note?: string; amountPaise?: number; tripLr?: string;
   status: 'pending' | 'approved' | 'rejected';
 }
-const seedRequests: MoneyRequest[] = [
-  { id: 'rq1', createdOn: '27 Jun', raisedBy: 'Supervisor · Peenya', kind: 'advance', title: 'Driver advance — Ramesh (Hosur trip)', amountPaise: 300000, tripLr: 'LR-24817', status: 'pending', note: 'Diesel + food advance for the run.' },
-  { id: 'rq2', createdOn: '26 Jun', raisedBy: 'Supervisor · Peenya', kind: 'expense', title: 'Tyre puncture repair — KA02D9930', amountPaise: 45000, status: 'pending' },
-];
-
-const seedCategories = ['Toll', 'RTO/Police', 'Loading', 'Repairs', 'Office', 'Misc'];
+/** Default expense categories. Not demo data — these are configuration, and the
+ *  team adds their own on top (see addExpenseCategory). */
+const DEFAULT_CATEGORIES = ['Toll', 'RTO/Police', 'Loading', 'Repairs', 'Office', 'Misc'];
 
 interface StoreShape {
   invoices: Invoice[];
@@ -307,47 +280,34 @@ interface StoreApi extends StoreShape {
   reset: () => void;
 }
 
-const KEY = 'shipva-partner-store-v2';
+/**
+ * Local blob key. Bumped to v3 when the demo data was retired: v2 holds the old
+ * fake invoices/expenses/payroll on every device that ever ran the app, and a
+ * new key is the only way to leave them behind — merging over a fresh seed would
+ * resurrect them. The old key is deleted on load.
+ */
+const KEY = 'sarva-partner-store-v3';
+const LEGACY_KEYS = ['shipva-partner-store-v2', 'trips-seeded-v1',
+  'ref-customers-seeded-v1', 'ref-drivers-seeded-v1', 'ref-trucks-seeded-v1', 'ref-owners-seeded-v1'];
 
+/** A brand-new org: no demo records, only the default expense categories (which
+ *  are configuration, not data). Nothing here fabricates business records — the
+ *  team's real data is the only data. */
 function seed(): StoreShape {
   return {
-    invoices: seedInvoices, expenses: seedExpenses, fuelLogs: seedFuelLogs,
-    payroll: seedPayroll, staff: seedStaff, savedPoints: seedPoints,
-    expenseCategories: seedCategories, requests: seedRequests,
+    invoices: [], expenses: [], fuelLogs: [], payroll: [], staff: [],
+    savedPoints: [], expenseCategories: [...DEFAULT_CATEGORIES], requests: [],
   };
 }
 
 function load(): StoreShape {
+  // Retire the demo-era blob and the one-time seeding flags.
+  try { LEGACY_KEYS.forEach((k) => localStorage.removeItem(k)); } catch { /* private mode */ }
   try {
     const raw = localStorage.getItem(KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as Record<string, unknown>;
-      // Reference data (customers/drivers/trucks/owners) now lives in Firestore —
-      // don't carry it in the local blob any more.
-      delete parsed.customers; delete parsed.drivers; delete parsed.trucks; delete parsed.attached;
-      return { ...seed(), ...parsed } as StoreShape;
-    }
+    if (raw) return { ...seed(), ...(JSON.parse(raw) as Record<string, unknown>) } as StoreShape;
   } catch { /* ignore corrupt cache */ }
   return seed();
-}
-
-/** The org's reference data as it last existed on THIS device (the owner's local
- *  additions plus the demo seed). Used exactly once to migrate into the shared
- *  Firestore collections so nothing the owner already entered disappears. */
-function readLegacyRefData(): { customers: Customer[]; drivers: FleetDriver[]; trucks: Truck[]; attached: AttachedTruck[] } {
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (raw) {
-      const j = JSON.parse(raw) as Partial<{ customers: Customer[]; drivers: FleetDriver[]; trucks: Truck[]; attached: AttachedTruck[] }>;
-      return {
-        customers: j.customers?.length ? j.customers : seedCustomers,
-        drivers: j.drivers?.length ? j.drivers : seedDrivers,
-        trucks: j.trucks?.length ? j.trucks : seedTrucks,
-        attached: j.attached?.length ? j.attached : seedAttached,
-      };
-    }
-  } catch { /* fall through to seed */ }
-  return { customers: seedCustomers, drivers: seedDrivers, trucks: seedTrucks, attached: seedAttached };
 }
 
 const Ctx = createContext<StoreApi | null>(null);
@@ -367,19 +327,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [s]);
 
   // Trips live in Firestore, scoped to the signed-in member (supervisors see
-  // only their own; owner/managers see all). One-time demo seed for the owner.
+  // only their own; owner/managers see all).
   useEffect(() => {
     if (!member) { setTrips([]); tripsRef.current = []; return; }
     const scope = { uid: member.uid, role: member.role, leaderUid: member.leaderUid || member.uid };
-    let seeded = false;
     return watchTrips(scope, (list) => {
       setTrips(list);
       tripsRef.current = list;
-      if (!seeded && list.length === 0 && member.role === 'owner' && !localStorage.getItem('trips-seeded-v1')) {
-        seeded = true;
-        localStorage.setItem('trips-seeded-v1', '1');
-        void seedTripsFor(scope);
-      }
     });
   }, [member?.uid, member?.role]);
 
@@ -405,7 +359,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // migrate whatever was in local storage (their additions + the demo seed) into
   // the shared collections, exactly once (guarded by the empty-collection check
   // plus a per-collection localStorage flag).
-  const legacyRef = useRef(readLegacyRefData());
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [drivers, setDrivers] = useState<FleetDriver[]>([]);
   const [trucks, setTrucks] = useState<Truck[]>([]);
@@ -417,19 +370,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setCustomers([]); setDrivers([]); setTrucks([]); setAttached([]); attachedRef.current = [];
       return;
     }
-    const isOwner = member.role === 'owner';
-    const legacy = legacyRef.current;
-    const seedOnce = (flag: string, empty: boolean, run: () => Promise<void>) => {
-      if (isOwner && empty && !localStorage.getItem(flag)) {
-        localStorage.setItem(flag, '1');
-        void run();
-      }
-    };
     const unsubs = [
-      customersCol.watch((l) => { setCustomers(l); seedOnce('ref-customers-seeded-v1', l.length === 0, () => customersCol.seed(legacy.customers)); }),
-      driversCol.watch((l) => { setDrivers(l); seedOnce('ref-drivers-seeded-v1', l.length === 0, () => driversCol.seed(legacy.drivers)); }),
-      trucksCol.watch((l) => { setTrucks(l); seedOnce('ref-trucks-seeded-v1', l.length === 0, () => trucksCol.seed(legacy.trucks)); }),
-      ownersCol.watch((l) => { setAttached(l); attachedRef.current = l; seedOnce('ref-owners-seeded-v1', l.length === 0, () => ownersCol.seed(legacy.attached)); }),
+      customersCol.watch(setCustomers),
+      driversCol.watch(setDrivers),
+      trucksCol.watch(setTrucks),
+      ownersCol.watch((l) => { setAttached(l); attachedRef.current = l; }),
     ];
     return () => unsubs.forEach((u) => u());
   }, [member?.uid, member?.role]);

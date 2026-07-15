@@ -53,12 +53,6 @@ function sharedCollection<T extends { id: string }>(name: string) {
     async remove(id: string): Promise<void> {
       await deleteDoc(doc(db, name, id));
     },
-    /** One-time bulk seed (owner) — preserves listed order via descending stamps. */
-    async seed(items: T[]): Promise<void> {
-      const base = Date.now();
-      await Promise.all(items.map((it, i) =>
-        addDoc(ref(), prep(it as Record<string, unknown>, base - i * 1000))));
-    },
   };
 }
 

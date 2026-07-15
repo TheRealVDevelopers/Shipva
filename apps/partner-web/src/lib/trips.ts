@@ -8,7 +8,6 @@ import {
 } from 'firebase/firestore';
 import { db } from '../firebase.js';
 import type { Trip, TripPoint, TripStatus } from './mocks.js';
-import { trips as seedTrips } from './mocks.js';
 import { genVrId } from './trip.js';
 
 interface Scope { uid: string; role: string; leaderUid?: string }
@@ -80,15 +79,3 @@ export async function updateTripDoc(id: string, patch: Partial<Trip>): Promise<v
   await updateDoc(doc(db, 'orgTrips', id), clean({ ...patch }));
 }
 
-/** One-time demo seed: writes the sample trips to the owner's account if empty. */
-export async function seedTripsFor(scope: Scope): Promise<void> {
-  const base = Date.now();
-  await Promise.all(seedTrips.map((t, i) =>
-    addDoc(collection(db, 'orgTrips'), clean({
-      ...t,
-      ownerUid: scope.uid,
-      ownerName: scope.role === 'owner' ? 'Owner' : '',
-      leaderUid: scope.uid,
-      createdAtMs: base - i * 1000,
-    }))));
-}
