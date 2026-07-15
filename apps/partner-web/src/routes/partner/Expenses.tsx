@@ -6,9 +6,9 @@ import { KpiCard } from '../../components/ui/KpiCard.js';
 import { Table, THead, Th, TBody, Tr, Td } from '../../components/ui/Table.js';
 import { Badge } from '../../components/ui/Badge.js';
 import { Button } from '../../components/ui/Button.js';
-import { Modal, Field, TextInput, Select, Row } from '../../components/ui/Modal.js';
+import { Modal, Field, TextInput, DateInput, Select, Row } from '../../components/ui/Modal.js';
 import { Donut } from '../../components/ui/Charts.js';
-import { rupees } from '../../lib/format.js';
+import { rupees, todayFullLabel } from '../../lib/format.js';
 import { useStore, todayLabel } from '../../lib/store.js';
 import { roleLabel } from '../../lib/roles.js';
 import { useAuth } from '../../lib/auth.js';
@@ -20,8 +20,10 @@ const KNOWN_SEGMENTS = ['Toll', 'RTO/Police', 'Loading', 'Repairs', 'Misc'];
 
 const OTHER = '__other__';
 type Scope = 'Trip' | 'Office' | 'General';
-const EXP_EMPTY = { scope: 'Trip' as Scope, tripLr: '', category: 'Toll', newCat: '', amount: '', note: '' };
-const FUEL_EMPTY = { reg: '', km: '', litres: '', rate: '92' };
+// Dates default to today but are pickable — an expense or a fuel bill is often
+// entered a day or two after it was actually incurred.
+const EXP_EMPTY = { date: '', scope: 'Trip' as Scope, tripLr: '', category: 'Toll', newCat: '', amount: '', note: '' };
+const FUEL_EMPTY = { date: '', reg: '', km: '', litres: '', rate: '92' };
 const REQ_EMPTY = { kind: 'expense' as 'expense' | 'advance' | 'trip' | 'other', title: '', amount: '', tripLr: '', note: '' };
 
 export function Expenses() {
@@ -58,7 +60,7 @@ export function Expenses() {
     let category = e.category;
     if (e.category === OTHER) { category = e.newCat.trim(); addExpenseCategory(category); }
     const tripLr = e.scope === 'Trip' ? (e.tripLr || '—') : e.scope; // "Office" / "General" for non-trip
-    addExpense({ date: todayLabel(), tripLr, category, amountPaise: Math.round(Number(e.amount) * 100), note: e.note });
+    addExpense({ date: e.date || todayFullLabel(), tripLr, category, amountPaise: Math.round(Number(e.amount) * 100), note: e.note });
     push({ title: 'Expense added', body: `${category} · ${rupees(Math.round(Number(e.amount) * 100))} (${e.scope.toLowerCase()})`, tone: 'success' });
     setE(EXP_EMPTY); setOpen(null);
   }
@@ -68,7 +70,7 @@ export function Expenses() {
     const km = Number(g.km), litres = Number(g.litres), ratePaise = Math.round(Number(g.rate) * 100);
     const costPaise = Math.round(litres * ratePaise);
     const expectedPaise = Math.round((km / MILEAGE_KMPL) * ratePaise);
-    addFuelLog({ date: todayLabel(), reg: g.reg, km, litres, ratePaise, costPaise, expectedPaise, ok: costPaise <= expectedPaise * 1.08 });
+    addFuelLog({ date: g.date || todayFullLabel(), reg: g.reg, km, litres, ratePaise, costPaise, expectedPaise, ok: costPaise <= expectedPaise * 1.08 });
     setG(FUEL_EMPTY); setOpen(null);
   }
 
@@ -109,8 +111,8 @@ export function Expenses() {
                 ))}
               </div>
               {tab === 'Fuel log'
-                ? <Button size="sm" onClick={() => setOpen('fuel')}><Fuel size={13} /> Log fuel</Button>
-                : <Button size="sm" onClick={() => setOpen('expense')}><Plus size={13} /> Add expense</Button>}
+                ? <Button size="sm" onClick={() => { setG({ ...FUEL_EMPTY, date: todayFullLabel() }); setOpen('fuel'); }}><Fuel size={13} /> Log fuel</Button>
+                : <Button size="sm" onClick={() => { setE({ ...EXP_EMPTY, date: todayFullLabel() }); setOpen('expense'); }}><Plus size={13} /> Add expense</Button>}
             </div>
 
             {tab === 'Expenses' ? (
@@ -210,6 +212,9 @@ export function Expenses() {
 
       {/* Add expense */}
       <Modal open={open === 'expense'} onClose={() => setOpen(null)} title="Add expense" subtitle="Trip cost, office or general spend" onSubmit={submitExpense} submitLabel="Add expense" submitDisabled={!expValid}>
+        <Field label="Expense date" required hint="When it was actually spent">
+          <DateInput value={e.date} onChange={(v) => setE({ ...e, date: v })} />
+        </Field>
         <Field label="This expense is for">
           <div className="grid grid-cols-3 gap-2">
             {(['Trip', 'Office', 'General'] as Scope[]).map((sc) => (
@@ -249,6 +254,9 @@ export function Expenses() {
 
       {/* Log fuel */}
       <Modal open={open === 'fuel'} onClose={() => setOpen(null)} title="Log fuel" subtitle="Leakage is auto-flagged" onSubmit={submitFuel} submitLabel="Save fuel entry" submitDisabled={!fuelValid}>
+        <Field label="Fuel date" required hint="When it was filled">
+          <DateInput value={g.date} onChange={(v) => setG({ ...g, date: v })} />
+        </Field>
         <Field label="Vehicle">
           <Select value={g.reg} onChange={(ev) => setG({ ...g, reg: ev.target.value })}>
             <option value="">Select vehicle</option>
