@@ -200,6 +200,11 @@ export interface Tour {
   serviceAt?: string;                 // service date & time (datetime-local)
   gpayName?: string; gpayNumber?: string;
   legs?: TourLeg[];                   // per-VRID routes (source of truth for new tours)
+  /** Manual odometer readings. The client wants the total derived, not typed —
+   *  `totalManualKm` is kept as the stored figure (the sheet exports it) but is
+   *  computed as endKm − startKm whenever both are present. */
+  startKm?: string;
+  endKm?: string;
   /** POC operational fields captured during the run. */
   invoiceGiven?: boolean;
   kmPhotoImg?: string; invoicePhotoImg?: string; gpsPhotoImg?: string;

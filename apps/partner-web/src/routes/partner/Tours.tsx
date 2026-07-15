@@ -273,7 +273,10 @@ export function Tours() {
                 <Search size={14} className="text-white/60" />
                 <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search VRID / trip ID / vehicle / vendor" className="w-full bg-transparent text-xs text-white outline-none placeholder:text-white/45" />
               </div>
-              <button onClick={() => exportTourSheet(tours)} className="hidden items-center gap-1.5 rounded-lg bg-white/10 px-3 py-2 text-xs font-bold text-white ring-1 ring-inset ring-white/15 hover:bg-white/15 sm:inline-flex"><FileSpreadsheet size={13} /> Export</button>
+              {/* Export is Admin/TL only, per the client. */}
+              {canEdit && (
+                <button onClick={() => exportTourSheet(shown)} className="hidden items-center gap-1.5 rounded-lg bg-white/10 px-3 py-2 text-xs font-bold text-white ring-1 ring-inset ring-white/15 hover:bg-white/15 sm:inline-flex"><FileSpreadsheet size={13} /> Export</button>
+              )}
               <button onClick={() => { resetForm(); setOpen(true); }} className="inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-extrabold shadow-sm" style={{ background: ORANGE, color: INK }}><RouteIcon size={14} /> Route Assign</button>
             </div>
           </div>
@@ -649,6 +652,7 @@ function TourCard({ t, isAdmin, canEdit, onOperate, onDiesel, onEdit, onDelete, 
 function TourOperate({ tour, onClose, onUpdate, showOwner }: {
   tour: Tour; onClose: () => void; onUpdate: (id: string, patch: Partial<Tour>) => void; showOwner: boolean;
 }) {
+  const { push } = useNotify();
   const legs = tour.legs ?? [];
   const allStops = legs.flatMap((l) => l.stops);
   const done = allStops.filter((s) => s.actualDeparture).length;
@@ -658,7 +662,8 @@ function TourOperate({ tour, onClose, onUpdate, showOwner }: {
   // locally-edited operational fields
   const [present, setPresent] = useState(tour.present || 'PRESENT');
   const [remarks, setRemarks] = useState(tour.remarks || '');
-  const [totalKm, setTotalKm] = useState(tour.totalManualKm || '');
+  const [startKm, setStartKm] = useState(tour.startKm || '');
+  const [endKm, setEndKm] = useState(tour.endKm || '');
   const [amazonKm, setAmazonKm] = useState(tour.amazonRelyKm || '');
   const [gpsKm, setGpsKm] = useState(tour.gpsKm || '');
   const [expenseAmount, setExpenseAmount] = useState(tour.expenseAmount || '');
@@ -666,21 +671,66 @@ function TourOperate({ tour, onClose, onUpdate, showOwner }: {
   const [invoiceGiven, setInvoiceGiven] = useState(!!tour.invoiceGiven);
   const [saved, setSaved] = useState(false);
 
+  // Total KM is derived from the odometer, never typed. Falls back to whatever
+  // was stored before start/end existed, so older routes keep their figure.
+  const kmSpan = (() => {
+    const a = Number(startKm), b = Number(endKm);
+    if (!startKm.trim() || !endKm.trim() || !Number.isFinite(a) || !Number.isFinite(b)) return null;
+    return b - a;
+  })();
+  const totalKm = kmSpan === null ? (tour.totalManualKm || '') : String(kmSpan);
+  const kmBackwards = kmSpan !== null && kmSpan < 0;
+
   function stampStop(li: number, si: number, key: 'actualArrival' | 'actualDeparture') {
     if (!tour.id) return;
     const next = legs.map((l, i) => (i !== li ? l : { ...l, stops: l.stops.map((s, j) => (j === si ? { ...s, [key]: Date.now() } : s)) }));
     const flat = next.flatMap((l) => l.stops);
-    const allOut = flat.length > 0 && flat.every((s) => s.actualDeparture);
     const anyIn = flat.some((s) => s.actualArrival);
-    const status = allOut ? 'COMPLETED' : anyIn ? 'IN PROGRESS' : 'PLANNED';
+    // Checking out of the last stop does NOT complete the run. It used to, which
+    // meant a tour could reach Completed with no KM, no Amazon KM and no GPS KM
+    // — the very figures the completion is for. Completion is now only ever the
+    // explicit "Submit & complete", per the client: "by submitting all this, it
+    // will move to completed". And once completed, a stray stamp mustn't drag it
+    // back to In Transit.
+    const status = tour.amzStatus === 'COMPLETED' ? 'COMPLETED' : anyIn ? 'IN PROGRESS' : 'PLANNED';
     onUpdate(tour.id, { legs: next, amzStatus: status, sarvaStatus: status });
   }
 
+  /** Load type is per-VRID — one run can be loaded and the next empty. */
+  function setLoadType(li: number, v: string) {
+    if (!tour.id) return;
+    onUpdate(tour.id, { legs: legs.map((l, i) => (i === li ? { ...l, loadType: v } : l)) });
+  }
+
+  const ops = () => ({
+    present, remarks, startKm, endKm,
+    totalManualKm: totalKm, amazonRelyKm: amazonKm, gpsKm,
+    expenseAmount, expenseNote, invoiceGiven,
+  });
+
   function saveOps() {
     if (!tour.id) return;
-    onUpdate(tour.id, { present, remarks, totalManualKm: totalKm, amazonRelyKm: amazonKm, gpsKm, expenseAmount, expenseNote, invoiceGiven });
+    onUpdate(tour.id, ops());
     setSaved(true); setTimeout(() => setSaved(false), 1500);
   }
+
+  /** "By submitting all this, it will move to completed." */
+  function submitComplete() {
+    if (!tour.id) return;
+    onUpdate(tour.id, { ...ops(), amzStatus: 'COMPLETED', sarvaStatus: 'COMPLETED' });
+    push({ title: 'Trip completed', body: `${tour.tourId} moved to Completed.`, tone: 'success' });
+    onClose();
+  }
+
+  // What the client requires before a run can be called done.
+  const missingToComplete = [
+    !startKm.trim() && 'starting KM',
+    !endKm.trim() && 'ending KM',
+    kmBackwards && 'valid KM readings',
+    !amazonKm.trim() && 'Amazon KM',
+    !gpsKm.trim() && 'GPS KM',
+  ].filter(Boolean) as string[];
+  const canComplete = missingToComplete.length === 0;
   function setPhoto(key: 'kmPhotoImg' | 'invoicePhotoImg' | 'gpsPhotoImg', v: string | undefined) {
     if (tour.id) onUpdate(tour.id, { [key]: v ?? '' });
   }
@@ -754,8 +804,10 @@ function TourOperate({ tour, onClose, onUpdate, showOwner }: {
 
           {/* operational fields */}
           <div className="rounded-xl p-3 ring-1 ring-inset" style={{ background: '#F7F8F8', borderColor: '#D5D9D9' }}>
-            <div className="mb-2 text-xs font-extrabold" style={{ color: INK }}>Trip updation</div>
-            <Field label="Driver present?">
+            <div className="mb-2 text-xs font-extrabold" style={{ color: INK }}>Open and update</div>
+
+            {/* 1 — present & absent */}
+            <Field label="Present / Absent">
               <div className="grid grid-cols-2 gap-2">
                 {['PRESENT', 'ABSENT'].map((m) => (
                   <button key={m} type="button" onClick={() => setPresent(m)} className="rounded-lg px-3 py-2 text-xs font-bold ring-1 ring-inset"
@@ -763,10 +815,35 @@ function TourOperate({ tour, onClose, onUpdate, showOwner }: {
                 ))}
               </div>
             </Field>
+
+            {/* 2 — load type, per VRID: it's decided per run, not per route */}
+            <div className="mt-2 space-y-2">
+              {legs.map((leg, li) => (
+                <Field key={li} label={`Load type · ${leg.vrid}`}>
+                  <div className="grid grid-cols-2 gap-2">
+                    {['Load', 'No Load'].map((m) => (
+                      <button key={m} type="button" onClick={() => setLoadType(li, m)} className="rounded-lg px-2 py-2 text-xs font-bold ring-1 ring-inset"
+                        style={(leg.loadType || 'Load') === m ? { background: INK, color: '#fff', borderColor: INK } : { background: '#fff', color: '#5A6572', borderColor: '#D5D9D9' }}>{m}</button>
+                    ))}
+                  </div>
+                </Field>
+              ))}
+            </div>
+
+            {/* 3 — manual KM: the total is worked out, not typed */}
             <div className="mt-2 grid grid-cols-3 gap-2">
-              <Field label="Total KM"><TextInput value={totalKm} onChange={(e) => setTotalKm(e.target.value)} placeholder="82" /></Field>
-              <Field label="Amazon KM"><TextInput value={amazonKm} onChange={(e) => setAmazonKm(e.target.value)} placeholder="80" /></Field>
-              <Field label="GPS KM"><TextInput value={gpsKm} onChange={(e) => setGpsKm(e.target.value)} placeholder="84" /></Field>
+              <Field label="Starting KM"><TextInput inputMode="numeric" value={startKm} onChange={(e) => setStartKm(e.target.value)} placeholder="12500" /></Field>
+              <Field label="Ending KM"><TextInput inputMode="numeric" value={endKm} onChange={(e) => setEndKm(e.target.value)} placeholder="12582" /></Field>
+              <Field label="Total KM" hint="auto"><TextInput value={totalKm} disabled placeholder="—" /></Field>
+            </div>
+            {kmBackwards && (
+              <p className="mt-1 text-[11px] font-bold" style={{ color: '#B12704' }}>Ending KM is lower than starting KM — check the readings.</p>
+            )}
+
+            {/* 4, 5 — Amazon & GPS KM */}
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <Field label="Amazon KM"><TextInput inputMode="numeric" value={amazonKm} onChange={(e) => setAmazonKm(e.target.value)} placeholder="80" /></Field>
+              <Field label="Vehicle GPS KM"><TextInput inputMode="numeric" value={gpsKm} onChange={(e) => setGpsKm(e.target.value)} placeholder="84" /></Field>
             </div>
             <div className="mt-2 grid grid-cols-2 gap-2">
               <Field label="Expense (₹)"><TextInput value={expenseAmount} onChange={(e) => setExpenseAmount(e.target.value)} placeholder="0" /></Field>
@@ -789,10 +866,31 @@ function TourOperate({ tour, onClose, onUpdate, showOwner }: {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 border-t border-neutral-100 px-5 py-3">
-          <button onClick={saveOps} className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-extrabold" style={{ background: ORANGE, color: INK }}>
-            {saved ? <><Check size={15} /> Saved</> : <><Save size={15} /> Save updation</>}
-          </button>
+        <div className="border-t border-neutral-100 px-5 py-3">
+          {tour.amzStatus === 'COMPLETED' ? (
+            <div className="flex items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-extrabold" style={{ background: '#EAF3EC', color: '#067D62' }}>
+              <Flag size={15} /> Completed
+            </div>
+          ) : (
+            <>
+              {!canComplete && (
+                <p className="mb-2 text-center text-[11px] font-semibold" style={{ color: '#B15C00' }}>
+                  To complete, still needed: {missingToComplete.join(' · ')}.
+                </p>
+              )}
+              <div className="flex items-center gap-2">
+                <button onClick={saveOps} className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-bold ring-1 ring-inset" style={{ color: INK, borderColor: '#D5D9D9', background: '#fff' }}>
+                  {saved ? <><Check size={15} /> Saved</> : <><Save size={15} /> Save</>}
+                </button>
+                {/* "By submitting all this, it will move to completed." */}
+                <button onClick={submitComplete} disabled={!canComplete}
+                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-extrabold disabled:opacity-40"
+                  style={{ background: ORANGE, color: INK }}>
+                  <Flag size={15} /> Submit &amp; complete
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

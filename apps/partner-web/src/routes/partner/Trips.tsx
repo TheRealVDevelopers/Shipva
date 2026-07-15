@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   Plus, FileText, MapPin, Search, Truck, X, Check, ExternalLink, Flag, Navigation,
-  Trash2, Route as RouteIcon, UserPlus, UserCog, ChevronRight, Pencil,
+  Trash2, Route as RouteIcon, UserPlus, UserCog, ChevronRight, Pencil, Download, CalendarRange,
 } from 'lucide-react';
 import { PartnerLayout } from '../../components/layout/PartnerLayout.js';
 import { Card } from '../../components/ui/Card.js';
@@ -22,6 +22,7 @@ import { watchMembers, teamOf, type Member } from '../../lib/members.js';
 import { canEditRecords } from '../../lib/roles.js';
 import { useNotify } from '../../lib/notify.js';
 import { printLR } from '../../lib/print.js';
+import { exportRows, rupeeCell, type Cell } from '../../lib/exportExcel.js';
 import { tripSteps, tripPoints, currentStep, progressPct } from '../../lib/trip.js';
 
 const TRIP_BADGE: Record<TripStatus, { label: string; tone: BadgeTone }> = {
@@ -68,6 +69,9 @@ export function Trips() {
   const [pts, setPts] = useState<PointDraft[]>([blankPoint(), blankPoint()]);
   const [trackId, setTrackId] = useState<string | null>(null);
   const [tried, setTried] = useState(false);
+  // Completed date window (Admin/TL use it to look back over a period).
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
   // Editing reuses the create form — one form, one set of validation rules.
   const [editId, setEditId] = useState<string | null>(null);
   const [confirmDel, setConfirmDel] = useState<Trip | null>(null);
@@ -80,9 +84,32 @@ export function Trips() {
   // Owner/manager can hand a trip to anyone; a Team Leader only to their POCs (or themselves).
   const assignable = isAdmin ? members : members.filter((m) => m.leaderUid === member?.uid || m.uid === member?.uid);
 
+  // Completed date window — "which trips finished between these dates". Uses the
+  // trip's own timestamp, not its display label, which has no year on old rows.
+  const inDateWindow = (t: Trip): boolean => {
+    if (filter !== 'Completed' || (!from && !to)) return true;
+    const ms = t.createdAtMs ?? 0;
+    if (!ms) return false;
+    if (from && ms < new Date(`${from}T00:00:00`).getTime()) return false;
+    if (to && ms > new Date(`${to}T23:59:59`).getTime()) return false;
+    return true;
+  };
+
   const shown = trips
     .filter((t) => matchesFilter(t.status, filter))
+    .filter(inDateWindow)
     .filter((t) => (q ? `${t.lr} ${t.vrId ?? ''} ${t.driver} ${t.from} ${t.to} ${t.customer ?? ''} ${t.ownerName ?? ''}`.toLowerCase().includes(q.toLowerCase()) : true));
+
+  /** Export exactly what's on screen — the filter, dates and search applied. */
+  function exportShown() {
+    exportRows(`sarva-trips-${filter.toLowerCase().replace(/\s+/g, '-')}`,
+      ['VR ID', 'LR', 'Date', 'From', 'To', 'Driver', 'Vehicle', 'Transporter', 'Material', 'Weight (kg)', 'Freight (₹)', 'Status', 'Handled by'],
+      shown.map((t): Cell[] => [
+        t.vrId ?? '', t.lr, t.date, t.from, t.to, t.driver, t.vehicleReg,
+        t.customer ?? '', t.material, t.weightKg, rupeeCell(t.freightPaise), t.status, t.ownerName ?? '',
+      ]));
+    push({ title: 'Exported', body: `${shown.length} trip${shown.length === 1 ? '' : 's'} downloaded.`, tone: 'success' });
+  }
   const active = trips.filter((t) => t.status !== 'closed').length;
   const freightTotal = trips.reduce((s, t) => s + t.freightPaise, 0);
   // Real month-to-date count — this used to be a hardcoded demo number.
@@ -253,11 +280,32 @@ export function Trips() {
                 </button>
               ))}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Completed is the tab people go back through, so it gets the date
+                  window — "which trips finished between these dates". */}
+              {filter === 'Completed' && (
+                <div className="flex items-center gap-1.5 rounded-lg bg-neutral-50 px-2.5 py-1 ring-1 ring-inset ring-neutral-200">
+                  <CalendarRange size={13} className="shrink-0 text-neutral-400" />
+                  <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} aria-label="Completed from"
+                    className="bg-transparent text-xs text-neutral-700 outline-none" />
+                  <span className="text-xs text-neutral-400">→</span>
+                  <input type="date" value={to} onChange={(e) => setTo(e.target.value)} aria-label="Completed to"
+                    className="bg-transparent text-xs text-neutral-700 outline-none" />
+                  {(from || to) && (
+                    <button onClick={() => { setFrom(''); setTo(''); }} className="rounded p-0.5 text-neutral-400 hover:text-rose-500" title="Clear dates"><X size={12} /></button>
+                  )}
+                </div>
+              )}
               <div className="flex items-center gap-2 rounded-lg bg-neutral-50 px-3 py-1.5 ring-1 ring-inset ring-neutral-200">
                 <Search size={13} className="text-neutral-400" />
                 <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search VR / LR / route / driver" className="w-44 bg-transparent text-xs text-neutral-700 outline-none placeholder:text-neutral-400" />
               </div>
+              {/* Export is Admin/TL only, per the client. */}
+              {canEdit && (
+                <Button size="sm" variant="secondary" onClick={exportShown} disabled={shown.length === 0}>
+                  <Download size={13} /> Export
+                </Button>
+              )}
               <Button size="sm" onClick={() => { resetForm(); setOpen(true); }}><Plus size={13} /> New Trip</Button>
             </div>
           </div>
