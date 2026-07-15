@@ -115,10 +115,62 @@ const seedCustomers: Customer[] = [
   { id: 'c4', name: 'Leela Stores', gstin: '29AAECL4444F1Z6', phone: '+91 98450 10004', city: 'Bengaluru', ratePerKmPaise: 3200, outstandingPaise: 113280 },
 ];
 
+/** Whether an owner's identity documents have been checked. Separate from
+ *  `stage`: KYC is "are these papers real", stage is "have they signed". */
+export type KycState = 'pending' | 'verified' | 'rejected';
+
+/**
+ * An attached (market) truck owner. The client wants the owner and the
+ * transporter kept apart — a vehicle owner often operates under someone else's
+ * transport company, and the two names were previously conflated into one
+ * field. `owner` stays the owner's own name (so existing records keep working);
+ * `transporterName` is the company they run under, when different.
+ */
 export interface AttachedTruck {
-  id: string; owner: string; reg: string; phone: string; balancePaise: number; trips: number;
+  id: string;
+  /** The person/entity who owns the vehicle. */
+  owner: string;
+  /** The transport company they operate under — blank when they're independent. */
+  transporterName?: string;
+  reg: string;
+  phone: string;
+  /** Second contact number — owners commonly give two. */
+  phone2?: string;
+  /** KYC — identity papers. GSTIN is optional (many owner-drivers have none). */
+  pan?: string;
+  aadhaar?: string;
+  gstin?: string;
+  kycStatus?: KycState;
+  kycVerifiedBy?: string;
+  kycVerifiedOn?: string;
+  /** Address. */
+  addressLine1?: string;
+  addressLine2?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
+  /** Payment details — how their balance actually gets paid out. */
+  bankAccountName?: string;
+  bankAccountNo?: string;
+  bankIfsc?: string;
+  bankName?: string;
+  upiId?: string;
+  /** Same onboarding ladder as a transporter: 7-day letter, then the agreement. */
+  stage?: OnboardStage;
+  trialStart?: string;
+  trialEnd?: string;
+  loiIssuedOn?: string;
+  agreementApprovedOn?: string;
+  agreementApprovedBy?: string;
+  balancePaise: number;
+  trips: number;
   agreement?: Agreement;
 }
+
+/** Owners created before onboarding existed are already trading — grandfather
+ *  them as onboarded rather than freezing their ledger. */
+export const ownerStageOf = (a: AttachedTruck): OnboardStage => a.stage ?? 'active';
+export const kycOf = (a: AttachedTruck): KycState => a.kycStatus ?? 'pending';
 const seedAttached: AttachedTruck[] = [
   { id: 'a1', owner: 'Deccan Freight', reg: 'KA25B4410', phone: '+91 90080 22001', balancePaise: 420000, trips: 6, agreement: { createdOn: '05 May 2026', effectiveFrom: '01 May 2026', durationMonths: 24, commissionPct: 8 } },
   { id: 'a2', owner: 'Sri Sai Carriers', reg: 'AP16C7788', phone: '+91 90080 22002', balancePaise: 185000, trips: 3 },
@@ -243,6 +295,9 @@ interface StoreApi extends StoreShape {
   /** Edit a transporter / advance them through onboarding. */
   updateCustomer: (id: string, patch: Partial<Customer>) => void;
   deleteCustomer: (id: string) => void;
+  /** Edit a truck owner / advance their onboarding & KYC. */
+  updateAttached: (id: string, patch: Partial<AttachedTruck>) => void;
+  deleteAttached: (id: string) => void;
   addStaff: (s: Omit<Staff, 'id'>) => void;
   addAttached: (a: Omit<AttachedTruck, 'id'>) => void;
   recordOwnerPayment: (id: string, amountPaise: number) => void;
@@ -481,6 +536,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const updateCustomer = useCallback((id: string, patch: Partial<Customer>) => { void customersCol.update(id, patch); }, []);
   const deleteCustomer = useCallback((id: string) => { void customersCol.remove(id); }, []);
+  const updateAttached = useCallback((id: string, patch: Partial<AttachedTruck>) => { void ownersCol.update(id, patch); }, []);
+  const deleteAttached = useCallback((id: string) => { void ownersCol.remove(id); }, []);
 
   const setAttachedAgreement = useCallback((id: string, a: Agreement) => {
     void ownersCol.update(id, { agreement: a });
@@ -511,13 +568,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     addTrip, updateTripStatus, advanceTrip, addSavedPoint, addInvoice, markInvoicePaid, addExpense, addFuelLog,
     addExpenseCategory, addRequest, resolveRequest, addCustomer, addDriver, addTruck,
     setDriverDocs, setTruckDocs, updateDriver, updateTruck, deleteDriver, deleteTruck,
-    setCustomerAgreement, setAttachedAgreement, updateCustomer, deleteCustomer,
+    setCustomerAgreement, setAttachedAgreement, updateCustomer, deleteCustomer, updateAttached, deleteAttached,
     addStaff, addAttached, recordOwnerPayment, addTour, updateTour, runPayroll, reset,
   }), [s, trips, tours, customers, drivers, trucks, attached,
     addTrip, updateTripStatus, advanceTrip, addSavedPoint, addInvoice, markInvoicePaid, addExpense, addFuelLog,
     addExpenseCategory, addRequest, resolveRequest, addCustomer, addDriver, addTruck,
     setDriverDocs, setTruckDocs, updateDriver, updateTruck, deleteDriver, deleteTruck,
-    setCustomerAgreement, setAttachedAgreement, updateCustomer, deleteCustomer,
+    setCustomerAgreement, setAttachedAgreement, updateCustomer, deleteCustomer, updateAttached, deleteAttached,
     addStaff, addAttached, recordOwnerPayment, addTour, updateTour, runPayroll, reset]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

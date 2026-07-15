@@ -1,56 +1,177 @@
 import { useState } from 'react';
-import { Truck as TruckIcon, Phone, HandCoins, FileText, FileWarning, Download, Plus } from 'lucide-react';
+import {
+  Truck as TruckIcon, Phone, HandCoins, FileText, FileWarning, Download, Plus,
+  ShieldCheck, ShieldAlert, Clock, FileSignature, ChevronLeft, Pencil, Trash2, BadgeCheck,
+} from 'lucide-react';
 import { PartnerLayout } from '../../components/layout/PartnerLayout.js';
 import { Card, CardHeader } from '../../components/ui/Card.js';
 import { KpiCard } from '../../components/ui/KpiCard.js';
 import { Table, THead, Th, TBody, Tr, Td } from '../../components/ui/Table.js';
-import { Badge } from '../../components/ui/Badge.js';
+import { Badge, type BadgeTone } from '../../components/ui/Badge.js';
 import { Button } from '../../components/ui/Button.js';
 import { Modal, Field, TextInput, DateInput, Select, Row } from '../../components/ui/Modal.js';
-import { rupees } from '../../lib/format.js';
-import { useStore, todayLabel, type AttachedTruck } from '../../lib/store.js';
+import { rupees, todayFullLabel, isoToLabel } from '../../lib/format.js';
+import {
+  useStore, todayLabel, ownerStageOf, kycOf, STAGE_LABEL,
+  type AttachedTruck, type OnboardStage, type KycState,
+} from '../../lib/store.js';
+import { useAuth } from '../../lib/auth.js';
+import {
+  nameError, phoneError, aadhaarError, panError, gstError, vehicleRegError,
+  requiredError, allClear, normalizePhone,
+} from '../../lib/validate.js';
 import { printAgreement } from '../../lib/agreement.js';
 import { printJoiningLetter } from '../../lib/joiningLetter.js';
 import { useNotify } from '../../lib/notify.js';
 
+const STAGE_TONE: Record<OnboardStage, BadgeTone> = {
+  draft: 'neutral', trial: 'accent', agreement_pending: 'warning', active: 'success', rejected: 'danger',
+};
+const KYC_TONE: Record<KycState, BadgeTone> = { pending: 'warning', verified: 'success', rejected: 'danger' };
+
 const AG_EMPTY = { effectiveFrom: '', durationMonths: '24', commission: '', notes: '' };
 
-const OWNER_EMPTY = { owner: '', reg: '', phone: '' };
+const EMPTY = {
+  owner: '', transporterName: '', reg: '', phone: '', phone2: '',
+  pan: '', aadhaar: '', gstin: '',
+  addressLine1: '', addressLine2: '', city: '', state: '', pincode: '',
+  bankAccountName: '', bankAccountNo: '', bankIfsc: '', bankName: '', upiId: '',
+};
+type Form = typeof EMPTY;
+
+function trialWindow(): { start: string; end: string } {
+  const p = (n: number) => String(n).padStart(2, '0');
+  const iso = (x: Date) => `${x.getFullYear()}-${p(x.getMonth() + 1)}-${p(x.getDate())}`;
+  return { start: isoToLabel(iso(new Date())), end: isoToLabel(iso(new Date(Date.now() + 6 * 864e5))) };
+}
 
 export function Payables() {
-  const { attached, setAttachedAgreement, recordOwnerPayment, addAttached } = useStore();
+  const { attached, setAttachedAgreement, recordOwnerPayment, addAttached, updateAttached, deleteAttached } = useStore();
+  const { member } = useAuth();
   const { push } = useNotify();
-  const [agFor, setAgFor] = useState<AttachedTruck | null>(null);
+  const isAdmin = member?.role === 'owner' || member?.role === 'manager';
+
+  const [open, setOpen] = useState(false);
+  const [step, setStep] = useState(1);
+  const [f, setF] = useState<Form>(EMPTY);
+  const [tried, setTried] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+
+  const [agForId, setAgForId] = useState<string | null>(null);
+  const agFor = agForId ? attached.find((a) => a.id === agForId) ?? null : null;
   const [ag, setAg] = useState(AG_EMPTY);
+
   const [payOpen, setPayOpen] = useState(false);
   const [pay, setPay] = useState({ id: '', amount: '' });
-  const [ownerOpen, setOwnerOpen] = useState(false);
-  const [owner, setOwner] = useState(OWNER_EMPTY);
+  const [kycForId, setKycForId] = useState<string | null>(null);
+  const kycFor = kycForId ? attached.find((a) => a.id === kycForId) ?? null : null;
+  const [confirmDel, setConfirmDel] = useState<AttachedTruck | null>(null);
 
-  function submitOwner() {
-    if (!owner.owner.trim()) return;
-    addAttached({ owner: owner.owner, reg: owner.reg, phone: owner.phone, balancePaise: 0, trips: 0 });
-    push({ title: 'Truck owner added', body: `${owner.owner} added to your market fleet.`, tone: 'success' });
-    setOwner(OWNER_EMPTY); setOwnerOpen(false);
+  const totalPayable = attached.reduce((s, a) => s + a.balancePaise, 0);
+  const owed = attached.filter((a) => a.balancePaise > 0).length;
+  const kycPending = attached.filter((a) => kycOf(a) !== 'verified').length;
+  const totalTrips = attached.reduce((s, a) => s + a.trips, 0);
+
+  // ── Validation ──────────────────────────────────────────────────────────────
+  const hasGst = !!f.gstin.trim();
+  const errs = {
+    owner: nameError(f.owner, { label: 'Owner name' }),
+    transporterName: '',                                   // optional — independents have none
+    reg: vehicleRegError(f.reg),
+    phone: phoneError(f.phone),
+    phone2: f.phone2.trim() ? phoneError(f.phone2, { label: 'Second phone' }) : '',
+    pan: panError(f.pan),
+    aadhaar: aadhaarError(f.aadhaar),
+    gstin: hasGst ? gstError(f.gstin) : '',
+    addressLine1: requiredError(f.addressLine1, 'Address line 1'),
+    city: nameError(f.city, { label: 'City' }),
+    state: nameError(f.state, { label: 'State' }),
+    pincode: /^[1-9][0-9]{5}$/.test(f.pincode.trim()) ? '' : 'PIN code must be 6 digits',
+    bankAccountName: requiredError(f.bankAccountName, 'Account holder name'),
+    bankAccountNo: /^[0-9]{9,18}$/.test(f.bankAccountNo.trim()) ? '' : 'Account number must be 9–18 digits',
+    bankIfsc: /^[A-Z]{4}0[A-Z0-9]{6}$/.test(f.bankIfsc.trim().toUpperCase()) ? '' : 'IFSC must look like HDFC0001234',
+    bankName: requiredError(f.bankName, 'Bank name'),
+  };
+  const STEP_FIELDS: (keyof typeof errs)[][] = [
+    ['owner', 'transporterName', 'reg', 'phone', 'phone2'],
+    ['pan', 'aadhaar', 'gstin', 'addressLine1', 'city', 'state', 'pincode'],
+    ['bankAccountName', 'bankAccountNo', 'bankIfsc', 'bankName'],
+  ];
+  const stepClear = (n: number) => STEP_FIELDS[n - 1]!.every((k) => !errs[k]);
+  const allValid = allClear(errs);
+
+  function startAdd() { setF(EMPTY); setStep(1); setTried(false); setEditId(null); setOpen(true); }
+  function startEdit(a: AttachedTruck) {
+    setF({
+      owner: a.owner, transporterName: a.transporterName ?? '', reg: a.reg, phone: a.phone, phone2: a.phone2 ?? '',
+      pan: a.pan ?? '', aadhaar: a.aadhaar ?? '', gstin: a.gstin ?? '',
+      addressLine1: a.addressLine1 ?? '', addressLine2: a.addressLine2 ?? '', city: a.city ?? '', state: a.state ?? '', pincode: a.pincode ?? '',
+      bankAccountName: a.bankAccountName ?? '', bankAccountNo: a.bankAccountNo ?? '', bankIfsc: a.bankIfsc ?? '', bankName: a.bankName ?? '', upiId: a.upiId ?? '',
+    });
+    setStep(1); setTried(false); setEditId(a.id); setOpen(true);
+  }
+  function next() {
+    setTried(true);
+    if (!stepClear(step)) return;
+    setTried(false); setStep((s) => Math.min(s + 1, 3));
+  }
+  function payload() {
+    return {
+      owner: f.owner.trim(), transporterName: f.transporterName.trim(),
+      reg: f.reg.trim().toUpperCase(), phone: normalizePhone(f.phone),
+      phone2: f.phone2.trim() ? normalizePhone(f.phone2) : '',
+      pan: f.pan.trim().toUpperCase(), aadhaar: f.aadhaar.trim(), gstin: f.gstin.trim().toUpperCase(),
+      addressLine1: f.addressLine1.trim(), addressLine2: f.addressLine2.trim(),
+      city: f.city.trim(), state: f.state.trim(), pincode: f.pincode.trim(),
+      bankAccountName: f.bankAccountName.trim(), bankAccountNo: f.bankAccountNo.trim(),
+      bankIfsc: f.bankIfsc.trim().toUpperCase(), bankName: f.bankName.trim(), upiId: f.upiId.trim(),
+    };
+  }
+  function submit() {
+    setTried(true);
+    if (!allValid) return;
+    if (editId) {
+      updateAttached(editId, payload());
+      push({ title: 'Owner updated', body: `${f.owner.trim()} saved.`, tone: 'success' });
+    } else {
+      addAttached({ ...payload(), balancePaise: 0, trips: 0, stage: 'draft', kycStatus: 'pending' });
+      push({ title: 'Details captured', body: `${f.owner.trim()} is a draft — verify KYC and issue the 7-day letter.`, tone: 'success' });
+    }
+    setOpen(false); setF(EMPTY); setStep(1); setTried(false); setEditId(null);
   }
 
-  function submitPayment() {
-    const owner = attached.find((a) => a.id === pay.id);
-    if (!owner || Number(pay.amount) <= 0) return;
-    recordOwnerPayment(owner.id, Math.round(Number(pay.amount) * 100));
-    push({ title: 'Payment recorded', body: `Paid ${rupees(Math.round(Number(pay.amount) * 100))} to ${owner.owner}.`, tone: 'success' });
-    setPay({ id: '', amount: '' }); setPayOpen(false);
+  function issueLoi(a: AttachedTruck) {
+    const { start, end } = trialWindow();
+    updateAttached(a.id, { stage: 'trial', trialStart: start, trialEnd: end, loiIssuedOn: todayFullLabel() });
+    printJoiningLetter(
+      { name: a.transporterName || a.owner, contact: a.owner, place: [a.addressLine1, a.city].filter(Boolean).join(', '), phone: a.phone },
+      { startDate: start, endDate: end },
+    );
+    push({ title: '7-day trial started', body: `Letter of Intent issued to ${a.owner} · trial ends ${end}.`, tone: 'success' });
   }
 
-  const totalDue = attached.reduce((s, a) => s + a.balancePaise, 0);
-  const owing = attached.filter((a) => a.balancePaise > 0).length;
-  const noAgreement = attached.filter((a) => !a.agreement).length;
+  function setKyc(a: AttachedTruck, status: KycState) {
+    updateAttached(a.id, {
+      kycStatus: status,
+      kycVerifiedBy: status === 'verified' ? member?.name ?? '' : '',
+      kycVerifiedOn: status === 'verified' ? todayFullLabel() : '',
+    });
+    push({
+      title: status === 'verified' ? 'KYC verified' : status === 'rejected' ? 'KYC rejected' : 'KYC reset',
+      body: `${a.owner}'s identity documents marked ${status}.`,
+      tone: status === 'verified' ? 'success' : 'warning',
+    });
+    setKycForId(null);
+  }
 
   function openAgreement(a: AttachedTruck) {
-    setAg({ effectiveFrom: todayLabel(), durationMonths: '24', commission: a.agreement?.commissionPct ? String(a.agreement.commissionPct) : '', notes: '' });
-    setAgFor(a);
+    setAg({
+      effectiveFrom: todayLabel(), durationMonths: '24',
+      commission: a.agreement?.commissionPct ? String(a.agreement.commissionPct) : '', notes: '',
+    });
+    setAgForId(a.id);
   }
-  function saveAgreement(download: boolean) {
+  function approveAgreement(download: boolean) {
     if (!agFor) return;
     const agreement = {
       createdOn: todayLabel(), effectiveFrom: ag.effectiveFrom || todayLabel(),
@@ -59,104 +180,296 @@ export function Payables() {
       ...(ag.notes ? { notes: ag.notes } : {}),
     };
     setAttachedAgreement(agFor.id, agreement);
-    if (download) printAgreement('truck-owner', { name: agFor.owner, phone: agFor.phone }, agreement);
-    setAgFor(null);
+    updateAttached(agFor.id, { stage: 'active', agreementApprovedOn: todayFullLabel(), agreementApprovedBy: member?.name ?? '' });
+    if (download) {
+      printAgreement('truck-owner',
+        { name: agFor.owner, gstin: agFor.gstin ?? '', place: [agFor.addressLine1, agFor.city].filter(Boolean).join(', '), phone: agFor.phone },
+        agreement);
+    }
+    push({ title: 'Owner onboarded', body: `${agFor.owner}'s agreement is approved.`, tone: 'success' });
+    setAgForId(null);
   }
 
+  function submitPayment() {
+    const amt = Math.round(Number(pay.amount) * 100);
+    if (!pay.id || !(amt > 0)) return;
+    recordOwnerPayment(pay.id, amt);
+    push({ title: 'Payment recorded', body: `${rupees(amt)} paid.`, tone: 'success' });
+    setPay({ id: '', amount: '' }); setPayOpen(false);
+  }
+
+  function effectiveStage(a: AttachedTruck): OnboardStage {
+    const s = ownerStageOf(a);
+    if (s !== 'trial' || !a.trialEnd) return s;
+    const end = new Date(a.trialEnd);
+    return !isNaN(end.getTime()) && Date.now() > end.getTime() + 864e5 ? 'agreement_pending' : s;
+  }
+
+  const stepTitle = ['Owner & vehicle', 'KYC & address', 'Payment details'][step - 1];
+
   return (
-    <PartnerLayout title="Payables" subtitle="Attached / market trucks, agreements & balances">
+    <PartnerLayout title="Truck Owners" subtitle="Attached / market trucks, KYC, agreements & balances">
       <div className="space-y-6">
         <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <KpiCard label="Attached trucks" value={String(attached.length)} hint="market vehicles" tone="primary" icon={<TruckIcon size={14} />} />
-          <KpiCard label="Agreements pending" value={String(noAgreement)} hint="not created yet" tone="danger" icon={<FileWarning size={14} />} />
-          <KpiCard label="Total payable" value={rupees(totalDue)} hint={`${owing} owed`} tone="accent" icon={<HandCoins size={14} />} />
-          <KpiCard label="Trips (market)" value={String(attached.reduce((s, a) => s + a.trips, 0))} hint="via attached" tone="success" />
+          <KpiCard label="KYC pending" value={String(kycPending)} hint="not verified" tone="danger" icon={<ShieldAlert size={14} />} />
+          <KpiCard label="Total payable" value={rupees(totalPayable)} hint={`${owed} owed`} tone="accent" icon={<HandCoins size={14} />} />
+          <KpiCard label="Trips (market)" value={String(totalTrips)} hint="via attached" tone="success" />
         </section>
 
         <Card>
           <CardHeader title="Truck-owner ledger" subtitle="Balances owed to attached vehicles"
-            action={<div className="flex items-center gap-2">
-              <Button size="sm" variant="secondary" onClick={() => setOwnerOpen(true)}><Plus size={13} /> Add owner</Button>
-              <Button size="sm" onClick={() => { setPay({ id: attached.find((a) => a.balancePaise > 0)?.id ?? '', amount: '' }); setPayOpen(true); }}><HandCoins size={13} /> Record payment</Button>
-            </div>} />
+            action={
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="secondary" onClick={() => setPayOpen(true)}><HandCoins size={13} /> Record payment</Button>
+                <Button size="sm" onClick={startAdd}><Plus size={13} /> Add owner</Button>
+              </div>
+            } />
           <Table>
             <THead>
-              <Tr><Th>Owner</Th><Th>Vehicle</Th><Th className="text-right">Trips</Th><Th className="text-right">Balance</Th><Th>Agreement</Th><Th></Th></Tr>
+              <Tr><Th>Owner</Th><Th>Transporter</Th><Th>Vehicle</Th><Th>KYC</Th><Th>Onboarding</Th><Th className="text-right">Balance</Th><Th></Th></Tr>
             </THead>
             <TBody>
-              {attached.map((a) => (
-                <Tr key={a.id}>
-                  <Td>
-                    <div className="font-semibold text-neutral-900">{a.owner}</div>
-                    <div className="flex items-center gap-1 text-[11px] text-neutral-400"><Phone size={10} /> {a.phone}</div>
-                  </Td>
-                  <Td className="font-mono text-xs text-neutral-700">{a.reg}</Td>
-                  <Td className="text-right text-neutral-600">{a.trips}</Td>
-                  <Td className="text-right">
-                    {a.balancePaise > 0 ? <span className="font-bold text-neutral-900">{rupees(a.balancePaise)}</span> : <Badge tone="success">Settled</Badge>}
-                  </Td>
-                  <Td>
-                    {a.agreement
-                      ? <Badge tone="success"><FileText size={11} /> Active · {a.agreement.createdOn}</Badge>
-                      : <Badge tone="danger"><FileWarning size={11} /> Not created</Badge>}
-                  </Td>
-                  <Td>
-                    <div className="flex items-center justify-end gap-3">
-                      {a.agreement
-                        ? <button onClick={() => printAgreement('truck-owner', { name: a.owner, phone: a.phone }, a.agreement!)} className="inline-flex items-center gap-1 text-xs font-bold text-primary-600 hover:text-primary-700"><Download size={12} /> Agreement</button>
-                        : <Button size="sm" onClick={() => openAgreement(a)}>Create agreement</Button>}
-                      <button onClick={() => printJoiningLetter({ name: a.owner, phone: a.phone })} className="text-xs font-bold text-neutral-500 hover:text-primary-600" title="Trial joining letter (LOI)">LOI</button>
-                    </div>
-                  </Td>
-                </Tr>
-              ))}
+              {attached.map((a) => {
+                const st = effectiveStage(a);
+                const kyc = kycOf(a);
+                return (
+                  <Tr key={a.id}>
+                    <Td>
+                      <div className="font-semibold text-neutral-900">{a.owner}</div>
+                      <div className="flex items-center gap-1 text-[11px] text-neutral-400">
+                        <Phone size={10} /> {a.phone}{a.phone2 ? ` · ${a.phone2}` : ''}
+                      </div>
+                    </Td>
+                    <Td className="text-neutral-600">{a.transporterName || <span className="text-neutral-400">Independent</span>}</Td>
+                    <Td className="font-mono text-xs text-neutral-700">{a.reg}</Td>
+                    <Td>
+                      <button onClick={() => setKycForId(a.id)} className="cursor-pointer" title="Review KYC">
+                        <Badge tone={KYC_TONE[kyc]}>
+                          {kyc === 'verified' ? <ShieldCheck size={11} /> : <ShieldAlert size={11} />} {kyc === 'verified' ? 'Verified' : kyc === 'rejected' ? 'Rejected' : 'KYC pending'}
+                        </Badge>
+                      </button>
+                    </Td>
+                    <Td>
+                      <Badge tone={STAGE_TONE[st]}>
+                        {st === 'active' ? <ShieldCheck size={11} /> : st === 'trial' ? <Clock size={11} /> : <FileSignature size={11} />} {STAGE_LABEL[st]}
+                      </Badge>
+                      {st === 'trial' && a.trialEnd && <div className="mt-0.5 text-[10px] text-neutral-400">ends {a.trialEnd}</div>}
+                    </Td>
+                    <Td className="text-right">
+                      {a.balancePaise > 0 ? <span className="font-bold text-rose-600">{rupees(a.balancePaise)}</span> : <Badge tone="success">Settled</Badge>}
+                    </Td>
+                    <Td>
+                      <div className="flex items-center justify-end gap-1.5">
+                        {st === 'draft' && <Button size="sm" onClick={() => issueLoi(a)}><FileText size={12} /> Issue 7-day letter</Button>}
+                        {(st === 'trial' || st === 'agreement_pending') && (
+                          isAdmin
+                            ? <Button size="sm" onClick={() => openAgreement(a)}><FileSignature size={12} /> Approve agreement</Button>
+                            : <span className="text-[11px] text-neutral-400">Awaiting owner approval</span>
+                        )}
+                        {st === 'active' && (a.agreement
+                          ? <button onClick={() => printAgreement('truck-owner', { name: a.owner, gstin: a.gstin ?? '', place: [a.addressLine1, a.city].filter(Boolean).join(', '), phone: a.phone }, a.agreement!)}
+                              className="inline-flex items-center gap-1 text-xs font-bold text-primary-600 hover:text-primary-700"><Download size={12} /> Agreement</button>
+                          : <Button size="sm" onClick={() => openAgreement(a)}><FileWarning size={12} /> Create agreement</Button>)}
+                        <button onClick={() => startEdit(a)} className="rounded-lg p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-primary-600" title="Edit owner"><Pencil size={14} /></button>
+                        {isAdmin && <button onClick={() => setConfirmDel(a)} className="rounded-lg p-1.5 text-neutral-400 hover:bg-rose-50 hover:text-rose-600" title="Delete owner"><Trash2 size={14} /></button>}
+                      </div>
+                    </Td>
+                  </Tr>
+                );
+              })}
             </TBody>
           </Table>
         </Card>
-
-        <Card>
-          <div className="flex items-start gap-3 px-5 py-4 text-sm text-neutral-600">
-            <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary-50 text-primary-600"><TruckIcon size={16} /></span>
-            <p>Every attached (market) truck should have a signed <b className="text-neutral-800">attachment agreement</b> covering commission, payment cycle and duration. Vehicles without one are flagged above — create and download the agreement in one step.</p>
-          </div>
-        </Card>
+        <p className="text-xs text-neutral-500">
+          Owner and transporter are kept apart — a vehicle owner often runs under someone else's transport company. Identity papers (PAN, Aadhaar,
+          and GSTIN when they have one) are verified by an owner or manager, and the attachment agreement follows the same
+          <b> 7-day letter → agreement</b> order as a transporter.
+        </p>
       </div>
 
-      {/* Add truck owner */}
-      <Modal open={ownerOpen} onClose={() => setOwnerOpen(false)} title="Add truck owner" subtitle="A market / attached vehicle owner" onSubmit={submitOwner} submitLabel="Add owner" submitDisabled={!owner.owner.trim()}>
-        <Field label="Owner / transporter name"><TextInput value={owner.owner} onChange={(e) => setOwner({ ...owner, owner: e.target.value })} placeholder="Deccan Freight" /></Field>
+      {/* Add / edit owner */}
+      <Modal open={open} onClose={() => setOpen(false)}
+        title={editId ? `Edit · ${f.owner || 'owner'}` : 'Add truck owner'}
+        subtitle={`Step ${step} of 3 — ${stepTitle}`}
+        onSubmit={step < 3 ? next : submit} submitLabel={step < 3 ? 'Next' : editId ? 'Save changes' : 'Capture details'} wide>
+        <div className="flex items-center gap-1.5">
+          {[1, 2, 3].map((n) => <div key={n} className={`h-1.5 flex-1 rounded-full ${n <= step ? 'bg-primary-500' : 'bg-neutral-200'}`} />)}
+        </div>
+        {tried && !stepClear(step) && (
+          <div className="rounded-lg bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 ring-1 ring-inset ring-rose-100">
+            Fill every field marked <span className="text-rose-500">*</span> to continue.
+          </div>
+        )}
+
+        {step === 1 && (
+          <>
+            <Row>
+              <Field label="Owner name" required hint="The person who owns the vehicle" error={tried ? errs.owner : undefined}>
+                <TextInput value={f.owner} onChange={(e) => setF({ ...f, owner: e.target.value })} placeholder="M. Khan" autoFocus />
+              </Field>
+              <Field label="Transporter name" hint="Optional — blank if independent">
+                <TextInput value={f.transporterName} onChange={(e) => setF({ ...f, transporterName: e.target.value })} placeholder="Deccan Freight" />
+              </Field>
+            </Row>
+            <Field label="Vehicle number" required error={tried ? errs.reg : undefined}>
+              <TextInput value={f.reg} onChange={(e) => setF({ ...f, reg: e.target.value.toUpperCase() })} placeholder="KA25B4410" />
+            </Field>
+            <Row>
+              <Field label="Phone" required error={tried ? errs.phone : undefined}>
+                <TextInput inputMode="numeric" maxLength={10} value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} placeholder="9876543210" />
+              </Field>
+              <Field label="Second phone" hint="Optional" error={tried ? errs.phone2 : undefined}>
+                <TextInput inputMode="numeric" maxLength={10} value={f.phone2} onChange={(e) => setF({ ...f, phone2: e.target.value })} placeholder="9876543211" />
+              </Field>
+            </Row>
+          </>
+        )}
+
+        {step === 2 && (
+          <>
+            <p className="rounded-lg bg-primary-50 px-3 py-2 text-[11px] text-primary-800 ring-1 ring-inset ring-primary-100">
+              Identity papers. An owner or manager verifies these before the vehicle is put to work.
+            </p>
+            <Row>
+              <Field label="PAN" required error={tried ? errs.pan : undefined}>
+                <TextInput value={f.pan} onChange={(e) => setF({ ...f, pan: e.target.value.toUpperCase() })} placeholder="ABCDE1234F" autoFocus />
+              </Field>
+              <Field label="Aadhaar" required error={tried ? errs.aadhaar : undefined}>
+                <TextInput inputMode="numeric" value={f.aadhaar} onChange={(e) => setF({ ...f, aadhaar: e.target.value })} placeholder="4821 7745 9012" />
+              </Field>
+            </Row>
+            <Field label="GSTIN" hint="Optional — many owner-drivers aren't registered" error={tried ? errs.gstin : undefined}>
+              <TextInput value={f.gstin} onChange={(e) => setF({ ...f, gstin: e.target.value.toUpperCase() })} placeholder="29ABCDE1234F1Z5" />
+            </Field>
+            <Field label="Address line 1" required error={tried ? errs.addressLine1 : undefined}>
+              <TextInput value={f.addressLine1} onChange={(e) => setF({ ...f, addressLine1: e.target.value })} placeholder="No. 12, 3rd Cross" />
+            </Field>
+            <Field label="Address line 2" hint="Optional">
+              <TextInput value={f.addressLine2} onChange={(e) => setF({ ...f, addressLine2: e.target.value })} placeholder="Peenya" />
+            </Field>
+            <Row>
+              <Field label="City" required error={tried ? errs.city : undefined}>
+                <TextInput value={f.city} onChange={(e) => setF({ ...f, city: e.target.value })} placeholder="Bengaluru" />
+              </Field>
+              <Field label="State" required error={tried ? errs.state : undefined}>
+                <TextInput value={f.state} onChange={(e) => setF({ ...f, state: e.target.value })} placeholder="Karnataka" />
+              </Field>
+            </Row>
+            <Field label="PIN code" required error={tried ? errs.pincode : undefined}>
+              <TextInput inputMode="numeric" maxLength={6} value={f.pincode} onChange={(e) => setF({ ...f, pincode: e.target.value })} placeholder="560058" />
+            </Field>
+          </>
+        )}
+
+        {step === 3 && (
+          <>
+            <p className="rounded-lg bg-primary-50 px-3 py-2 text-[11px] text-primary-800 ring-1 ring-inset ring-primary-100">
+              Where their balance gets paid out.
+            </p>
+            <Field label="Account holder name" required error={tried ? errs.bankAccountName : undefined}>
+              <TextInput value={f.bankAccountName} onChange={(e) => setF({ ...f, bankAccountName: e.target.value })} placeholder="M. Khan" autoFocus />
+            </Field>
+            <Row>
+              <Field label="Account number" required error={tried ? errs.bankAccountNo : undefined}>
+                <TextInput inputMode="numeric" value={f.bankAccountNo} onChange={(e) => setF({ ...f, bankAccountNo: e.target.value })} placeholder="50100123456789" />
+              </Field>
+              <Field label="IFSC" required error={tried ? errs.bankIfsc : undefined}>
+                <TextInput value={f.bankIfsc} onChange={(e) => setF({ ...f, bankIfsc: e.target.value.toUpperCase() })} placeholder="HDFC0001234" />
+              </Field>
+            </Row>
+            <Row>
+              <Field label="Bank & branch" required error={tried ? errs.bankName : undefined}>
+                <TextInput value={f.bankName} onChange={(e) => setF({ ...f, bankName: e.target.value })} placeholder="HDFC Bank, Peenya" />
+              </Field>
+              <Field label="UPI ID" hint="Optional">
+                <TextInput value={f.upiId} onChange={(e) => setF({ ...f, upiId: e.target.value })} placeholder="name@okhdfcbank" />
+              </Field>
+            </Row>
+          </>
+        )}
+
+        {step > 1 && (
+          <button type="button" onClick={() => { setTried(false); setStep((s) => s - 1); }}
+            className="inline-flex items-center gap-1 text-xs font-bold text-neutral-500 hover:text-primary-600">
+            <ChevronLeft size={13} /> Back
+          </button>
+        )}
+      </Modal>
+
+      {/* KYC review */}
+      {kycFor && (
+        <Modal open onClose={() => setKycForId(null)} title={`KYC · ${kycFor.owner}`} subtitle="Identity papers on file"
+          onSubmit={() => setKycForId(null)} submitLabel="Close">
+          <div className="space-y-2 rounded-lg bg-neutral-50 p-3 text-xs ring-1 ring-inset ring-neutral-100">
+            {([['PAN', kycFor.pan], ['Aadhaar', kycFor.aadhaar], ['GSTIN', kycFor.gstin]] as const).map(([k, v]) => (
+              <div key={k} className="flex justify-between"><span className="font-bold text-neutral-500">{k}</span><span className="font-mono text-neutral-800">{v || '—'}</span></div>
+            ))}
+          </div>
+          {kycOf(kycFor) === 'verified' ? (
+            <div className="flex items-center justify-between rounded-lg bg-emerald-50 px-3 py-2.5 text-xs ring-1 ring-inset ring-emerald-100">
+              <span className="inline-flex items-center gap-1.5 font-bold text-emerald-800">
+                <BadgeCheck size={14} /> Verified{kycFor.kycVerifiedBy ? ` by ${kycFor.kycVerifiedBy}` : ''}{kycFor.kycVerifiedOn ? ` · ${kycFor.kycVerifiedOn}` : ''}
+              </span>
+              {isAdmin && <button type="button" onClick={() => setKyc(kycFor, 'pending')} className="font-bold text-emerald-700 hover:underline">Reset</button>}
+            </div>
+          ) : isAdmin ? (
+            <div className="flex items-center justify-between gap-3 rounded-lg bg-sky-50 px-3 py-2.5 text-xs ring-1 ring-inset ring-sky-100">
+              <span className="text-sky-800">Confirm you've checked these documents.</span>
+              <div className="flex shrink-0 gap-2">
+                <button type="button" onClick={() => setKyc(kycFor, 'rejected')} className="rounded-lg bg-white px-3 py-1.5 font-bold text-rose-600 ring-1 ring-inset ring-rose-200 hover:bg-rose-50">Reject</button>
+                <button type="button" onClick={() => setKyc(kycFor, 'verified')} className="rounded-lg bg-emerald-600 px-3 py-1.5 font-bold text-white hover:bg-emerald-700">Mark verified</button>
+              </div>
+            </div>
+          ) : (
+            <p className="rounded-lg bg-sky-50 px-3 py-2.5 text-xs text-sky-800 ring-1 ring-inset ring-sky-100">An owner or manager needs to verify these.</p>
+          )}
+        </Modal>
+      )}
+
+      {/* Approve agreement */}
+      <Modal open={!!agFor} onClose={() => setAgForId(null)} title={`Attachment agreement · ${agFor?.owner ?? ''}`}
+        subtitle="Approving this onboards them" onSubmit={() => approveAgreement(true)} submitLabel="Approve & download">
         <Row>
-          <Field label="Vehicle reg"><TextInput value={owner.reg} onChange={(e) => setOwner({ ...owner, reg: e.target.value })} placeholder="KA25B4410" /></Field>
-          <Field label="Phone"><TextInput value={owner.phone} onChange={(e) => setOwner({ ...owner, phone: e.target.value })} placeholder="+91 90080 22001" /></Field>
+          <Field label="Effective from" required><DateInput value={ag.effectiveFrom} onChange={(v) => setAg({ ...ag, effectiveFrom: v })} /></Field>
+          <Field label="Duration (months)" required><TextInput type="number" value={ag.durationMonths} onChange={(e) => setAg({ ...ag, durationMonths: e.target.value })} placeholder="24" /></Field>
         </Row>
-        <p className="text-[11px] text-neutral-400">After adding, use "Create agreement" / "LOI" on their row to formalise the arrangement.</p>
+        <Field label="Commission (%)" hint="Optional"><TextInput type="number" value={ag.commission} onChange={(e) => setAg({ ...ag, commission: e.target.value })} placeholder="8" /></Field>
+        <Field label="Special terms" hint="Optional"><TextInput value={ag.notes} onChange={(e) => setAg({ ...ag, notes: e.target.value })} placeholder="Fortnightly settlement" /></Field>
+        {agFor && kycOf(agFor) !== 'verified' && (
+          <p className="rounded-lg bg-amber-50 px-3 py-2 text-[11px] text-amber-800 ring-1 ring-inset ring-amber-100">
+            Their KYC isn't verified yet. You can still approve, but check the identity papers first.
+          </p>
+        )}
+        <div className="flex items-center justify-between rounded-lg bg-emerald-50 px-3 py-2 text-[11px] text-emerald-800 ring-1 ring-inset ring-emerald-100">
+          <span className="inline-flex items-center gap-1.5"><BadgeCheck size={13} /> Approving marks them onboarded.</span>
+          <button type="button" onClick={() => approveAgreement(false)} className="font-bold text-emerald-700 hover:underline">Approve without download</button>
+        </div>
       </Modal>
 
       {/* Record payment */}
-      <Modal open={payOpen} onClose={() => setPayOpen(false)} title="Record payment" subtitle="Pay an attached truck owner" onSubmit={submitPayment} submitLabel="Record payment" submitDisabled={!pay.id || Number(pay.amount) <= 0}>
-        <Field label="Owner">
+      <Modal open={payOpen} onClose={() => setPayOpen(false)} title="Record payment" subtitle="Reduces the owner's balance"
+        onSubmit={submitPayment} submitLabel="Record payment" submitDisabled={!pay.id || !(Number(pay.amount) > 0)}>
+        <Field label="Owner" required>
           <Select value={pay.id} onChange={(e) => setPay({ ...pay, id: e.target.value })}>
             <option value="">Select owner</option>
             {attached.map((a) => <option key={a.id} value={a.id}>{a.owner} · balance {rupees(a.balancePaise)}</option>)}
           </Select>
         </Field>
-        <Field label="Amount (₹)"><TextInput type="number" value={pay.amount} onChange={(e) => setPay({ ...pay, amount: e.target.value })} placeholder="20000" /></Field>
+        <Field label="Amount (₹)" required><TextInput type="number" value={pay.amount} onChange={(e) => setPay({ ...pay, amount: e.target.value })} placeholder="20000" /></Field>
       </Modal>
 
-      {/* Create agreement */}
-      <Modal open={!!agFor} onClose={() => setAgFor(null)} title={`Agreement · ${agFor?.owner ?? ''}`} subtitle="Vehicle attachment terms"
-        onSubmit={() => saveAgreement(true)} submitLabel="Create & download">
-        <Row>
-          <Field label="Effective from" required><DateInput value={ag.effectiveFrom} onChange={(v) => setAg({ ...ag, effectiveFrom: v })} /></Field>
-          <Field label="Duration (months)"><TextInput type="number" value={ag.durationMonths} onChange={(e) => setAg({ ...ag, durationMonths: e.target.value })} placeholder="24" /></Field>
-        </Row>
-        <Field label="Commission (%)" hint="Your margin retained per trip"><TextInput type="number" value={ag.commission} onChange={(e) => setAg({ ...ag, commission: e.target.value })} placeholder="8" /></Field>
-        <Field label="Special terms" hint="Optional"><TextInput value={ag.notes} onChange={(e) => setAg({ ...ag, notes: e.target.value })} placeholder="Weekly settlement, diesel on actuals" /></Field>
-        <div className="flex items-center justify-between rounded-lg bg-primary-50 px-3 py-2 text-[11px] text-primary-800 ring-1 ring-inset ring-primary-100">
-          <span>Generates a PDF you can print &amp; sign.</span>
-          <button type="button" onClick={() => saveAgreement(false)} className="font-bold text-primary-700 hover:underline">Save without download</button>
-        </div>
-      </Modal>
+      {/* Delete */}
+      {confirmDel && (
+        <Modal open onClose={() => setConfirmDel(null)} title={`Delete ${confirmDel.owner}?`} subtitle="This removes them for everyone"
+          onSubmit={() => { deleteAttached(confirmDel.id); push({ title: 'Deleted', body: `${confirmDel.owner} removed.`, tone: 'info' }); setConfirmDel(null); }}
+          submitLabel="Delete">
+          <p className="rounded-lg bg-rose-50 px-3 py-2.5 text-sm text-rose-800 ring-1 ring-inset ring-rose-100">
+            <b>{confirmDel.owner}</b> ({confirmDel.reg}) will be removed for the whole team.
+            {confirmDel.balancePaise > 0 && <> They still have a balance of <b>{rupees(confirmDel.balancePaise)}</b> outstanding.</>} This can't be undone.
+          </p>
+        </Modal>
+      )}
     </PartnerLayout>
   );
 }

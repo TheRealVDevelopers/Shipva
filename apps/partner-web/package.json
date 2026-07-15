@@ -13,6 +13,7 @@
     "@shipva/shared-logic": "*",
     "@shipva/shared-types": "*",
     "@shipva/ui": "*",
+    "exceljs": "^4.4.0",
     "firebase": "^11.0.1",
     "lucide-react": "^1.17.0",
     "react": "^18.3.1",
