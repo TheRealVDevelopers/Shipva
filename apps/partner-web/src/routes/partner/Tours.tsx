@@ -4,7 +4,7 @@ import {
   Navigation, LogIn, LogOut, Flag, AlertTriangle, Truck, Package, Plus, Send, Save, Pencil, Fuel, Copy,
 } from 'lucide-react';
 import { PartnerLayout } from '../../components/layout/PartnerLayout.js';
-import { Modal, Field, TextInput, Select, Row } from '../../components/ui/Modal.js';
+import { Modal, Field, TextInput, DateTimeInput, Select, Row } from '../../components/ui/Modal.js';
 import { ImageUpload } from '../../components/ui/ImageUpload.js';
 import { useStore, todayLabel, type Tour, type TourLeg, type TourLegStop } from '../../lib/store.js';
 import { useAuth } from '../../lib/auth.js';
@@ -320,7 +320,7 @@ export function Tours() {
       {/* ── Route Assign ──────────────────────────────────────────────── */}
       <Modal open={open} onClose={() => setOpen(false)} title="Route Assign" subtitle="Assign an Amazon line — every field must be filled to create" onSubmit={submit} submitLabel={busy ? 'Checking VRIDs…' : 'Create route'} submitDisabled={!valid || busy} wide>
         <Row>
-          <Field label="Service date & time"><TextInput type="datetime-local" value={f.serviceAt} onChange={(e) => setF({ ...f, serviceAt: e.target.value })} /></Field>
+          <Field label="Service date & time"><DateTimeInput value={f.serviceAt} onChange={(v) => setF({ ...f, serviceAt: v })} /></Field>
           <Field label="Trip type">
             <div className="grid grid-cols-2 gap-2">
               {(['SCHEDULE', 'ADHOC'] as const).map((m) => (
@@ -387,8 +387,8 @@ export function Tours() {
                       <Field label="Location — Google Maps link"><TextInput value={s.mapUrl} onChange={(e) => setLegStop(li, si, { mapUrl: e.target.value })} placeholder="https://maps.app.goo.gl/…" className="text-xs" /></Field>
                     </Row>
                     <Row>
-                      <Field label="Arrival date & time"><TextInput type="datetime-local" value={s.arrivalAt} onChange={(e) => setLegStop(li, si, { arrivalAt: e.target.value })} /></Field>
-                      <Field label="Departure date & time"><TextInput type="datetime-local" value={s.departureAt} onChange={(e) => setLegStop(li, si, { departureAt: e.target.value })} /></Field>
+                      <Field label="Arrival date & time"><DateTimeInput value={s.arrivalAt} onChange={(v) => setLegStop(li, si, { arrivalAt: v })} /></Field>
+                      <Field label="Departure date & time"><DateTimeInput value={s.departureAt} onChange={(v) => setLegStop(li, si, { departureAt: v })} /></Field>
                     </Row>
                   </div>
                 ))}

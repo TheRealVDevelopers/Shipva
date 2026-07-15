@@ -94,3 +94,57 @@ export function Select({ children, ...props }: React.SelectHTMLAttributes<HTMLSe
 export function Row({ children }: { children: ReactNode }) {
   return <div className="grid grid-cols-2 gap-3">{children}</div>;
 }
+
+/**
+ * Date + time picker that reads/writes a `datetime-local` value
+ * ("2026-07-16T09:00") but never wraps.
+ *
+ * The native <input type="datetime-local"> spinner rolls 23 → 00 and 59 → 00,
+ * which the client asked us to stop; that's the browser's own behaviour and
+ * can't be overridden. So the time half is a pair of plain selects that simply
+ * end at 23 and 59 — nothing to roll past. The date half stays native, since
+ * its calendar is genuinely better than anything hand-rolled.
+ */
+export function DateTimeInput({ value, onChange, minuteStep = 1, disabled }: {
+  value: string;
+  onChange: (v: string) => void;
+  /** Minutes granularity. 1 by default: the client asked for the range to end
+   *  at 59, and a coarser step would also make a time like 22:47 unenterable. */
+  minuteStep?: number;
+  disabled?: boolean | undefined;
+}) {
+  const [datePart = '', timePart = ''] = value.split('T');
+  const [hh = '', mm = ''] = timePart.split(':');
+
+  const emit = (d: string, h: string, m: string) => {
+    if (!d) return onChange('');
+    // A date with no time yet is still a valid partial choice — default to 00:00
+    // rather than emitting something unparseable.
+    onChange(`${d}T${(h || '00').padStart(2, '0')}:${(m || '00').padStart(2, '0')}`);
+  };
+
+  const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
+  const minutes = Array.from({ length: Math.ceil(60 / minuteStep) }, (_, i) => String(i * minuteStep).padStart(2, '0'));
+  const sel = `${inputCls} px-2 tabular-nums`;
+
+  return (
+    <div className="flex items-center gap-2">
+      <input type="date" value={datePart} disabled={disabled}
+        onChange={(e) => emit(e.target.value, hh, mm)}
+        className={`${inputCls} flex-1`} />
+      <div className="flex shrink-0 items-center gap-1">
+        <select aria-label="Hour" value={hh} disabled={disabled || !datePart}
+          onChange={(e) => emit(datePart, e.target.value, mm)} className={sel}>
+          <option value="">--</option>
+          {hours.map((h) => <option key={h} value={h}>{h}</option>)}
+        </select>
+        <span className="text-sm font-bold text-neutral-400">:</span>
+        <select aria-label="Minute" value={mm} disabled={disabled || !datePart}
+          onChange={(e) => emit(datePart, hh, e.target.value)} className={sel}>
+          <option value="">--</option>
+          {minutes.map((m) => <option key={m} value={m}>{m}</option>)}
+        </select>
+      </div>
+    </div>
+  );
+}
