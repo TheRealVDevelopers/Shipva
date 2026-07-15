@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   Plus, FileText, MapPin, Search, Truck, X, Check, ExternalLink, Flag, Navigation,
   Trash2, Route as RouteIcon, UserPlus, UserCog, ChevronRight,
@@ -16,7 +16,7 @@ import {
   requiredError, positiveError, normalizePhone, allClear,
 } from '../../lib/validate.js';
 import { osCounters, type Trip, type TripPoint, type TripStatus } from '../../lib/mocks.js';
-import { useStore } from '../../lib/store.js';
+import { useStore, stageOf, type Customer } from '../../lib/store.js';
 import { useAuth } from '../../lib/auth.js';
 import { watchMembers, teamOf, type Member } from '../../lib/members.js';
 import { useNotify } from '../../lib/notify.js';
@@ -48,7 +48,6 @@ const EMPTY = {
   mode: 'single' as 'single' | 'multi',
   date: '', driver: '', vehicleReg: '', customer: '', material: '', weight: '', freight: '', handledBy: '',
 };
-const NEW_CUST = { name: '', phone: '', city: '' };
 const NEW_DRIVER = { name: '', phone: '', vehicleReg: '', aadhaar: '', licenseNo: '' };
 
 export function Trips() {
@@ -67,10 +66,7 @@ export function Trips() {
   const [pts, setPts] = useState<PointDraft[]>([blankPoint(), blankPoint()]);
   const [trackId, setTrackId] = useState<string | null>(null);
   const [tried, setTried] = useState(false);
-  // inline add
-  const [custAdd, setCustAdd] = useState(false);
-  const [newCust, setNewCust] = useState(NEW_CUST);
-  const [custTried, setCustTried] = useState(false);
+  // inline add — drivers only; transporters go through onboarding in Transporters
   const [drvAdd, setDrvAdd] = useState(false);
   const [newDriver, setNewDriver] = useState(NEW_DRIVER);
   const [drvTried, setDrvTried] = useState(false);
@@ -92,7 +88,6 @@ export function Trips() {
     setF({ ...EMPTY, date: todayFullLabel(), handledBy: member?.uid ?? '' });
     setPts([blankPoint(), blankPoint()]);
     setTried(false);
-    setCustAdd(false); setNewCust(NEW_CUST); setCustTried(false);
     setDrvAdd(false); setNewDriver(NEW_DRIVER); setDrvTried(false);
   }
   function setMode(mode: 'single' | 'multi') {
@@ -120,12 +115,16 @@ export function Trips() {
   // A truck may only go on a trip once an owner/manager has verified its papers.
   const vehicleNotVerified = !!f.vehicleReg && !trucks.find((t) => t.reg === f.vehicleReg)?.verified;
   const unverifiedTrucks = trucks.filter((t) => !t.verified).length;
+  // ...and a transporter only once their agreement is approved (onboarded).
+  const custNotOnboarded = !!f.customer && stageOf(customers.find((c) => c.name === f.customer) ?? ({} as Customer)) !== 'active';
+  const pendingCustomers = customers.filter((c) => stageOf(c) !== 'active').length;
   const errs = {
     date: requiredError(f.date, 'Trip date'),
     driver: requiredError(f.driver, 'Driver'),
     vehicleReg: requiredError(f.vehicleReg, 'Vehicle')
       || (vehicleNotVerified ? "This truck's documents aren't verified yet" : ''),
-    customer: requiredError(f.customer, 'Transporter'),
+    customer: requiredError(f.customer, 'Transporter')
+      || (custNotOnboarded ? "This transporter isn't onboarded yet" : ''),
     material: requiredError(f.material, 'Material'),
     weight: positiveError(f.weight, 'Weight'),
     freight: positiveError(f.freight, 'Freight'),
@@ -137,22 +136,6 @@ export function Trips() {
     if (i === 0) return 'Pickup point';
     if (i === total - 1) return 'Drop point';
     return `Point ${i}`;
-  }
-
-  // Inline "new transporter" — company name, city and phone are all required.
-  const custErrs = {
-    name: requiredError(newCust.name, 'Transporter name'),
-    city: nameError(newCust.city, { label: 'City' }),
-    phone: phoneError(newCust.phone),
-  };
-  function saveNewCustomer() {
-    setCustTried(true);
-    if (!allClear(custErrs)) return;
-    const name = newCust.name.trim();
-    addCustomer({ name, gstin: '', phone: normalizePhone(newCust.phone), city: newCust.city.trim(), ratePerKmPaise: 0 });
-    setF({ ...f, customer: name });
-    setCustAdd(false); setNewCust(NEW_CUST); setCustTried(false);
-    push({ title: 'Transporter added', body: `${name} added and selected.`, tone: 'success' });
   }
 
   // Inline "new driver" — the client requires Aadhaar + driving licence up front.
@@ -410,33 +393,26 @@ export function Trips() {
         </Field>
 
         {/* Transporter + inline add */}
-        <Field label="Transporter" required error={tried ? errs.customer : undefined}>
+        <Field label="Transporter" required error={tried ? errs.customer : undefined}
+          hint={pendingCustomers > 0 ? `${pendingCustomers} transporter${pendingCustomers === 1 ? '' : 's'} can't be picked until their agreement is approved.` : undefined}>
           <div className="flex items-center gap-2">
             <Select value={f.customer} onChange={set('customer')}>
               <option value="">Select transporter</option>
-              {customers.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
+              {customers.map((c) => (
+                <option key={c.id} value={c.name} disabled={stageOf(c) !== 'active'}>
+                  {c.name}{stageOf(c) === 'active' ? '' : ' — not onboarded'}
+                </option>
+              ))}
             </Select>
-            <button type="button" onClick={() => setCustAdd((v) => !v)} className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-white px-2.5 py-2 text-xs font-bold text-primary-600 ring-1 ring-inset ring-primary-200 hover:bg-primary-50"><UserPlus size={13} /> New</button>
+            {/* No inline "add transporter" here any more: onboarding is a real
+                process (full legal/bank details, a 7-day letter, then an approved
+                agreement), and a vendor created here would be a draft — unusable
+                on the very trip being created. Send them to Transporters instead. */}
+            <Link to="/p/customers" className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-white px-2.5 py-2 text-xs font-bold text-primary-600 ring-1 ring-inset ring-primary-200 hover:bg-primary-50" title="Onboard a new transporter">
+              <UserPlus size={13} /> Onboard
+            </Link>
           </div>
         </Field>
-        {custAdd && (
-          <div className="space-y-3 rounded-xl bg-primary-50/60 p-3 ring-1 ring-inset ring-primary-100">
-            <Row>
-              <Field label="Transporter name" required error={custTried ? custErrs.name : undefined}>
-                <TextInput value={newCust.name} onChange={(e) => setNewCust({ ...newCust, name: e.target.value })} placeholder="Acme Traders" autoFocus />
-              </Field>
-              <Field label="City" required error={custTried ? custErrs.city : undefined}>
-                <TextInput value={newCust.city} onChange={(e) => setNewCust({ ...newCust, city: e.target.value })} placeholder="Hosur" />
-              </Field>
-            </Row>
-            <div className="flex items-end gap-2">
-              <Field label="Phone" required error={custTried ? custErrs.phone : undefined}>
-                <TextInput inputMode="numeric" maxLength={10} value={newCust.phone} onChange={(e) => setNewCust({ ...newCust, phone: e.target.value })} placeholder="9876543210" />
-              </Field>
-              <button type="button" onClick={saveNewCustomer} className="mb-0.5 shrink-0 rounded-lg bg-primary-500 px-3 py-2 text-xs font-bold text-white hover:bg-primary-600">Add transporter</button>
-            </div>
-          </div>
-        )}
 
         {canAssign && (
           <Field label="Handled by" hint={isAdmin ? 'Which team member owns this route' : 'Which of your POCs runs this route'}>

@@ -30,11 +30,84 @@ export interface Agreement {
   notes?: string;
 }
 
+/** How far a transporter has got through onboarding. Mirrors the client's own
+ *  documents: capture details, issue the 7-day Letter of Intent, run the trial,
+ *  sign the Service Agreement before day 8 — only then are they onboarded.
+ *  A transporter can't be put on a trip until they're `active`. */
+export type OnboardStage = 'draft' | 'trial' | 'agreement_pending' | 'active' | 'rejected';
+
+export type EntityType = 'proprietorship' | 'partnership' | 'pvt_ltd' | 'llp' | 'other';
+
+/**
+ * A transporter (the app calls them customers internally; the UI says
+ * "Transporter"). The field set is driven by what the two agreements actually
+ * demand — the Service Agreement's party block wants legal name, entity type,
+ * GSTIN/PAN and registered address; clause 5.5 needs a GSTIN to raise a
+ * GST-compliant invoice; 5.8 needs a PAN for TDS; clause 17 needs a notices
+ * address + email; the signature block needs an authorised signatory; and
+ * Annexure B is the rate contract.
+ */
 export interface Customer {
-  id: string; name: string; gstin: string; phone: string; city: string;
-  ratePerKmPaise: number; outstandingPaise: number;
+  id: string;
+  /** Legal entity name — the "OWNER" in the Service Agreement party block. */
+  name: string;
+  entityType?: EntityType;
+  /** GSTIN, or Aadhaar instead when the vendor isn't GST-registered. */
+  gstin: string;
+  pan?: string;
+  aadhaar?: string;
+  /** Contact — the LOI is addressed to this person. */
+  contactName?: string;
+  phone: string;
+  /** Secondary phone — one of only two fields the client allows to be optional. */
+  phone2?: string;
+  email?: string;
+  /** Registered / office address (agreement party block + clause 17 notices). */
+  addressLine1?: string;
+  /** Address line 2 — the other field the client allows to be optional. */
+  addressLine2?: string;
+  city: string;
+  state?: string;
+  pincode?: string;
+  /** Payment details — how the monthly vendor payout actually goes out. */
+  bankAccountName?: string;
+  bankAccountNo?: string;
+  bankIfsc?: string;
+  bankName?: string;
+  upiId?: string;
+  /** Who signs for them (agreement signature block). */
+  signatoryName?: string;
+  signatoryTitle?: string;
+  /** Rate contract — Annexure B of the Service Agreement. */
+  ratePerKmPaise: number;
+  monthlyCostPaise?: number;
+  extraKmPaise?: number;
+  avgMonthlyKm?: number;
+  vehicleType?: string;
+  /** Onboarding progress. Absent on records that predate onboarding — those are
+   *  grandfathered as `active` (see stageOf), since they're already trading. */
+  stage?: OnboardStage;
+  trialStart?: string;
+  trialEnd?: string;
+  loiIssuedOn?: string;
+  agreementApprovedOn?: string;
+  agreementApprovedBy?: string;
+  outstandingPaise: number;
   agreement?: Agreement;
 }
+
+/** Records created before onboarding existed have no stage — they're live
+ *  customers with outstanding invoices, so treat them as already onboarded
+ *  rather than suddenly blocking trips for them. */
+export const stageOf = (c: Customer): OnboardStage => c.stage ?? 'active';
+
+export const STAGE_LABEL: Record<OnboardStage, string> = {
+  draft: 'Draft — details captured',
+  trial: 'Trial (7-day LOI)',
+  agreement_pending: 'Agreement pending',
+  active: 'Onboarded',
+  rejected: 'Rejected',
+};
 const seedCustomers: Customer[] = [
   { id: 'c1', name: 'Bharat Steels', gstin: '29AABCB1111C1Z9', phone: '+91 98450 10001', city: 'Hosur', ratePerKmPaise: 4200, outstandingPaise: 1180000, agreement: { createdOn: '12 Jun 2026', effectiveFrom: '01 Jun 2026', durationMonths: 12, ratePerKmPaise: 4200 } },
   { id: 'c2', name: 'Vexa Polymers', gstin: '29AACCV2222D1Z8', phone: '+91 98450 10002', city: 'Chennai', ratePerKmPaise: 3800, outstandingPaise: 1357000 },
@@ -167,6 +240,9 @@ interface StoreApi extends StoreShape {
   deleteTruck: (id: string) => void;
   setCustomerAgreement: (id: string, a: Agreement) => void;
   setAttachedAgreement: (id: string, a: Agreement) => void;
+  /** Edit a transporter / advance them through onboarding. */
+  updateCustomer: (id: string, patch: Partial<Customer>) => void;
+  deleteCustomer: (id: string) => void;
   addStaff: (s: Omit<Staff, 'id'>) => void;
   addAttached: (a: Omit<AttachedTruck, 'id'>) => void;
   recordOwnerPayment: (id: string, amountPaise: number) => void;
@@ -403,6 +479,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     void customersCol.update(id, { agreement: a });
   }, []);
 
+  const updateCustomer = useCallback((id: string, patch: Partial<Customer>) => { void customersCol.update(id, patch); }, []);
+  const deleteCustomer = useCallback((id: string) => { void customersCol.remove(id); }, []);
+
   const setAttachedAgreement = useCallback((id: string, a: Agreement) => {
     void ownersCol.update(id, { agreement: a });
   }, []);
@@ -432,12 +511,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     addTrip, updateTripStatus, advanceTrip, addSavedPoint, addInvoice, markInvoicePaid, addExpense, addFuelLog,
     addExpenseCategory, addRequest, resolveRequest, addCustomer, addDriver, addTruck,
     setDriverDocs, setTruckDocs, updateDriver, updateTruck, deleteDriver, deleteTruck,
-    setCustomerAgreement, setAttachedAgreement, addStaff, addAttached, recordOwnerPayment, addTour, updateTour, runPayroll, reset,
+    setCustomerAgreement, setAttachedAgreement, updateCustomer, deleteCustomer,
+    addStaff, addAttached, recordOwnerPayment, addTour, updateTour, runPayroll, reset,
   }), [s, trips, tours, customers, drivers, trucks, attached,
     addTrip, updateTripStatus, advanceTrip, addSavedPoint, addInvoice, markInvoicePaid, addExpense, addFuelLog,
     addExpenseCategory, addRequest, resolveRequest, addCustomer, addDriver, addTruck,
     setDriverDocs, setTruckDocs, updateDriver, updateTruck, deleteDriver, deleteTruck,
-    setCustomerAgreement, setAttachedAgreement, addStaff, addAttached, recordOwnerPayment, addTour, updateTour, runPayroll, reset]);
+    setCustomerAgreement, setAttachedAgreement, updateCustomer, deleteCustomer,
+    addStaff, addAttached, recordOwnerPayment, addTour, updateTour, runPayroll, reset]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
