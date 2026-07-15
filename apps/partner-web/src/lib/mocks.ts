@@ -194,6 +194,12 @@ export interface Trip {
   stepIndex?: number;
   /** Free-text note captured when the trip is finished (e.g. "police checkpost delay"). */
   remark?: string;
+  /** Reported delays — same audit log a tour keeps. Typed loosely here to avoid
+   *  a cycle with store.tsx, which owns DelayReport. */
+  reports?: {
+    id: string; vrid: string; event: string; reason: string;
+    scheduledAt: string; estimatedAt: string; byName: string; atMs: number;
+  }[];
   /** Firestore doc id (present once the trip is backed by the backend). */
   id?: string;
   /** The supervisor/member who handles this trip. Owner/managers see all; a

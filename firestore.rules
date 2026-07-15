@@ -156,6 +156,13 @@ service cloud.firestore {
     match /orgTrucks/{id}    { allow read, create, update: if isOrgMember(); allow delete: if canWipe(); }
     match /orgOwners/{id}    { allow read, create, update: if isOrgMember(); allow delete: if canWipe(); }
 
+    // Delay reason codes — the client's rule: the admin sets the list, everyone
+    // else may only pick from it. So reads are open to members, writes aren't.
+    match /orgReasonCodes/{id} {
+      allow read: if isOrgMember();
+      allow create, update, delete: if isOrgAdmin();
+    }
+
     // Public config (vehicle types, zones, fares) — readable by any signed-in user.
     match /config/{doc} { allow read: if signedIn(); allow write: if false; }
 

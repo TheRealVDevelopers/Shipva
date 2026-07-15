@@ -173,6 +173,27 @@ export interface TourStop {
   actualArrival?: number; actualDeparture?: number;
 }
 
+/**
+ * A reported delay against one VRID's arrival or departure. Append-only — the
+ * client asked for an audit log, so a correction is another entry rather than an
+ * edit of the last one. Lives on the run itself so it travels with it.
+ */
+export interface DelayReport {
+  id: string;
+  /** Which VRID the delay is on. */
+  vrid: string;
+  /** What slipped, e.g. "HKR3 arrival" / "TBK2 departure". */
+  event: string;
+  /** Reason code, chosen from the admin's list. */
+  reason: string;
+  /** The time it was meant to happen (as scheduled), for the record. */
+  scheduledAt: string;
+  /** The new estimate. */
+  estimatedAt: string;
+  byName: string;
+  atMs: number;
+}
+
 /** A stop on a VRID leg. Each VRID (vehicle-run) is its own route. */
 export interface TourLegStop {
   name: string; location?: string; mapUrl?: string;
@@ -211,6 +232,8 @@ export interface Tour {
   expenseAmount?: string; expenseNote?: string;
   /** WhatsApp share status. */
   sharedVendor?: boolean; sharedDriver?: boolean;
+  /** Reported delays, oldest first — the audit log. */
+  reports?: DelayReport[];
 }
 
 /** A remembered pickup/drop location, suggested while typing a new trip. */

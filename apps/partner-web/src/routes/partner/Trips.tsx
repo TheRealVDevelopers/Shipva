@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Plus, FileText, MapPin, Search, Truck, X, Check, ExternalLink, Flag, Navigation,
   Trash2, Route as RouteIcon, UserPlus, UserCog, ChevronRight, Pencil, Download, CalendarRange,
+  AlertTriangle,
 } from 'lucide-react';
 import { PartnerLayout } from '../../components/layout/PartnerLayout.js';
 import { Card } from '../../components/ui/Card.js';
@@ -15,8 +16,10 @@ import {
   nameError, phoneError, aadhaarError, licenceError, vehicleRegError,
   requiredError, positiveError, normalizePhone, allClear,
 } from '../../lib/validate.js';
-import { isVerified, type Trip, type TripPoint, type TripStatus } from '../../lib/mocks.js';
-import { useStore, stageOf, type Customer } from '../../lib/store.js';
+import { isVerified, type Trip, type TripPoint } from '../../lib/mocks.js';
+import { useStore, stageOf, type Customer, type DelayReport } from '../../lib/store.js';
+import { buildBoard, inLane, matches, type BoardItem, type Lane } from '../../lib/board.js';
+import { ReportDelay } from '../../components/ReportDelay.js';
 import { useAuth } from '../../lib/auth.js';
 import { watchMembers, teamOf, type Member } from '../../lib/members.js';
 import { canEditRecords } from '../../lib/roles.js';
@@ -25,24 +28,10 @@ import { printLR } from '../../lib/print.js';
 import { exportRows, rupeeCell, type Cell } from '../../lib/exportExcel.js';
 import { tripSteps, tripPoints, currentStep, progressPct } from '../../lib/trip.js';
 
-const TRIP_BADGE: Record<TripStatus, { label: string; tone: BadgeTone }> = {
-  assigned: { label: 'Assigned', tone: 'info' },
-  loading: { label: 'Loading', tone: 'accent' },
-  in_transit: { label: 'In transit', tone: 'primary' },
-  at_drop: { label: 'At drop', tone: 'primary' },
-  pod_pending: { label: 'POD pending', tone: 'warning' },
-  closed: { label: 'Closed', tone: 'success' },
-};
-
-const FILTERS = ['All', 'Upcoming', 'In Transit', 'Completed'] as const;
-type Filter = (typeof FILTERS)[number];
-
-function matchesFilter(status: TripStatus, filter: Filter): boolean {
-  if (filter === 'All') return true;
-  if (filter === 'Upcoming') return status === 'assigned';       // assigned, not started
-  if (filter === 'Completed') return status === 'closed';
-  return status !== 'assigned' && status !== 'closed';           // In Transit: loading → POD
-}
+// Three tabs, no "All" — the client's call. Amazon tours and ordinary trips
+// share these lanes (see lib/board).
+const FILTERS: Lane[] = ['Upcoming', 'In Transit', 'Completed'];
+type Filter = Lane;
 
 interface PointDraft { label: string; mapUrl: string }
 const blankPoint = (): PointDraft => ({ label: '', mapUrl: '' });
@@ -52,17 +41,167 @@ const EMPTY = {
 };
 const NEW_DRIVER = { name: '', phone: '', vehicleReg: '', aadhaar: '', licenseNo: '' };
 
+const LANE_TONE: Record<Lane, BadgeTone> = { Upcoming: 'info', 'In Transit': 'primary', Completed: 'success' };
+
+const fmtPlan = (dt?: string) => {
+  if (!dt) return '—';
+  const d = new Date(dt);
+  return isNaN(d.getTime()) ? dt : d.toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false });
+};
+const fmtActual = (ms?: number) => (ms ? new Date(ms).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false }) : '');
+
+/**
+ * One run on the board. Collapsed it's a scannable line; expanded it shows the
+ * Relay-style Stop / Equipment / Arrival / Departure breakdown, per VRID.
+ *
+ * Trip-only actions (LR, track, status) are hidden for tours — a tour is worked
+ * from its own line board, and pretending otherwise would offer buttons that do
+ * nothing.
+ */
+function BoardRow({ item, expanded, onToggle, showOwner, canEdit, onReport, onTrack, onPrintLR, onEdit, onDelete, onAdvance }: {
+  item: BoardItem; expanded: boolean; onToggle: () => void; showOwner: boolean; canEdit: boolean;
+  onReport: () => void; onTrack: () => void; onPrintLR: () => void;
+  onEdit: () => void; onDelete: () => void; onAdvance: () => void;
+}) {
+  const isTour = item.kind === 'tour';
+  const trip = isTour ? null : (item.source as Trip);
+  const steps = trip ? tripSteps(trip) : [];
+  const cur = trip ? currentStep(trip) : 0;
+  const next = trip ? steps[cur + 1] : undefined;
+  const finished = trip ? cur >= steps.length - 1 : item.lane === 'Completed';
+  const reports = item.source.reports ?? [];
+
+  return (
+    <div className={expanded ? 'bg-primary-50/20' : ''}>
+      {/* Collapsed line */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-3 hover:bg-neutral-50/70">
+        <button onClick={onToggle} className="flex min-w-0 flex-1 items-center gap-2 text-left" aria-expanded={expanded}>
+          <ChevronRight size={14} className={`shrink-0 text-neutral-400 transition-transform ${expanded ? 'rotate-90' : ''}`} />
+          <span className="font-mono text-sm font-extrabold text-primary-700">{item.code}</span>
+          <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-extrabold uppercase ${isTour ? 'bg-amber-100 text-amber-800' : 'bg-neutral-100 text-neutral-600'}`}>
+            {isTour ? 'Amazon' : 'Trip'}
+          </span>
+          <span className="truncate text-xs text-neutral-500">
+            {item.stops.map((s) => s.name).join(' → ') || '—'}
+          </span>
+        </button>
+
+        <div className="flex shrink-0 items-center gap-2 text-[11px] text-neutral-500">
+          {item.distanceLabel && <span className="font-semibold text-neutral-700">{item.distanceLabel}</span>}
+          {item.vehicleType && <span>{item.vehicleType}</span>}
+          <span className="font-mono">{item.vehicle || '—'}</span>
+          <Badge tone={LANE_TONE[item.lane]}>{item.lane}</Badge>
+          {reports.length > 0 && (
+            <span className="inline-flex items-center gap-1 rounded bg-amber-50 px-1.5 py-0.5 font-bold text-amber-700" title={`${reports.length} delay report${reports.length === 1 ? '' : 's'}`}>
+              <AlertTriangle size={10} /> {reports.length}
+            </span>
+          )}
+          {showOwner && item.ownerName && (
+            <span className="inline-flex items-center gap-1 rounded-md bg-neutral-100 px-2 py-0.5 font-bold text-neutral-600" title="Handled by">
+              <UserCog size={10} /> {item.ownerName}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Expanded — Stop / Equipment / Arrival / Departure, per VRID */}
+      {expanded && (
+        <div className="px-4 pb-4">
+          {item.legs.map((leg) => (
+            <div key={leg.vrid} className="mb-3 overflow-hidden rounded-lg ring-1 ring-inset ring-neutral-200">
+              <div className="flex items-center gap-2 bg-neutral-50 px-3 py-1.5">
+                <span className="rounded bg-primary-50 px-1.5 py-0.5 font-mono text-[11px] font-extrabold text-primary-700">{leg.vrid}</span>
+                {leg.loadType && <span className="text-[10px] font-bold uppercase text-neutral-500">{leg.loadType}</span>}
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="text-[10px] uppercase tracking-wide text-neutral-400">
+                    <tr>
+                      <th className="px-3 py-1.5 font-semibold">Stop</th>
+                      <th className="px-3 py-1.5 font-semibold">Equipment</th>
+                      <th className="px-3 py-1.5 font-semibold">Arrival</th>
+                      <th className="px-3 py-1.5 font-semibold">Departure</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-neutral-50">
+                    {leg.stops.map((s, si) => (
+                      <tr key={si}>
+                        <td className="px-3 py-2">
+                          <div className="flex items-center gap-1.5">
+                            <span className="flex h-4 w-4 items-center justify-center rounded-full bg-neutral-200 text-[9px] font-black text-neutral-600">{si + 1}</span>
+                            <span className="font-mono font-bold text-neutral-800">{s.name}</span>
+                            {s.mapUrl && <a href={s.mapUrl} target="_blank" rel="noreferrer" className="text-[10px] font-bold text-primary-600 hover:underline">Map</a>}
+                          </div>
+                        </td>
+                        <td className="px-3 py-2 text-neutral-600">{item.vehicleType || '—'}<div className="text-[10px] text-neutral-400">{item.vehicle}</div></td>
+                        <td className="px-3 py-2">
+                          <div className="text-neutral-400">Sch. {fmtPlan(s.arrivalAt)}</div>
+                          {s.actualArrival ? <div className="font-bold text-emerald-600">✓ {fmtActual(s.actualArrival)}</div> : null}
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="text-neutral-400">Sch. {fmtPlan(s.departureAt)}</div>
+                          {s.actualDeparture ? <div className="font-bold text-emerald-600">✓ {fmtActual(s.actualDeparture)}</div> : null}
+                        </td>
+                      </tr>
+                    ))}
+                    {leg.stops.length === 0 && (
+                      <tr><td colSpan={4} className="px-3 py-3 text-center text-[11px] text-neutral-400">No stops recorded.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ))}
+
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="text-[11px] text-neutral-500">
+              {item.driver || '—'}{item.driverNumber ? ` · ${item.driverNumber}` : ''} · {item.dateLabel}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Was "Report delay" — the client wants it to read simply "Report". */}
+              <button onClick={onReport} className="inline-flex items-center gap-1 rounded-lg bg-white px-2.5 py-1.5 text-xs font-bold text-amber-700 ring-1 ring-inset ring-amber-200 hover:bg-amber-50">
+                <AlertTriangle size={12} /> Report
+              </button>
+              {!isTour && (
+                <>
+                  {!finished && next && (
+                    <button onClick={onAdvance} className="inline-flex items-center gap-1 rounded-lg bg-emerald-500 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-emerald-600">
+                      <Check size={12} /> {cur === steps.length - 2 ? 'Finish' : next.label}
+                    </button>
+                  )}
+                  <button onClick={onTrack} className="inline-flex items-center gap-1 rounded-lg bg-white px-2.5 py-1.5 text-xs font-bold text-primary-600 ring-1 ring-inset ring-primary-200 hover:bg-primary-50"><Navigation size={12} /> Track</button>
+                  <button onClick={onPrintLR} className="inline-flex items-center gap-1 rounded-lg bg-white px-2.5 py-1.5 text-xs font-bold text-neutral-600 ring-1 ring-inset ring-neutral-200 hover:bg-neutral-50"><FileText size={12} /> LR</button>
+                </>
+              )}
+              {canEdit && (
+                <>
+                  <button onClick={onEdit} className="rounded-lg p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-primary-600" title={isTour ? 'Edit on the Amazon Tours board' : 'Edit trip'}><Pencil size={14} /></button>
+                  {!isTour && <button onClick={onDelete} className="rounded-lg p-1.5 text-neutral-400 hover:bg-rose-50 hover:text-rose-600" title="Delete trip"><Trash2 size={14} /></button>}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function Trips() {
-  const { trips, drivers, trucks, customers, savedPoints, addTrip, addSavedPoint, addDriver, advanceTrip, updateTrip, deleteTrip } = useStore();
+  const { trips, tours, drivers, trucks, customers, savedPoints, addTrip, addSavedPoint, addDriver, advanceTrip, updateTrip, deleteTrip, updateTour } = useStore();
   const { member } = useAuth();
   const isAdmin = member?.role === 'owner' || member?.role === 'manager';
   const canAssign = isAdmin || member?.role === 'team_leader';
   const canEdit = canEditRecords(member?.role);
   const { push } = useNotify();
+  const navigate = useNavigate();
   const [params] = useSearchParams();
   const [members, setMembers] = useState<Member[]>([]);
-  const initialFilter = FILTERS.find((x) => x === params.get('f')) ?? 'All';
+  const initialFilter = FILTERS.find((x) => x === params.get('f')) ?? 'Upcoming';
   const [filter, setFilter] = useState<Filter>(initialFilter);
+  /** Which row is expanded into its Stop / Equipment / Arrival / Departure detail. */
+  const [openRow, setOpenRow] = useState<string | null>(null);
+  const [reportFor, setReportFor] = useState<BoardItem | null>(null);
   const [q, setQ] = useState('');
   const [open, setOpen] = useState(false);
   const [f, setF] = useState(EMPTY);
@@ -84,31 +223,39 @@ export function Trips() {
   // Owner/manager can hand a trip to anyone; a Team Leader only to their POCs (or themselves).
   const assignable = isAdmin ? members : members.filter((m) => m.leaderUid === member?.uid || m.uid === member?.uid);
 
-  // Completed date window — "which trips finished between these dates". Uses the
-  // trip's own timestamp, not its display label, which has no year on old rows.
-  const inDateWindow = (t: Trip): boolean => {
+  // Amazon tours and ordinary trips on one board. Both collections are already
+  // scoped per member upstream, so whatever a POC can see here is already theirs.
+  const board = useMemo(() => buildBoard(tours, trips), [tours, trips]);
+
+  // Completed date window — "which runs finished between these dates". Uses the
+  // run's own timestamp, not its display label, which has no year on old rows.
+  const inDateWindow = (i: BoardItem): boolean => {
     if (filter !== 'Completed' || (!from && !to)) return true;
-    const ms = t.createdAtMs ?? 0;
-    if (!ms) return false;
-    if (from && ms < new Date(`${from}T00:00:00`).getTime()) return false;
-    if (to && ms > new Date(`${to}T23:59:59`).getTime()) return false;
+    if (!i.startMs) return false;
+    if (from && i.startMs < new Date(`${from}T00:00:00`).getTime()) return false;
+    if (to && i.startMs > new Date(`${to}T23:59:59`).getTime()) return false;
     return true;
   };
 
-  const shown = trips
-    .filter((t) => matchesFilter(t.status, filter))
-    .filter(inDateWindow)
-    .filter((t) => (q ? `${t.lr} ${t.vrId ?? ''} ${t.driver} ${t.from} ${t.to} ${t.customer ?? ''} ${t.ownerName ?? ''}`.toLowerCase().includes(q.toLowerCase()) : true));
+  const shown = board.filter((i) => inLane(i, filter)).filter(inDateWindow).filter((i) => matches(i, q));
 
-  /** Export exactly what's on screen — the filter, dates and search applied. */
+  /** Export exactly what's on screen — the tab, dates and search applied. */
   function exportShown() {
-    exportRows(`sarva-trips-${filter.toLowerCase().replace(/\s+/g, '-')}`,
-      ['VR ID', 'LR', 'Date', 'From', 'To', 'Driver', 'Vehicle', 'Transporter', 'Material', 'Weight (kg)', 'Freight (₹)', 'Status', 'Handled by'],
-      shown.map((t): Cell[] => [
-        t.vrId ?? '', t.lr, t.date, t.from, t.to, t.driver, t.vehicleReg,
-        t.customer ?? '', t.material, t.weightKg, rupeeCell(t.freightPaise), t.status, t.ownerName ?? '',
+    exportRows(`sarva-${filter.toLowerCase().replace(/\s+/g, '-')}`,
+      ['Type', 'ID', 'VR IDs', 'Date', 'Route', 'Driver', 'Vehicle', 'Vehicle type', 'Distance', 'Status', 'Handled by'],
+      shown.map((i): Cell[] => [
+        i.kind === 'tour' ? 'Amazon tour' : 'Trip',
+        i.code, i.vrids.join(', '), i.dateLabel,
+        i.stops.map((s) => s.name).join(' → '),
+        i.driver, i.vehicle, i.vehicleType, i.distanceLabel, i.lane, i.ownerName,
       ]));
-    push({ title: 'Exported', body: `${shown.length} trip${shown.length === 1 ? '' : 's'} downloaded.`, tone: 'success' });
+    push({ title: 'Exported', body: `${shown.length} run${shown.length === 1 ? '' : 's'} downloaded.`, tone: 'success' });
+  }
+
+  /** Save a delay report back to whichever kind of record it came from. */
+  function saveReports(i: BoardItem, reports: DelayReport[]) {
+    if (i.kind === 'tour') updateTour(i.id, { reports });
+    else updateTrip(i.id, { reports });
   }
   const active = trips.filter((t) => t.status !== 'closed').length;
   const freightTotal = trips.reduce((s, t) => s + t.freightPaise, 0);
@@ -310,69 +457,27 @@ export function Trips() {
             </div>
           </div>
 
-          {/* Card grid */}
-          <div className="grid grid-cols-1 gap-4 p-4 lg:grid-cols-2">
-            {shown.map((t) => {
-              const steps = tripSteps(t);
-              const cur = currentStep(t);
-              const pct = progressPct(steps, cur);
-              const stops = tripPoints(t).length;
-              const finished = cur >= steps.length - 1;
-              const next = steps[cur + 1];
-              return (
-                <div key={t.id ?? t.lr} className="rounded-xl bg-white p-4 ring-1 ring-inset ring-neutral-200 transition hover:ring-primary-200">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-sm font-extrabold text-primary-700">{t.vrId ?? '—'}</span>
-                        <Badge tone={TRIP_BADGE[t.status].tone}>{steps[cur]?.label ?? TRIP_BADGE[t.status].label}</Badge>
-                      </div>
-                      <div className="font-mono text-[11px] text-neutral-400">{t.lr} · {t.date}</div>
-                    </div>
-                    {isAdmin && t.ownerName && (
-                      <span className="inline-flex items-center gap-1 rounded-md bg-neutral-100 px-2 py-1 text-[11px] font-bold text-neutral-600" title="Handled by">
-                        <UserCog size={11} /> {t.ownerName}
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="mt-2.5 flex items-center gap-1.5 text-sm text-neutral-700">
-                    <MapPin size={12} className="text-emerald-500" /><span className="font-semibold">{t.from}</span>
-                    <ChevronRight size={13} className="text-neutral-300" />
-                    <MapPin size={12} className="text-rose-500" /><span className="font-semibold">{t.to}</span>
-                    {stops > 2 && <span className="text-[11px] text-neutral-400">· {stops - 2} stop{stops - 2 > 1 ? 's' : ''}</span>}
-                  </div>
-                  <div className="mt-1 text-xs text-neutral-500">{t.driver} · <span className="font-mono">{t.vehicleReg}</span>{t.customer ? ` · ${t.customer}` : ''}</div>
-
-                  {/* progress */}
-                  <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-neutral-100">
-                    <div className={`h-full rounded-full transition-all ${finished ? 'bg-emerald-500' : 'bg-primary-500'}`} style={{ width: `${pct}%` }} />
-                  </div>
-
-                  <div className="mt-3 flex items-center justify-between gap-2">
-                    <span className="text-sm font-extrabold text-neutral-900">{rupees(t.freightPaise)}</span>
-                    <div className="flex items-center gap-2">
-                      {!finished && next && (
-                        <button onClick={() => advanceOnCard(t)} className="inline-flex items-center gap-1 rounded-lg bg-emerald-500 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-emerald-600" title="Update status">
-                          <Check size={12} /> {cur === steps.length - 2 ? 'Finish' : next.label}
-                        </button>
-                      )}
-                      <button onClick={() => t.id && setTrackId(t.id)} className="inline-flex items-center gap-1 rounded-lg bg-white px-2.5 py-1.5 text-xs font-bold text-primary-600 ring-1 ring-inset ring-primary-200 hover:bg-primary-50"><Navigation size={12} /> Track</button>
-                      <button onClick={() => printLR(t)} className="inline-flex items-center gap-1 rounded-lg bg-white px-2.5 py-1.5 text-xs font-bold text-neutral-600 ring-1 ring-inset ring-neutral-200 hover:bg-neutral-50"><FileText size={12} /> LR</button>
-                      {canEdit && (
-                        <>
-                          <button onClick={() => startEdit(t)} className="rounded-lg p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-primary-600" title="Edit trip"><Pencil size={14} /></button>
-                          <button onClick={() => setConfirmDel(t)} className="rounded-lg p-1.5 text-neutral-400 hover:bg-rose-50 hover:text-rose-600" title="Delete trip"><Trash2 size={14} /></button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+          {/* One board: Amazon tours and ordinary trips, newest first. */}
+          <div className="divide-y divide-neutral-100">
+            {shown.map((i) => (
+              <BoardRow key={`${i.kind}-${i.id || i.code}`} item={i}
+                expanded={openRow === `${i.kind}-${i.id}`}
+                onToggle={() => setOpenRow(openRow === `${i.kind}-${i.id}` ? null : `${i.kind}-${i.id}`)}
+                showOwner={isAdmin || canAssign}
+                canEdit={canEdit}
+                onReport={() => setReportFor(i)}
+                onTrack={() => i.kind === 'trip' && i.id && setTrackId(i.id)}
+                onPrintLR={() => i.kind === 'trip' && printLR(i.source as Trip)}
+                onEdit={() => i.kind === 'trip' ? startEdit(i.source as Trip) : navigate('/p/tours')}
+                onDelete={() => i.kind === 'trip' && setConfirmDel(i.source as Trip)}
+                onAdvance={() => i.kind === 'trip' && advanceOnCard(i.source as Trip)}
+              />
+            ))}
             {shown.length === 0 && (
-              <div className="col-span-full py-10 text-center text-sm text-neutral-400">
-                {trips.length === 0 ? 'No trips yet — create your first one.' : 'No trips match this filter.'}
+              <div className="py-10 text-center text-sm text-neutral-400">
+                {board.length === 0
+                  ? 'Nothing here yet — create a trip, or assign an Amazon route.'
+                  : `No ${filter.toLowerCase()} runs match this view.`}
               </div>
             )}
           </div>
@@ -382,6 +487,12 @@ export function Trips() {
       <datalist id="saved-points">
         {savedPoints.map((sp) => <option key={sp.label} value={sp.label} />)}
       </datalist>
+
+      {/* Report a delay against a VRID's arrival/departure */}
+      {reportFor && (
+        <ReportDelay item={reportFor} onClose={() => setReportFor(null)}
+          onSave={(reports) => saveReports(reportFor, reports)} />
+      )}
 
       {/* New trip */}
       <Modal open={open} onClose={() => setOpen(false)}
