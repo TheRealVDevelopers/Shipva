@@ -1,8 +1,13 @@
 /**
  * Styled "Amazon Tour Sheet" export — reproduces the client's operational Excel
- * format (55 columns, up to 4 stops, bold centred headers, red status/photo
+ * format (54 columns, up to 4 stops, bold centred headers, red status/photo
  * columns, yellow "Amazon Rely KM") as a .xls that opens in Excel with the
  * formatting. Populated fully from Tour records.
+ *
+ * Column order is verified against their own "EXL Update.xlsx": stops 1–3 each
+ * end with a KM column, stop 4 does not. Keep it that way — an extra column
+ * shifts TOTAL/AMAZON RELY/GPS/Remarks and silently files numbers under the
+ * wrong headers when they paste into their template.
  */
 import type { Tour, TourStop } from './store.js';
 
@@ -13,7 +18,7 @@ const stopAt = (t: Tour, i: number): TourStop | undefined => t.stops[i];
 
 function stopCols(n: number): Col[] {
   const i = n - 1;
-  return [
+  const cols: Col[] = [
     { label: `Stop ${n}`, get: (t) => stopAt(t, i)?.name ?? '' },
     { label: `Stop ${n} AMZ Arrival`, get: (t) => stopAt(t, i)?.amzArrival ?? '' },
     { label: 'KM PHOTO\nYES/NO', red: true, get: (t) => (stopAt(t, i)?.name ? yn(!!stopAt(t, i)?.kmPhoto) : '') },
@@ -21,8 +26,24 @@ function stopCols(n: number): Col[] {
     { label: `Stop ${n} AMZ Departure`, get: (t) => stopAt(t, i)?.amzDeparture ?? '' },
     { label: 'INVOICE PHOTO\nYES/NO', red: true, get: (t) => (stopAt(t, i)?.name ? yn(!!stopAt(t, i)?.invoicePhoto) : '') },
     { label: 'Dispatch Report', red: true, get: (t) => stopAt(t, i)?.dispatchReport ?? '' },
-    { label: 'KM', get: (t) => stopAt(t, i)?.km ?? '' },
   ];
+  // The client's own sheet carries a KM column for stops 1–3 but NOT for stop 4
+  // (it runs Dispatch Report -> TOTAL VEHICLE MANUAL KM). Emitting one anyway
+  // shifted their last four columns, so stop 4's KM is folded into the manual-KM
+  // total below instead. Match their file exactly — 54 columns.
+  if (n < 4) cols.push({ label: 'KM', get: (t) => stopAt(t, i)?.km ?? '' });
+  return cols;
+}
+
+/** Stop 4 has no KM column in the client's sheet, so its reading would be lost.
+ *  Fold it into the manual-KM total rather than dropping the number. */
+function totalManualKm(t: Tour): string {
+  const stop4 = stopAt(t, 3)?.km?.trim();
+  if (!stop4) return t.totalManualKm;
+  const total = Number(t.totalManualKm);
+  const extra = Number(stop4);
+  if (!Number.isFinite(total) || !Number.isFinite(extra)) return t.totalManualKm;
+  return String(total + extra);
 }
 
 const COLUMNS: Col[] = [
@@ -46,7 +67,7 @@ const COLUMNS: Col[] = [
   { label: 'Driver Number', get: (t) => t.driverNumber },
   { label: "VENDOR'S NAME", get: (t) => t.vendorName },
   ...stopCols(1), ...stopCols(2), ...stopCols(3), ...stopCols(4),
-  { label: 'TOTAL VEHICLE\nMANUAL KM', get: (t) => t.totalManualKm },
+  { label: 'TOTAL VEHICLE\nMANUAL KM', get: totalManualKm },
   { label: 'AMAZON\nRELY KM', yellow: true, get: (t) => t.amazonRelyKm },
   { label: 'GPS KM', get: (t) => t.gpsKm },
   { label: 'Remarks', get: (t) => t.remarks },
