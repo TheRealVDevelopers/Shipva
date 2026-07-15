@@ -19,11 +19,28 @@ export interface Brand {
   logoSrc?: string;
   /** Full logo lockup (login hero / documents). */
   lockupSrc?: string;
+  /** Real legal details printed on outward documents — the Lorry Receipt, the
+   *  tax invoice and the agreements. These leave the building and go to
+   *  drivers, customers and vendors, so they must never come from mocks.ts
+   *  (that file's `partner` is demo fixture data with a made-up GSTIN). */
+  gstin?: string;
+  address?: string;
+  email?: string;
+  phone?: string;
 }
 
 const BRANDS: Record<string, Brand> = {
   shipva: { name: 'ShipVa', tagline: 'Transporter OS', company: 'Karnataka Roadlines' },
-  'sarva-express': { name: 'Sarva Express', tagline: 'Transport OS', company: 'Sarva Express', logoSrc: sarvaIcon, lockupSrc: sarvaLogo },
+  'sarva-express': {
+    name: 'Sarva Express', tagline: 'Transport OS', company: 'Sarva Express',
+    logoSrc: sarvaIcon, lockupSrc: sarvaLogo,
+    // Source: the client's executed Service Agreement (18 May 2024).
+    gstin: '29CDVPV2440P1ZE',
+    address: 'No. 46, Ground Floor, 12th Main Rd, 9th Cross, Shakambari Nagar, 1st Phase, J. P. Nagar, Bengaluru, Karnataka 560078',
+    email: 'legal@sarvaexpress.com',
+    // phone: intentionally absent — no verified number yet, and a wrong one on a
+    // Lorry Receipt is worse than none. Add it here once confirmed.
+  },
 };
 
 const key = ((import.meta.env.VITE_BRAND as string | undefined) ?? 'shipva').toLowerCase();

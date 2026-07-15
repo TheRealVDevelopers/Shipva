@@ -6,7 +6,7 @@ import { Field, TextInput } from '../../components/ui/Modal.js';
 import { Button } from '../../components/ui/Button.js';
 import { Badge } from '../../components/ui/Badge.js';
 import { rupees } from '../../lib/format.js';
-import { partner, subscription } from '../../lib/mocks.js';
+import { subscription } from '../../lib/mocks.js';
 import { useStore } from '../../lib/store.js';
 import { BRAND } from '../../lib/brand.js';
 
@@ -24,11 +24,11 @@ export function Settings() {
           <CardBody>
             <form onSubmit={(e) => { e.preventDefault(); setSaved(true); setTimeout(() => setSaved(false), 1800); }} className="space-y-3.5">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                <Field label="Company name"><TextInput defaultValue={partner.company} /></Field>
-                <Field label="Contact person"><TextInput defaultValue={partner.contact} /></Field>
-                <Field label="GSTIN"><TextInput defaultValue={partner.gstin} /></Field>
-                <Field label="Phone"><TextInput defaultValue={partner.phone} /></Field>
-                <Field label="Operating region"><TextInput defaultValue={partner.region} /></Field>
+                <Field label="Company name"><TextInput defaultValue={BRAND.company} /></Field>
+                <Field label="GSTIN"><TextInput defaultValue={BRAND.gstin ?? ''} /></Field>
+                <Field label="Address"><TextInput defaultValue={BRAND.address ?? ''} /></Field>
+                <Field label="Email"><TextInput defaultValue={BRAND.email ?? ''} /></Field>
+                <Field label="Phone"><TextInput defaultValue={BRAND.phone ?? ''} placeholder="Not set" /></Field>
                 <Field label="Base city"><TextInput defaultValue="Bengaluru" /></Field>
               </div>
               <div className="flex items-center gap-3 pt-1">

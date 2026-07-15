@@ -3,7 +3,6 @@
  * print() — the browser's "Save as PDF" produces the file. No PDF dependency.
  */
 import { rupees } from './format.js';
-import { partner } from './mocks.js';
 import { BRAND } from './brand.js';
 import type { Invoice, Trip } from './mocks.js';
 
@@ -44,14 +43,22 @@ function open(title: string, body: string) {
 }
 
 function header(docLabel: string, docNo: string, date: string) {
+  // Only print the legal lines we actually have — a blank or invented GSTIN on
+  // a tax invoice is a compliance problem, so omit rather than guess.
+  const legal = [
+    // The logo already reads BRAND.name; only repeat the company when it differs.
+    BRAND.company === BRAND.name ? '' : BRAND.company,
+    BRAND.address,
+    BRAND.gstin ? `GSTIN: ${BRAND.gstin}` : '',
+    BRAND.phone ?? '',
+    BRAND.email ?? '',
+  ].filter(Boolean).map((l) => `<div class="muted">${l}</div>`).join('');
+
   return `
     <div class="brand">
-      <div>
+      <div style="max-width:60%">
         <div class="logo">${LOGO_HTML}</div>
-        <div class="muted" style="margin-top:6px">${BRAND.company}</div>
-        <div class="muted">${partner.region}</div>
-        <div class="muted">GSTIN: ${partner.gstin}</div>
-        <div class="muted">${partner.phone}</div>
+        <div style="margin-top:6px">${legal}</div>
       </div>
       <div style="text-align:right">
         <h1 style="margin:0">${docLabel}</h1>
