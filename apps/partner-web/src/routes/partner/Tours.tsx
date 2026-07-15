@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   MapPin, Trash2, FileSpreadsheet, Search, X, Check, Route as RouteIcon, UserCog,
-  Navigation, LogIn, LogOut, Flag, AlertTriangle, Truck, Package, Plus, Send, Save,
+  Navigation, LogIn, LogOut, Flag, AlertTriangle, Truck, Package, Plus, Send, Save, Pencil,
 } from 'lucide-react';
 import { PartnerLayout } from '../../components/layout/PartnerLayout.js';
 import { Modal, Field, TextInput, Select, Row } from '../../components/ui/Modal.js';
@@ -9,7 +9,8 @@ import { ImageUpload } from '../../components/ui/ImageUpload.js';
 import { useStore, todayLabel, type Tour, type TourLeg, type TourLegStop } from '../../lib/store.js';
 import { useAuth } from '../../lib/auth.js';
 import { watchMembers, teamOf, type Member } from '../../lib/members.js';
-import { vridExists } from '../../lib/tours.js';
+import { canEditRecords } from '../../lib/roles.js';
+import { vridHolder, updateTourLegs } from '../../lib/tours.js';
 import { exportTourSheet } from '../../lib/exportTourSheet.js';
 import { vendorMessage, driverMessage, waLink } from '../../lib/tourMessages.js';
 import { useNotify } from '../../lib/notify.js';
@@ -38,6 +39,11 @@ const EMPTY = {
   gpayName: '', gpayNumber: '', advanceAmount: '', paidPending: 'Pending', handledBy: '',
 };
 
+/** The VRIDs a route holds — legs first, falling back to the legacy fields. */
+const tourVridList = (t: Tour): string[] =>
+  (t.legs?.length ? t.legs.map((l) => l.vrid) : t.vrIds?.length ? t.vrIds : t.vrId ? [t.vrId] : []).filter(Boolean);
+const tourVridCount = (t: Tour): number => tourVridList(t).length;
+
 const fmtClock = (ms: number) => new Date(ms).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' });
 const fmtDTShort = (v?: string) => {
   if (!v) return '';
@@ -46,7 +52,7 @@ const fmtDTShort = (v?: string) => {
 };
 
 export function Tours() {
-  const { tours, drivers, trucks, attached, addTour, updateTour } = useStore();
+  const { tours, drivers, trucks, attached, addTour, updateTour, deleteTour } = useStore();
   const { member } = useAuth();
   const isAdmin = member?.role === 'owner' || member?.role === 'manager';
   const canAssign = isAdmin || member?.role === 'team_leader';
@@ -60,6 +66,11 @@ export function Tours() {
   const [f, setF] = useState(EMPTY);
   const [legs, setLegs] = useState<LegDraft[]>([blankLeg()]);
   const [busy, setBusy] = useState(false);
+  // Editing reuses the Route Assign form; delete needs the whole tour so its
+  // VRIDs can be released.
+  const [editId, setEditId] = useState<string | null>(null);
+  const [confirmDel, setConfirmDel] = useState<Tour | null>(null);
+  const canEdit = canEditRecords(member?.role);
 
   useEffect(() => { if (canAssign) return watchMembers((l) => setMembers(l.filter((m) => m.status === 'active'))); }, [canAssign]);
   const assignable = isAdmin ? members : members.filter((m) => m.leaderUid === member?.uid || m.uid === member?.uid);
@@ -96,8 +107,11 @@ export function Tours() {
     const v = legs[li]?.vrid.trim().toUpperCase();
     if (!v) return;
     if (legs.some((l, i) => i !== li && l.vrid.trim().toUpperCase() === v)) { setLeg(li, { error: `VRID already exists — ${v} is on another leg above.` }); return; }
-    try { if (await vridExists(v)) setLeg(li, { error: `VRID already exists — ${v} is used on another route.` }); else setLeg(li, { error: '' }); }
-    catch { /* ignore, re-checked on submit */ }
+    try {
+      // A VRID held by the route being edited isn't a duplicate — it's its own.
+      const holder = await vridHolder(v);
+      setLeg(li, { error: holder && holder !== editId ? `VRID already exists — ${v} is used on another route.` : '' });
+    } catch { /* ignore, re-checked on submit */ }
   }
 
   const stopComplete = (s: StopDraft) => s.name.trim() && s.mapUrl.trim() && s.arrivalAt && s.departureAt;
@@ -119,17 +133,52 @@ export function Tours() {
     const now = new Date(); now.setSeconds(0, 0);
     setF({ ...EMPTY, serviceAt: new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16), handledBy: member?.uid ?? '' });
     setLegs([blankLeg()]);
+    setEditId(null);
+  }
+
+  /** Load an existing route back into the Route Assign form. */
+  function startEdit(t: Tour) {
+    setF({
+      serviceAt: t.serviceAt ?? '', vendor: t.vendorName === 'Sarva Express' ? OWN_FLEET : (t.vendorName ?? ''),
+      tripType: (t.scheduleAdhoc === 'ADHOC' ? 'ADHOC' : 'SCHEDULE'),
+      driver: t.driver ?? '', driverNumber: t.driverNumber ?? '', vehicleId: t.vehicleId ?? '',
+      tourId: t.tourId ?? '', gpayName: t.gpayName ?? '', gpayNumber: t.gpayNumber ?? '',
+      advanceAmount: t.advanceAmount ?? '', paidPending: t.paidPending || 'Pending',
+      handledBy: t.ownerUid ?? member?.uid ?? '',
+    });
+    setLegs((t.legs?.length ? t.legs : [{ vrid: t.vrId ?? '', loadType: t.noLoadLoad || 'Load', stops: [] }]).map((l) => ({
+      vrid: l.vrid, loadType: l.loadType || 'Load', error: '',
+      stops: (l.stops?.length ? l.stops : [{ name: '' }]).map((s) => ({
+        name: s.name ?? '', mapUrl: s.mapUrl ?? '', arrivalAt: s.arrivalAt ?? '', departureAt: s.departureAt ?? '',
+      })),
+    })));
+    setEditId(t.id);
+    setOpen(true);
+  }
+
+  function doDelete() {
+    if (!confirmDel) return;
+    deleteTour(confirmDel);
+    push({
+      title: 'Route deleted',
+      body: `${confirmDel.tourId || 'Route'} removed — its VRID${tourVridCount(confirmDel) === 1 ? '' : 's'} freed for reuse.`,
+      tone: 'info',
+    });
+    setConfirmDel(null);
   }
 
   async function submit() {
     if (!valid || busy) return;
     setBusy(true);
     try {
-      // final company-wide VRID uniqueness re-check
+      // Final company-wide VRID uniqueness re-check. When editing, a VRID this
+      // route already holds is fine — only a clash with a *different* route is
+      // a duplicate, otherwise a route could never be saved without changing it.
       for (let i = 0; i < legs.length; i++) {
         const v = legs[i]!.vrid.trim().toUpperCase();
         if (legs.some((l, j) => j !== i && l.vrid.trim().toUpperCase() === v)) { setLeg(i, { error: `VRID already exists — ${v} is on another leg.` }); setBusy(false); return; }
-        if (await vridExists(v)) { setLeg(i, { error: `VRID already exists — ${v} is used on another route.` }); setBusy(false); return; }
+        const holder = await vridHolder(v);
+        if (holder && holder !== editId) { setLeg(i, { error: `VRID already exists — ${v} is used on another route.` }); setBusy(false); return; }
       }
       const tourLegs: TourLeg[] = legs.map((l) => ({
         vrid: l.vrid.trim().toUpperCase(), loadType: l.loadType,
@@ -140,17 +189,36 @@ export function Tours() {
         ? { uid: handler.uid, name: handler.name, leaderUid: teamOf(handler) }
         : (member ? { uid: member.uid, name: member.name, leaderUid: teamOf(member) } : undefined);
       const svc = new Date(f.serviceAt);
-      addTour({
+      const core = {
         date: isNaN(svc.getTime()) ? todayLabel() : svc.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
         serviceAt: f.serviceAt,
         tourId: f.tourId.trim(), vrId: tourLegs[0]?.vrid ?? '', vrIds: tourLegs.map((l) => l.vrid), legs: tourLegs,
-        seTracker: '', toll: '', amzEquipmentType: vehicleFeet, seEquipmentType: vehicleFeet,
-        amzStatus: 'PLANNED', sarvaStatus: 'PLANNED', present: 'PRESENT', scheduleAdhoc: f.tripType, noLoadLoad: legs[0]?.loadType ?? 'Load',
+        amzEquipmentType: vehicleFeet, seEquipmentType: vehicleFeet,
+        scheduleAdhoc: f.tripType, noLoadLoad: legs[0]?.loadType ?? 'Load',
         advanceAmount: f.advanceAmount, paidPending: f.paidPending, gpayName: f.gpayName.trim(), gpayNumber: f.gpayNumber.trim(),
         driver: f.driver, vehicleId: f.vehicleId, driverNumber: f.driverNumber, vendorName: f.vendor === OWN_FLEET ? 'Sarva Express' : f.vendor,
-        stops: [], totalManualKm: '', amazonRelyKm: '', gpsKm: '', remarks: '',
-      }, handledBy);
-      push({ title: 'Route assigned', body: `${f.tourId} · ${legs.length} VRID${legs.length > 1 ? 's' : ''}.`, tone: 'success' });
+      };
+
+      if (editId) {
+        const existing = tours.find((t) => t.id === editId);
+        if (existing) {
+          // Keep the POC's own work — statuses, KM, photos, check-ins — and
+          // re-point the VRID registry at this route, freeing any it dropped.
+          await updateTourLegs(existing, {
+            ...core,
+            ...(handledBy ? { ownerUid: handledBy.uid, ownerName: handledBy.name, leaderUid: handledBy.leaderUid } : {}),
+          }, member?.uid ?? '');
+          push({ title: 'Route updated', body: `${f.tourId} saved.`, tone: 'success' });
+        }
+      } else {
+        addTour({
+          ...core,
+          seTracker: '', toll: '',
+          amzStatus: 'PLANNED', sarvaStatus: 'PLANNED', present: 'PRESENT',
+          stops: [], totalManualKm: '', amazonRelyKm: '', gpsKm: '', remarks: '',
+        }, handledBy);
+        push({ title: 'Route assigned', body: `${f.tourId} · ${legs.length} VRID${legs.length > 1 ? 's' : ''}.`, tone: 'success' });
+      }
       resetForm(); setOpen(false);
     } finally { setBusy(false); }
   }
@@ -217,7 +285,9 @@ export function Tours() {
         {/* load cards */}
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
           {shown.map((t) => (
-            <TourCard key={t.id} t={t} isAdmin={isAdmin} onOperate={() => t.id && setOperateId(t.id)} onShare={updateTour} />
+            <TourCard key={t.id} t={t} isAdmin={isAdmin} canEdit={canEdit}
+              onOperate={() => t.id && setOperateId(t.id)}
+              onEdit={() => startEdit(t)} onDelete={() => setConfirmDel(t)} onShare={updateTour} />
           ))}
           {shown.length === 0 && (
             <div className="col-span-full rounded-xl bg-white py-12 text-center text-sm text-neutral-400" style={{ border: '1px dashed #D5D9D9' }}>
@@ -334,14 +404,30 @@ export function Tours() {
       </Modal>
 
       {operating && <TourOperate tour={operating} onClose={() => setOperateId(null)} onUpdate={updateTour} showOwner={isAdmin} />}
+
+      {/* Delete route */}
+      {confirmDel && (
+        <Modal open onClose={() => setConfirmDel(null)} title={`Delete ${confirmDel.tourId || 'this route'}?`}
+          subtitle="This removes the route for everyone" onSubmit={doDelete} submitLabel="Delete route">
+          <p className="rounded-lg bg-rose-50 px-3 py-2.5 text-sm text-rose-800 ring-1 ring-inset ring-rose-100">
+            <b>{confirmDel.tourId || 'This route'}</b>{confirmDel.driver ? ` (${confirmDel.driver}, ${confirmDel.vehicleId})` : ''} will be removed for the whole team,
+            along with any check-ins, KM readings and photos the POC recorded against it. This can't be undone.
+          </p>
+          <p className="rounded-lg bg-sky-50 px-3 py-2 text-[11px] text-sky-800 ring-1 ring-inset ring-sky-100">
+            Its VRID{tourVridCount(confirmDel) === 1 ? '' : 's'} — <b>{tourVridList(confirmDel).join(', ') || '—'}</b> — will be released, so {tourVridCount(confirmDel) === 1 ? 'it' : 'they'} can be entered on a new route.
+          </p>
+        </Modal>
+      )}
     </PartnerLayout>
   );
 }
 
 /* ─── Load card ──────────────────────────────────────────────────────── */
 
-function TourCard({ t, isAdmin, onOperate, onShare }: {
-  t: Tour; isAdmin: boolean; onOperate: () => void; onShare: (id: string, patch: Partial<Tour>) => void;
+function TourCard({ t, isAdmin, canEdit, onOperate, onEdit, onDelete, onShare }: {
+  t: Tour; isAdmin: boolean; canEdit: boolean;
+  onOperate: () => void; onEdit: () => void; onDelete: () => void;
+  onShare: (id: string, patch: Partial<Tour>) => void;
 }) {
   const legs = t.legs && t.legs.length ? t.legs : [];
   const allStops = legs.flatMap((l) => l.stops);
@@ -403,7 +489,15 @@ function TourCard({ t, isAdmin, onOperate, onShare }: {
             {isAdmin && t.ownerName && <span className="ml-2 inline-flex items-center gap-1 rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] font-bold text-neutral-600"><UserCog size={10} /> {t.ownerName}</span>}
             <div className="text-[11px] text-neutral-400">{t.date} · {t.vendorName || '—'} · Adv ₹{Number(t.advanceAmount || 0).toLocaleString('en-IN')} · {t.paidPending}</div>
           </div>
-          <button onClick={onOperate} className="inline-flex items-center gap-1 rounded-lg px-3 py-2 text-xs font-extrabold shadow-sm" style={{ background: ORANGE, color: INK }}><Navigation size={13} /> Open / Update</button>
+          <div className="flex items-center gap-1.5">
+            <button onClick={onOperate} className="inline-flex items-center gap-1 rounded-lg px-3 py-2 text-xs font-extrabold shadow-sm" style={{ background: ORANGE, color: INK }}><Navigation size={13} /> Open / Update</button>
+            {canEdit && (
+              <>
+                <button onClick={onEdit} className="rounded-lg p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-primary-600" title="Edit route"><Pencil size={14} /></button>
+                <button onClick={onDelete} className="rounded-lg p-1.5 text-neutral-400 hover:bg-rose-50 hover:text-rose-600" title="Delete route"><Trash2 size={14} /></button>
+              </>
+            )}
+          </div>
         </div>
 
         {/* WhatsApp shares */}

@@ -14,6 +14,7 @@ import { Modal, Field, TextInput, DateInput, Select, Row } from '../../component
 import { ImageUpload } from '../../components/ui/ImageUpload.js';
 import { useStore } from '../../lib/store.js';
 import { useAuth } from '../../lib/auth.js';
+import { canEditRecords } from '../../lib/roles.js';
 import { useNotify } from '../../lib/notify.js';
 import { todayFullLabel } from '../../lib/format.js';
 import {
@@ -60,6 +61,9 @@ export function Fleet() {
   const { member } = useAuth();
   const { push } = useNotify();
   const isAdmin = member?.role === 'owner' || member?.role === 'manager';
+  // Editing/deleting a record is leadership-only. Verifying documents stays
+  // admin-only (isAdmin) — that's a control gate, not routine editing.
+  const canEdit = canEditRecords(member?.role);
 
   const [tab, setTab] = useState<(typeof TABS)[number]>('Drivers');
   const [add, setAdd] = useState<null | 'driver' | 'truck'>(null);
@@ -233,8 +237,8 @@ export function Fleet() {
                           <Button size="sm" variant={miss.length ? 'primary' : 'secondary'} onClick={() => openDriverDocs(d)}>
                             {miss.length ? 'Provide docs' : 'View docs'}
                           </Button>
-                          <button onClick={() => setEditDriverId(d.id)} className="rounded-lg p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-primary-600" title="Edit driver"><Pencil size={14} /></button>
-                          {isAdmin && <button onClick={() => setConfirmDel({ kind: 'driver', id: d.id, label: d.name })} className="rounded-lg p-1.5 text-neutral-400 hover:bg-rose-50 hover:text-rose-600" title="Delete driver"><Trash2 size={14} /></button>}
+                          {canEdit && <button onClick={() => setEditDriverId(d.id)} className="rounded-lg p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-primary-600" title="Edit driver"><Pencil size={14} /></button>}
+                          {canEdit && <button onClick={() => setConfirmDel({ kind: 'driver', id: d.id, label: d.name })} className="rounded-lg p-1.5 text-neutral-400 hover:bg-rose-50 hover:text-rose-600" title="Delete driver"><Trash2 size={14} /></button>}
                         </div>
                       </Td>
                     </Tr>
@@ -262,8 +266,8 @@ export function Fleet() {
                           <Button size="sm" variant={miss.length ? 'primary' : 'secondary'} onClick={() => openTruckDocs(t)}>
                             {miss.length ? 'Submit docs' : 'View docs'}
                           </Button>
-                          <button onClick={() => setEditTruckId(t.id)} className="rounded-lg p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-primary-600" title="Edit truck"><Pencil size={14} /></button>
-                          {isAdmin && <button onClick={() => setConfirmDel({ kind: 'truck', id: t.id, label: t.reg })} className="rounded-lg p-1.5 text-neutral-400 hover:bg-rose-50 hover:text-rose-600" title="Delete truck"><Trash2 size={14} /></button>}
+                          {canEdit && <button onClick={() => setEditTruckId(t.id)} className="rounded-lg p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-primary-600" title="Edit truck"><Pencil size={14} /></button>}
+                          {canEdit && <button onClick={() => setConfirmDel({ kind: 'truck', id: t.id, label: t.reg })} className="rounded-lg p-1.5 text-neutral-400 hover:bg-rose-50 hover:text-rose-600" title="Delete truck"><Trash2 size={14} /></button>}
                         </div>
                       </Td>
                     </Tr>

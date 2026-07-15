@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   Plus, FileText, MapPin, Search, Truck, X, Check, ExternalLink, Flag, Navigation,
-  Trash2, Route as RouteIcon, UserPlus, UserCog, ChevronRight,
+  Trash2, Route as RouteIcon, UserPlus, UserCog, ChevronRight, Pencil,
 } from 'lucide-react';
 import { PartnerLayout } from '../../components/layout/PartnerLayout.js';
 import { Card } from '../../components/ui/Card.js';
@@ -19,6 +19,7 @@ import { isVerified, type Trip, type TripPoint, type TripStatus } from '../../li
 import { useStore, stageOf, type Customer } from '../../lib/store.js';
 import { useAuth } from '../../lib/auth.js';
 import { watchMembers, teamOf, type Member } from '../../lib/members.js';
+import { canEditRecords } from '../../lib/roles.js';
 import { useNotify } from '../../lib/notify.js';
 import { printLR } from '../../lib/print.js';
 import { tripSteps, tripPoints, currentStep, progressPct } from '../../lib/trip.js';
@@ -51,10 +52,11 @@ const EMPTY = {
 const NEW_DRIVER = { name: '', phone: '', vehicleReg: '', aadhaar: '', licenseNo: '' };
 
 export function Trips() {
-  const { trips, drivers, trucks, customers, savedPoints, addTrip, addSavedPoint, addCustomer, addDriver, advanceTrip } = useStore();
+  const { trips, drivers, trucks, customers, savedPoints, addTrip, addSavedPoint, addDriver, advanceTrip, updateTrip, deleteTrip } = useStore();
   const { member } = useAuth();
   const isAdmin = member?.role === 'owner' || member?.role === 'manager';
   const canAssign = isAdmin || member?.role === 'team_leader';
+  const canEdit = canEditRecords(member?.role);
   const { push } = useNotify();
   const [params] = useSearchParams();
   const [members, setMembers] = useState<Member[]>([]);
@@ -66,6 +68,9 @@ export function Trips() {
   const [pts, setPts] = useState<PointDraft[]>([blankPoint(), blankPoint()]);
   const [trackId, setTrackId] = useState<string | null>(null);
   const [tried, setTried] = useState(false);
+  // Editing reuses the create form — one form, one set of validation rules.
+  const [editId, setEditId] = useState<string | null>(null);
+  const [confirmDel, setConfirmDel] = useState<Trip | null>(null);
   // inline add — drivers only; transporters go through onboarding in Transporters
   const [drvAdd, setDrvAdd] = useState(false);
   const [newDriver, setNewDriver] = useState(NEW_DRIVER);
@@ -90,8 +95,30 @@ export function Trips() {
   function resetForm() {
     setF({ ...EMPTY, date: todayFullLabel(), handledBy: member?.uid ?? '' });
     setPts([blankPoint(), blankPoint()]);
-    setTried(false);
+    setTried(false); setEditId(null);
     setDrvAdd(false); setNewDriver(NEW_DRIVER); setDrvTried(false);
+  }
+
+  /** Load an existing trip back into the create form. */
+  function startEdit(t: Trip) {
+    const pts0 = t.points?.length ? t.points : [{ label: t.from }, { label: t.to }];
+    setF({
+      mode: pts0.length > 2 ? 'multi' : 'single',
+      date: t.date, driver: t.driver, vehicleReg: t.vehicleReg, customer: t.customer ?? '',
+      material: t.material, weight: String(t.weightKg || ''),
+      freight: String((t.freightPaise || 0) / 100), handledBy: t.ownerUid ?? member?.uid ?? '',
+    });
+    setPts(pts0.map((p) => ({ label: p.label, mapUrl: p.mapUrl ?? '' })));
+    setTried(false); setDrvAdd(false); setDrvTried(false);
+    setEditId(t.id ?? null);
+    setOpen(true);
+  }
+
+  function doDelete() {
+    if (!confirmDel?.id) return;
+    deleteTrip(confirmDel.id);
+    push({ title: 'Trip deleted', body: `${confirmDel.lr} removed.`, tone: 'info' });
+    setConfirmDel(null);
   }
   function setMode(mode: 'single' | 'multi') {
     if (mode === 'single' && pts.length > 2) setPts([pts[0]!, pts[pts.length - 1]!]);
@@ -179,14 +206,23 @@ export function Trips() {
     const handledBy = handler
       ? { uid: handler.uid, name: handler.name, leaderUid: teamOf(handler) }
       : (member ? { uid: member.uid, name: member.name, leaderUid: teamOf(member) } : undefined);
-    addTrip({
+    const core = {
       date: f.date, from: clean[0]!, to: clean[clean.length - 1]!,
       driver: f.driver, vehicleReg: f.vehicleReg,
       material: f.material.trim(), weightKg: Number(f.weight),
-      freightPaise: Math.round(Number(f.freight) * 100), status: 'assigned', ewayBill: false,
-      points, stepIndex: 0, customer: f.customer,
-    }, handledBy);
-    push({ title: 'Trip created', body: `${clean[0]} → ${clean[clean.length - 1]} · assigned to ${f.driver}.`, tone: 'success' });
+      freightPaise: Math.round(Number(f.freight) * 100),
+      points, customer: f.customer,
+    };
+
+    if (editId) {
+      // Editing keeps the trip's live status/progress and its LR — only the
+      // details change. Re-assign the handler if leadership picked a new one.
+      updateTrip(editId, { ...core, ...(handledBy ? { ownerUid: handledBy.uid, ownerName: handledBy.name, leaderUid: handledBy.leaderUid } : {}) });
+      push({ title: 'Trip updated', body: `${clean[0]} → ${clean[clean.length - 1]} saved.`, tone: 'success' });
+    } else {
+      addTrip({ ...core, status: 'assigned', ewayBill: false, stepIndex: 0 }, handledBy);
+      push({ title: 'Trip created', body: `${clean[0]} → ${clean[clean.length - 1]} · assigned to ${f.driver}.`, tone: 'success' });
+    }
     resetForm(); setOpen(false);
   }
 
@@ -275,6 +311,12 @@ export function Trips() {
                       )}
                       <button onClick={() => t.id && setTrackId(t.id)} className="inline-flex items-center gap-1 rounded-lg bg-white px-2.5 py-1.5 text-xs font-bold text-primary-600 ring-1 ring-inset ring-primary-200 hover:bg-primary-50"><Navigation size={12} /> Track</button>
                       <button onClick={() => printLR(t)} className="inline-flex items-center gap-1 rounded-lg bg-white px-2.5 py-1.5 text-xs font-bold text-neutral-600 ring-1 ring-inset ring-neutral-200 hover:bg-neutral-50"><FileText size={12} /> LR</button>
+                      {canEdit && (
+                        <>
+                          <button onClick={() => startEdit(t)} className="rounded-lg p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-primary-600" title="Edit trip"><Pencil size={14} /></button>
+                          <button onClick={() => setConfirmDel(t)} className="rounded-lg p-1.5 text-neutral-400 hover:bg-rose-50 hover:text-rose-600" title="Delete trip"><Trash2 size={14} /></button>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -294,10 +336,15 @@ export function Trips() {
       </datalist>
 
       {/* New trip */}
-      <Modal open={open} onClose={() => setOpen(false)} title="New Trip" subtitle="A VR ID is generated automatically" onSubmit={submit} submitLabel="Create trip" wide>
-        <div className="rounded-xl bg-primary-50 px-4 py-3 text-sm text-primary-900 ring-1 ring-inset ring-primary-100">
-          <span className="font-bold">VR ID</span> &amp; <span className="font-bold">LR</span> are auto-assigned on save. Add Google Maps links so the driver can tap to navigate.
-        </div>
+      <Modal open={open} onClose={() => setOpen(false)}
+        title={editId ? 'Edit trip' : 'New Trip'}
+        subtitle={editId ? 'The LR, VR ID and live status are kept' : 'A VR ID is generated automatically'}
+        onSubmit={submit} submitLabel={editId ? 'Save changes' : 'Create trip'} wide>
+        {!editId && (
+          <div className="rounded-xl bg-primary-50 px-4 py-3 text-sm text-primary-900 ring-1 ring-inset ring-primary-100">
+            <span className="font-bold">VR ID</span> &amp; <span className="font-bold">LR</span> are auto-assigned on save. Add Google Maps links so the driver can tap to navigate.
+          </div>
+        )}
         {tried && !valid && (
           <div className="rounded-lg bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 ring-1 ring-inset ring-rose-100">
             Every field marked <span className="text-rose-500">*</span> is required — fill the highlighted ones to save.
@@ -442,6 +489,17 @@ export function Trips() {
       </Modal>
 
       {tracked && <TrackModal trip={tracked} onClose={() => setTrackId(null)} onAdvance={advanceTrip} showOwner={isAdmin} />}
+
+      {/* Delete trip */}
+      {confirmDel && (
+        <Modal open onClose={() => setConfirmDel(null)} title={`Delete ${confirmDel.lr}?`} subtitle="This removes the trip for everyone"
+          onSubmit={doDelete} submitLabel="Delete trip">
+          <p className="rounded-lg bg-rose-50 px-3 py-2.5 text-sm text-rose-800 ring-1 ring-inset ring-rose-100">
+            <b>{confirmDel.lr}</b> ({confirmDel.from} → {confirmDel.to}, {confirmDel.driver}) will be removed for the whole team.
+            {confirmDel.status !== 'closed' && <> This trip is still <b>in progress</b>.</>} Any invoice already raised against it stays. This can't be undone.
+          </p>
+        </Modal>
+      )}
     </PartnerLayout>
   );
 }

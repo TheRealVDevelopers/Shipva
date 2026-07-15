@@ -32,6 +32,17 @@ export const ROLE_ACCESS: Record<Role, FeatureId[] | 'all'> = {
 /** Owner & manager see & manage the whole org. */
 export const isOrgAdminRole = (role: Role): boolean => role === 'owner' || role === 'manager';
 
+/**
+ * Who may edit or delete records — trips, tours, drivers, trucks, transporters
+ * and truck owners. The client's rule: leadership only, not every supervisor.
+ * A manager is included because they outrank a team leader and already hold
+ * org-wide access; excluding them would let a TL delete what their own manager
+ * couldn't. Supervisors and accountants can still do their jobs (updating trip
+ * status, POC tour updation) — they just can't rewrite or destroy a record.
+ */
+export const canEditRecords = (role: Role | undefined): boolean =>
+  !!role && (isOrgAdminRole(role) || role === 'team_leader');
+
 /** Default explicit page list to pre-tick when inviting a non-admin role. */
 export function defaultPages(role: Role): FeatureId[] {
   const a = ROLE_ACCESS[role];

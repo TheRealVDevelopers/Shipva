@@ -4,7 +4,7 @@
  * a supervisor sees only their own routes. Rules mirror this (see firestore.rules).
  */
 import {
-  addDoc, collection, doc, onSnapshot, query, updateDoc, where,
+  addDoc, collection, deleteDoc, doc, onSnapshot, query, updateDoc, where,
 } from 'firebase/firestore';
 import { db } from '../firebase.js';
 import type { Trip, TripPoint, TripStatus } from './mocks.js';
@@ -77,5 +77,9 @@ export async function addTripDoc(t: Omit<Trip, 'lr' | 'vrId' | 'id'>, scope: Sco
 
 export async function updateTripDoc(id: string, patch: Partial<Trip>): Promise<void> {
   await updateDoc(doc(db, 'orgTrips', id), clean({ ...patch }));
+}
+
+export async function deleteTripDoc(id: string): Promise<void> {
+  await deleteDoc(doc(db, 'orgTrips', id));
 }
 

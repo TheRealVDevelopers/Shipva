@@ -67,6 +67,9 @@ service cloud.firestore {
     function isOrgAdmin() { return isOrgMember() && orgMember().role in ['owner', 'manager']; }
     function isOrgTeamLeader() { return isOrgMember() && orgMember().role == 'team_leader'; }
     function isBootstrapOwner() { return signedIn() && request.auth.token.email == 'admin@sarvaexpress.in'; }
+    // Who may destroy records: leadership only (owner, manager, team leader).
+    // Mirrors canEditRecords in lib/roles.tsx — keep the two in step.
+    function canWipe() { return isOrgAdmin() || isOrgTeamLeader(); }
 
     match /orgMembers/{uid} {
       allow read: if isOrgMember() || isBootstrapOwner();
@@ -132,21 +135,26 @@ service cloud.firestore {
     }
 
     // VRID registry — company-wide uniqueness. Any member may look one up or
-    // claim a new one (create fails if it already exists); only admins release.
+    // claim a new one (create fails if it already exists). Releasing is
+    // leadership only, and must match who can delete a tour: deleting a tour
+    // frees its VRIDs, so a team leader who can do one must be able to do the
+    // other — otherwise the VRID stays claimed by a route that no longer exists.
     match /orgVrids/{vrid} {
       allow read: if isOrgMember();
       allow create: if isOrgMember();
       allow update: if false;
-      allow delete: if isOrgAdmin();
+      allow delete: if canWipe();
     }
 
     // Shared reference data — customers, drivers, trucks and truck owners. Common
     // to the whole org: any member may read and add/edit (so a supervisor's new
-    // customer or driver is visible to everyone); only admins delete.
-    match /orgCustomers/{id} { allow read, create, update: if isOrgMember(); allow delete: if isOrgAdmin(); }
-    match /orgDrivers/{id}   { allow read, create, update: if isOrgMember(); allow delete: if isOrgAdmin(); }
-    match /orgTrucks/{id}    { allow read, create, update: if isOrgMember(); allow delete: if isOrgAdmin(); }
-    match /orgOwners/{id}    { allow read, create, update: if isOrgMember(); allow delete: if isOrgAdmin(); }
+    // customer or driver is visible to everyone, and a POC can still attach the
+    // documents they collect). Deleting is leadership only — owner, manager or
+    // team leader — matching canEditRecords in lib/roles.
+    match /orgCustomers/{id} { allow read, create, update: if isOrgMember(); allow delete: if canWipe(); }
+    match /orgDrivers/{id}   { allow read, create, update: if isOrgMember(); allow delete: if canWipe(); }
+    match /orgTrucks/{id}    { allow read, create, update: if isOrgMember(); allow delete: if canWipe(); }
+    match /orgOwners/{id}    { allow read, create, update: if isOrgMember(); allow delete: if canWipe(); }
 
     // Public config (vehicle types, zones, fares) — readable by any signed-in user.
     match /config/{doc} { allow read: if signedIn(); allow write: if false; }

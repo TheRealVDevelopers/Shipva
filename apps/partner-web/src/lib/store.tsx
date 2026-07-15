@@ -11,8 +11,8 @@ import type {
   Trip, Invoice, Expense, FuelLog, FleetDriver, Truck, PayrollLine, Staff, TripStatus,
 } from './mocks.js';
 import { tripSteps, statusFromStep } from './trip.js';
-import { watchTrips, addTripDoc, updateTripDoc } from './trips.js';
-import { watchToursFs, addTourDoc, updateTourDoc } from './tours.js';
+import { watchTrips, addTripDoc, updateTripDoc, deleteTripDoc } from './trips.js';
+import { watchToursFs, addTourDoc, updateTourDoc, deleteTourDoc } from './tours.js';
 import { customersCol, driversCol, trucksCol, ownersCol } from './common.js';
 import { useAuth } from './auth.js';
 
@@ -243,6 +243,10 @@ interface StoreApi extends StoreShape {
   attached: AttachedTruck[];
   addTrip: (t: Omit<Trip, 'lr' | 'vrId' | 'id'>, handledBy?: { uid: string; name: string; leaderUid?: string }) => void;
   updateTripStatus: (id: string, status: TripStatus) => void;
+  /** Edit / remove a trip or tour — leadership only (see canEditRecords). */
+  updateTrip: (id: string, patch: Partial<Trip>) => void;
+  deleteTrip: (id: string) => void;
+  deleteTour: (t: Tour) => void;
   /** Advance a trip one step along its live timeline; pass a remark when finishing. */
   advanceTrip: (id: string, remark?: string) => void;
   addSavedPoint: (p: SavedPoint) => void;
@@ -388,6 +392,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     void updateTripDoc(id, { status });
   }, []);
 
+  const updateTrip = useCallback((id: string, patch: Partial<Trip>) => { void updateTripDoc(id, patch); }, []);
+  const deleteTrip = useCallback((id: string) => { void deleteTripDoc(id); }, []);
+  const deleteTour = useCallback((t: Tour) => { void deleteTourDoc(t); }, []);
+
   const advanceTrip = useCallback((id: string, remark?: string) => {
     const t = tripsRef.current.find((x) => x.id === id);
     if (!t) return;
@@ -510,13 +518,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<StoreApi>(() => ({
     ...s, trips, tours, customers, drivers, trucks, attached,
-    addTrip, updateTripStatus, advanceTrip, addSavedPoint, addInvoice, markInvoicePaid, addExpense, addFuelLog,
+    addTrip, updateTripStatus, updateTrip, deleteTrip, deleteTour,
+    advanceTrip, addSavedPoint, addInvoice, markInvoicePaid, addExpense, addFuelLog,
     addExpenseCategory, addRequest, resolveRequest, addCustomer, addDriver, addTruck,
     setDriverDocs, setTruckDocs, updateDriver, updateTruck, deleteDriver, deleteTruck,
     setCustomerAgreement, setAttachedAgreement, updateCustomer, deleteCustomer, updateAttached, deleteAttached,
     addStaff, addAttached, recordOwnerPayment, addTour, updateTour, runPayroll, reset,
   }), [s, trips, tours, customers, drivers, trucks, attached,
-    addTrip, updateTripStatus, advanceTrip, addSavedPoint, addInvoice, markInvoicePaid, addExpense, addFuelLog,
+    addTrip, updateTripStatus, updateTrip, deleteTrip, deleteTour,
+    advanceTrip, addSavedPoint, addInvoice, markInvoicePaid, addExpense, addFuelLog,
     addExpenseCategory, addRequest, resolveRequest, addCustomer, addDriver, addTruck,
     setDriverDocs, setTruckDocs, updateDriver, updateTruck, deleteDriver, deleteTruck,
     setCustomerAgreement, setAttachedAgreement, updateCustomer, deleteCustomer, updateAttached, deleteAttached,

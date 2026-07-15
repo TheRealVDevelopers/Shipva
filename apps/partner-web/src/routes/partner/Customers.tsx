@@ -16,6 +16,7 @@ import {
   type Customer, type OnboardStage, type EntityType,
 } from '../../lib/store.js';
 import { useAuth } from '../../lib/auth.js';
+import { canEditRecords } from '../../lib/roles.js';
 import { useNotify } from '../../lib/notify.js';
 import {
   nameError, phoneError, aadhaarError, panError, gstError, requiredError, allClear, normalizePhone,
@@ -63,6 +64,9 @@ export function Customers() {
   const { member } = useAuth();
   const { push } = useNotify();
   const isAdmin = member?.role === 'owner' || member?.role === 'manager';
+  // Editing/deleting is leadership-only; approving an agreement stays with
+  // owner/manager (isAdmin), since that's what makes a vendor usable.
+  const canEdit = canEditRecords(member?.role);
 
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState(1);
@@ -274,8 +278,8 @@ export function Customers() {
                           <button onClick={() => printAgreement('customer', { name: c.name, gstin: c.gstin, place: [c.addressLine1, c.city].filter(Boolean).join(', '), phone: c.phone }, c.agreement!)}
                             className="inline-flex items-center gap-1 text-xs font-bold text-primary-600 hover:text-primary-700"><Download size={12} /> Agreement</button>
                         )}
-                        <button onClick={() => startEdit(c)} className="rounded-lg p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-primary-600" title="Edit transporter"><Pencil size={14} /></button>
-                        {isAdmin && <button onClick={() => setConfirmDel(c)} className="rounded-lg p-1.5 text-neutral-400 hover:bg-rose-50 hover:text-rose-600" title="Delete transporter"><Trash2 size={14} /></button>}
+                        {canEdit && <button onClick={() => startEdit(c)} className="rounded-lg p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-primary-600" title="Edit transporter"><Pencil size={14} /></button>}
+                        {canEdit && <button onClick={() => setConfirmDel(c)} className="rounded-lg p-1.5 text-neutral-400 hover:bg-rose-50 hover:text-rose-600" title="Delete transporter"><Trash2 size={14} /></button>}
                       </div>
                     </Td>
                   </Tr>

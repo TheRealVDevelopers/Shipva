@@ -16,6 +16,7 @@ import {
   type AttachedTruck, type OnboardStage, type KycState,
 } from '../../lib/store.js';
 import { useAuth } from '../../lib/auth.js';
+import { canEditRecords } from '../../lib/roles.js';
 import {
   nameError, phoneError, aadhaarError, panError, gstError, vehicleRegError,
   requiredError, allClear, normalizePhone,
@@ -50,6 +51,8 @@ export function Payables() {
   const { member } = useAuth();
   const { push } = useNotify();
   const isAdmin = member?.role === 'owner' || member?.role === 'manager';
+  // Editing/deleting is leadership-only; KYC verification stays owner/manager.
+  const canEdit = canEditRecords(member?.role);
 
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState(1);
@@ -271,8 +274,8 @@ export function Payables() {
                           ? <button onClick={() => printAgreement('truck-owner', { name: a.owner, gstin: a.gstin ?? '', place: [a.addressLine1, a.city].filter(Boolean).join(', '), phone: a.phone }, a.agreement!)}
                               className="inline-flex items-center gap-1 text-xs font-bold text-primary-600 hover:text-primary-700"><Download size={12} /> Agreement</button>
                           : <Button size="sm" onClick={() => openAgreement(a)}><FileWarning size={12} /> Create agreement</Button>)}
-                        <button onClick={() => startEdit(a)} className="rounded-lg p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-primary-600" title="Edit owner"><Pencil size={14} /></button>
-                        {isAdmin && <button onClick={() => setConfirmDel(a)} className="rounded-lg p-1.5 text-neutral-400 hover:bg-rose-50 hover:text-rose-600" title="Delete owner"><Trash2 size={14} /></button>}
+                        {canEdit && <button onClick={() => startEdit(a)} className="rounded-lg p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-primary-600" title="Edit owner"><Pencil size={14} /></button>}
+                        {canEdit && <button onClick={() => setConfirmDel(a)} className="rounded-lg p-1.5 text-neutral-400 hover:bg-rose-50 hover:text-rose-600" title="Delete owner"><Trash2 size={14} /></button>}
                       </div>
                     </Td>
                   </Tr>

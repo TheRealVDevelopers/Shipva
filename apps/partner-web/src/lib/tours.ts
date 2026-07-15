@@ -30,7 +30,7 @@ function clean<T extends Record<string, unknown>>(obj: T): T {
   return obj;
 }
 /** Every VRID on a tour, from legs (preferred) or the legacy vrIds/vrId fields. */
-function tourVrids(t: { legs?: TourLeg[]; vrIds?: string[]; vrId?: string }): string[] {
+function tourVrids(t: { legs?: TourLeg[] | undefined; vrIds?: string[] | undefined; vrId?: string | undefined }): string[] {
   if (t.legs && t.legs.length) return t.legs.map((l) => l.vrid).filter(Boolean);
   if (t.vrIds && t.vrIds.length) return t.vrIds;
   return t.vrId ? [t.vrId] : [];
@@ -103,9 +103,34 @@ export async function vridExists(vrid: string): Promise<boolean> {
   return snap.exists();
 }
 
+/**
+ * Which tour currently holds this VRID, or null if it's free. Editing a route
+ * needs this: its own VRIDs are already in the registry, so a plain
+ * vridExists() check would reject a route for clashing with itself.
+ */
+export async function vridHolder(vrid: string): Promise<string | null> {
+  const key = vridKey(vrid);
+  if (!key) return null;
+  const snap = await getDoc(doc(db, 'orgVrids', key));
+  return snap.exists() ? ((snap.data() as { tourId?: string }).tourId ?? '') : null;
+}
+
 async function registerVrids(vrids: string[], tourId: string, uid: string): Promise<void> {
   await Promise.all(vrids.map((v) =>
     setDoc(doc(db, 'orgVrids', vridKey(v)), { vrid: vridKey(v), tourId, uid, createdAtMs: Date.now() })));
+}
+
+/**
+ * Save an edited route: re-point the registry at this tour for any VRID it now
+ * carries, and release the ones it no longer uses so they can be re-entered.
+ */
+export async function updateTourLegs(tour: Tour, patch: Partial<Tour>, uid: string): Promise<void> {
+  const before = tourVrids(tour);
+  const after = tourVrids({ legs: patch.legs ?? tour.legs, vrIds: patch.vrIds ?? tour.vrIds, vrId: patch.vrId ?? tour.vrId });
+  await updateTourDoc(tour.id, patch);
+  await registerVrids(after, tour.id, uid);
+  const dropped = before.filter((v) => !after.map(vridKey).includes(vridKey(v)));
+  await Promise.allSettled(dropped.map((v) => releaseVrid(v)));
 }
 
 export async function addTourDoc(t: Omit<Tour, 'id'>, scope: Scope, handledBy?: Handler): Promise<void> {
@@ -134,4 +159,15 @@ export async function updateTourDoc(id: string, patch: Partial<Tour>): Promise<v
 /** Free a VRID back up (admin fixing a typo). */
 export async function releaseVrid(vrid: string): Promise<void> {
   await deleteDoc(doc(db, 'orgVrids', vridKey(vrid)));
+}
+
+/**
+ * Delete a tour and release the VRIDs it had claimed. Without the release the
+ * VRIDs stay in the company-wide registry forever and re-entering one comes
+ * back as "VRID already exists" — for a route that no longer exists.
+ */
+export async function deleteTourDoc(t: Tour): Promise<void> {
+  await deleteDoc(doc(db, 'orgTours', t.id));
+  const vrids = tourVrids(t);
+  await Promise.allSettled(vrids.map((v) => releaseVrid(v)));
 }
