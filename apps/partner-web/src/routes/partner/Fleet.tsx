@@ -20,7 +20,7 @@ import {
   nameError, phoneError, aadhaarError, licenceError, panError, vehicleRegError,
   positiveError, normalizePhone, allClear,
 } from '../../lib/validate.js';
-import type { FleetDriver, Truck } from '../../lib/mocks.js';
+import { isVerified, type FleetDriver, type Truck } from '../../lib/mocks.js';
 import type { VehicleType } from '@shipva/shared-types';
 
 const TABS = ['Drivers', 'Trucks'] as const;
@@ -91,7 +91,7 @@ export function Fleet() {
 
   const driversPending = drivers.filter((d) => driverMissing(d).length > 0).length;
   const trucksPending = trucks.filter((t) => truckMissing(t).length > 0).length;
-  const trucksUnverified = trucks.filter((t) => !t.verified).length;
+  const trucksUnverified = trucks.filter((t) => !isVerified(t)).length;
 
   // ── New driver — the client requires Aadhaar, licence and PAN up front ──────
   const ndErrs = {
@@ -110,6 +110,7 @@ export function Fleet() {
       vehicleReg: nd.vehicleReg.trim().toUpperCase(), vehicleType: nd.vehicleType,
       dutyStatus: 'offline', kycStatus: 'pending', ratingAvg: 0, tripsToday: 0,
       aadhaar: nd.aadhaar.trim(), licenseNo: nd.licenseNo.trim().toUpperCase(), pan: nd.pan.trim().toUpperCase(),
+      verified: false, // explicit: absent means a legacy record, not a new one
     });
     setNd(DRV_EMPTY); setAdd(null); setTried(false);
     push({ title: 'Driver onboarded', body: `${nd.name.trim()} added — upload the document images next.`, tone: 'success' });
@@ -126,6 +127,7 @@ export function Fleet() {
     addTruck({
       reg: nt.reg.trim().toUpperCase(), type: nt.type,
       capacityKg: Number(nt.capacityKg), status: 'available', docsOk: false,
+      verified: false, // explicit: absent means a legacy record, not a new one
     });
     setNt(TRK_EMPTY); setAdd(null); setTried(false);
     push({ title: 'Truck added', body: `${nt.reg.trim().toUpperCase()} added — submit its documents to make it assignable.`, tone: 'success' });
@@ -224,7 +226,7 @@ export function Fleet() {
                       </Td>
                       <Td><div className="flex items-center gap-2"><VehicleArt type={d.vehicleType} className="h-6 w-9 shrink-0" /><span className="font-mono text-xs text-neutral-700">{d.vehicleReg || '—'}</span></div></Td>
                       <Td><DutyBadge status={d.dutyStatus} /></Td>
-                      <Td><DocState missing={miss} verified={d.verified} /></Td>
+                      <Td><DocState missing={miss} verified={isVerified(d)} /></Td>
                       <Td>{d.ratingAvg > 0 ? <span className="inline-flex items-center gap-1 text-sm"><Star size={12} className="fill-amber-400 text-amber-400" /> {d.ratingAvg}</span> : <span className="text-xs text-neutral-400">new</span>}</Td>
                       <Td>
                         <div className="flex items-center justify-end gap-1.5">
@@ -254,7 +256,7 @@ export function Fleet() {
                       <Td className="capitalize text-neutral-700">{t.type.replaceAll('_', ' ')}</Td>
                       <Td className="text-neutral-700">{t.capacityKg.toLocaleString('en-IN')} kg</Td>
                       <Td><Badge tone={t.status === 'available' ? 'success' : t.status === 'on_trip' ? 'info' : 'warning'}><TruckIcon size={10} /> {t.status.replaceAll('_', ' ')}</Badge></Td>
-                      <Td><DocState missing={miss} verified={t.verified} /></Td>
+                      <Td><DocState missing={miss} verified={isVerified(t)} /></Td>
                       <Td>
                         <div className="flex items-center justify-end gap-1.5">
                           <Button size="sm" variant={miss.length ? 'primary' : 'secondary'} onClick={() => openTruckDocs(t)}>
@@ -408,13 +410,19 @@ function VerifyPanel({ record, missing, isAdmin, onVerify }: {
   missing: string[]; isAdmin: boolean; onVerify: (on: boolean) => void;
 }) {
   const complete = missing.length === 0;
-  if (record.verified) {
+  if (isVerified(record)) {
+    // A grandfathered record has no verifiedBy/On — say so plainly rather than
+    // implying somebody checked it.
+    const grandfathered = record.verified === undefined;
     return (
       <div className="flex items-center justify-between rounded-lg bg-emerald-50 px-3 py-2.5 text-xs ring-1 ring-inset ring-emerald-100">
         <span className="inline-flex items-center gap-1.5 font-bold text-emerald-800">
-          <BadgeCheck size={14} /> Verified{record.verifiedBy ? ` by ${record.verifiedBy}` : ''}{record.verifiedOn ? ` · ${record.verifiedOn}` : ''}
+          <BadgeCheck size={14} />
+          {grandfathered
+            ? 'Allowed on trips — added before document checks; upload the papers when you can'
+            : `Verified${record.verifiedBy ? ` by ${record.verifiedBy}` : ''}${record.verifiedOn ? ` · ${record.verifiedOn}` : ''}`}
         </span>
-        {isAdmin && <button type="button" onClick={() => onVerify(false)} className="font-bold text-emerald-700 hover:underline">Remove verification</button>}
+        {isAdmin && <button type="button" onClick={() => onVerify(false)} className="shrink-0 font-bold text-emerald-700 hover:underline">Remove verification</button>}
       </div>
     );
   }

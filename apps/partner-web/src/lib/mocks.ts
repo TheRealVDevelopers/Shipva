@@ -77,6 +77,15 @@ export const trucks: Truck[] = [
   { id: 't5', reg: 'KA05K2245', type: 'mini_truck', feet: '8ft Truck', capacityKg: 850, status: 'maintenance', docsOk: false, rc: 'RC-KA05K2245' },
 ];
 
+/**
+ * Was this record's paperwork signed off? Trucks and drivers that predate the
+ * verification gate have no `verified` flag at all — they're already out
+ * working, so grandfather them rather than stopping every trip on the day the
+ * gate ships. Anything added since sets `verified: false` explicitly, so an
+ * absent flag reliably means "legacy" and a false one means "not checked yet".
+ */
+export const isVerified = (r: { verified?: boolean | undefined }): boolean => r.verified ?? true;
+
 export type LoadKind = 'instant' | 'auction' | 'backhaul';
 export interface Load {
   id: string; from: string; to: string; poster: string; vehicleType: VehicleType;

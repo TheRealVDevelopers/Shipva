@@ -15,7 +15,7 @@ import {
   nameError, phoneError, aadhaarError, licenceError, vehicleRegError,
   requiredError, positiveError, normalizePhone, allClear,
 } from '../../lib/validate.js';
-import { osCounters, type Trip, type TripPoint, type TripStatus } from '../../lib/mocks.js';
+import { osCounters, isVerified, type Trip, type TripPoint, type TripStatus } from '../../lib/mocks.js';
 import { useStore, stageOf, type Customer } from '../../lib/store.js';
 import { useAuth } from '../../lib/auth.js';
 import { watchMembers, teamOf, type Member } from '../../lib/members.js';
@@ -113,8 +113,10 @@ export function Trips() {
   // Every field is mandatory before a trip can be saved. Errors only surface
   // once the user has tried to save, so the form doesn't open covered in red.
   // A truck may only go on a trip once an owner/manager has verified its papers.
-  const vehicleNotVerified = !!f.vehicleReg && !trucks.find((t) => t.reg === f.vehicleReg)?.verified;
-  const unverifiedTrucks = trucks.filter((t) => !t.verified).length;
+  // Trucks added before the gate existed are grandfathered (see isVerified).
+  const pickedTruck = trucks.find((t) => t.reg === f.vehicleReg);
+  const vehicleNotVerified = !!f.vehicleReg && !!pickedTruck && !isVerified(pickedTruck);
+  const unverifiedTrucks = trucks.filter((t) => !isVerified(t)).length;
   // ...and a transporter only once their agreement is approved (onboarded).
   const custNotOnboarded = !!f.customer && stageOf(customers.find((c) => c.name === f.customer) ?? ({} as Customer)) !== 'active';
   const pendingCustomers = customers.filter((c) => stageOf(c) !== 'active').length;
@@ -385,8 +387,8 @@ export function Trips() {
           <Select value={f.vehicleReg} onChange={set('vehicleReg')}>
             <option value="">Select vehicle</option>
             {trucks.map((t) => (
-              <option key={t.id} value={t.reg} disabled={!t.verified}>
-                {t.reg}{t.verified ? '' : ' — documents not verified'}
+              <option key={t.id} value={t.reg} disabled={!isVerified(t)}>
+                {t.reg}{isVerified(t) ? '' : ' — documents not verified'}
               </option>
             ))}
           </Select>
