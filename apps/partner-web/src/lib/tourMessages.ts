@@ -36,6 +36,34 @@ export function fmtServiceDate(t: Tour): string {
   return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
 }
 
+/** Same date, dotted — the diesel request uses "15.07.2026", not slashes. */
+export function fmtDotDate(t: Tour): string {
+  const raw = t.serviceAt || t.date;
+  const d = new Date(raw);
+  if (isNaN(d.getTime())) return raw;
+  return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`;
+}
+
+/**
+ * Diesel request — the advance the vendor is asked to release for a run.
+ * Format is the client's, verbatim:
+ *   Date / Name / Trip / G/ PAY NO / Advance Amount / Vehicle no / VR id ×N
+ * (their sample repeats "VR id:" on its own line for each VRID rather than
+ * numbering them, unlike the vendor message's "VRID 1:" / "VRID 2:").
+ */
+export function dieselRequestMessage(t: Tour): string {
+  const vrids = legsOf(t).map((l) => l.vrid).filter(Boolean);
+  return [
+    `Date: ${fmtDotDate(t)}`,
+    `Name: ${t.gpayName || '—'}`,
+    `Trip: ${t.tourId || '—'}`,
+    `G/ PAY NO: ${t.gpayNumber || '—'}`,
+    `Advance Amount: ${t.advanceAmount || '0'}`,
+    `Vehicle no: ${t.vehicleId || '—'}`,
+    ...vrids.map((v) => `VR id: ${v}`),
+  ].join('\n');
+}
+
 /** Vendor payment message. */
 export function vendorMessage(t: Tour): string {
   const vrids = legsOf(t).map((l) => l.vrid).filter(Boolean);
@@ -77,7 +105,21 @@ export function driverMessage(t: Tour): string {
   return `${head}\n\n${blocks}`;
 }
 
+/**
+ * WhatsApp share link.
+ *
+ * Uses api.whatsapp.com/send rather than wa.me. The text and its encoding are
+ * identical either way (verified: every \n becomes %0A and round-trips exactly),
+ * but wa.me hands off to the Desktop client in a way that flattens the line
+ * breaks — the client saw their route arrive as one run-on paragraph instead of
+ * the laid-out format. api.whatsapp.com/send is the documented endpoint and
+ * preserves them.
+ *
+ * If a client ever mangles it again, the share menus also offer Copy — that puts
+ * the exact text on the clipboard, bypassing the URL entirely.
+ */
 export function waLink(phone: string, text: string): string {
   const num = waDigits(phone);
-  return `https://wa.me/${num}?text=${encodeURIComponent(text)}`;
+  const t = encodeURIComponent(text);
+  return num ? `https://api.whatsapp.com/send?phone=${num}&text=${t}` : `https://api.whatsapp.com/send?text=${t}`;
 }

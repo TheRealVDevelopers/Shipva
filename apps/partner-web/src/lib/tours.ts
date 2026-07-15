@@ -133,7 +133,9 @@ export async function updateTourLegs(tour: Tour, patch: Partial<Tour>, uid: stri
   await Promise.allSettled(dropped.map((v) => releaseVrid(v)));
 }
 
-export async function addTourDoc(t: Omit<Tour, 'id'>, scope: Scope, handledBy?: Handler): Promise<void> {
+/** Creates the route and returns its new doc id — the caller needs it to hand
+ *  the line to a POC as a second step. */
+export async function addTourDoc(t: Omit<Tour, 'id'>, scope: Scope, handledBy?: Handler): Promise<string> {
   const owner = handledBy ?? { uid: scope.uid, name: '', leaderUid: scope.leaderUid };
   const payload: Record<string, unknown> = {
     ...t,
@@ -146,6 +148,7 @@ export async function addTourDoc(t: Omit<Tour, 'id'>, scope: Scope, handledBy?: 
   if (t.legs) payload.legs = cleanLegs(t.legs);
   const ref = await addDoc(collection(db, 'orgTours'), clean(payload));
   await registerVrids(tourVrids(t), ref.id, owner.uid);
+  return ref.id;
 }
 
 export async function updateTourDoc(id: string, patch: Partial<Tour>): Promise<void> {

@@ -278,7 +278,8 @@ interface StoreApi extends StoreShape {
   addStaff: (s: Omit<Staff, 'id'>) => void;
   addAttached: (a: Omit<AttachedTruck, 'id'>) => void;
   recordOwnerPayment: (id: string, amountPaise: number) => void;
-  addTour: (t: Omit<Tour, 'id'>, handledBy?: { uid: string; name: string; leaderUid?: string }) => void;
+  /** Returns the new route's id so the caller can assign it to a POC next. */
+  addTour: (t: Omit<Tour, 'id'>, handledBy?: { uid: string; name: string; leaderUid?: string }) => Promise<string>;
   updateTour: (id: string, patch: Partial<Tour>) => void;
   runPayroll: () => void;
   reset: () => void;
@@ -348,9 +349,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return watchToursFs({ uid: member.uid, role: member.role, leaderUid: member.leaderUid || member.uid }, setTours);
   }, [member?.uid, member?.role, member?.leaderUid]);
 
-  const addTour = useCallback((t: Omit<Tour, 'id'>, handledBy?: { uid: string; name: string; leaderUid?: string }) => {
-    if (!member) return;
-    void addTourDoc(t, { uid: member.uid, role: member.role, leaderUid: member.leaderUid || member.uid }, handledBy);
+  const addTour = useCallback(async (t: Omit<Tour, 'id'>, handledBy?: { uid: string; name: string; leaderUid?: string }): Promise<string> => {
+    if (!member) return '';
+    return addTourDoc(t, { uid: member.uid, role: member.role, leaderUid: member.leaderUid || member.uid }, handledBy);
   }, [member?.uid, member?.role, member?.leaderUid]);
 
   const updateTour = useCallback((id: string, patch: Partial<Tour>) => {
