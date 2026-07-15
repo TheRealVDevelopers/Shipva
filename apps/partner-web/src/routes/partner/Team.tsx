@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   Plus, Phone, UserCog, Mail, Check, Copy, KeyRound, Shield, Pencil, ShieldCheck,
-  Clock, ListTodo, CalendarClock, Coffee,
+  Clock, ListTodo, CalendarClock, Coffee, Trash2,
 } from 'lucide-react';
 import { PartnerLayout } from '../../components/layout/PartnerLayout.js';
 import { Card } from '../../components/ui/Card.js';
@@ -11,7 +11,8 @@ import { Modal, Field, TextInput, Select, Row } from '../../components/ui/Modal.
 import { useAuth } from '../../lib/auth.js';
 import { roleLabel, defaultPages, type Role } from '../../lib/roles.js';
 import {
-  watchMembers, inviteMember, updateMember, pagesForRole, canManageMember, ASSIGNABLE_PAGES, type Member,
+  watchMembers, inviteMember, updateMember, deleteMember, pagesForRole,
+  canManageMember, canDeleteMember, ASSIGNABLE_PAGES, type Member,
 } from '../../lib/members.js';
 import type { FeatureId } from '../../lib/features.js';
 import {
@@ -39,6 +40,8 @@ export function Team() {
   const [edit, setEdit] = useState<Member | null>(null);
   const [assignTo, setAssignTo] = useState<Member | null>(null);
   const [todayFor, setTodayFor] = useState<Member | null>(null);
+  const [confirmDel, setConfirmDel] = useState<Member | null>(null);
+  const [delBusy, setDelBusy] = useState(false);
 
   const isAdmin = me?.role === 'owner' || me?.role === 'manager';
   const isTL = me?.role === 'team_leader';
@@ -137,6 +140,7 @@ export function Team() {
                     <button onClick={() => setTodayFor(m)} className="inline-flex items-center gap-1 text-xs font-bold text-neutral-600 hover:text-primary-700"><CalendarClock size={12} /> Today</button>
                     {canEdit && m.uid !== me?.uid && <button onClick={() => setAssignTo(m)} className="inline-flex items-center gap-1 text-xs font-bold text-primary-600 hover:text-primary-700"><ListTodo size={12} /> Assign task</button>}
                     {canEdit && <button onClick={() => setEdit(m)} className="inline-flex items-center gap-1 text-xs font-bold text-neutral-600 hover:text-primary-700"><Pencil size={12} /> Edit access</button>}
+                    {canDeleteMember(me, m) && <button onClick={() => setConfirmDel(m)} className="inline-flex items-center gap-1 text-xs font-bold text-neutral-500 hover:text-rose-600"><Trash2 size={12} /> Remove</button>}
                   </div>
                 </div>
               </Card>
@@ -190,6 +194,32 @@ export function Team() {
 
       {/* Member's day */}
       {todayFor && <TodayModal member={todayFor} activity={activity[todayFor.uid] ?? null} onClose={() => setTodayFor(null)} />}
+
+      {/* Remove employee */}
+      {confirmDel && (
+        <Modal open onClose={() => setConfirmDel(null)} title={`Remove ${confirmDel.name}?`} subtitle="They lose access immediately"
+          onSubmit={async () => {
+            if (delBusy) return;
+            setDelBusy(true);
+            try {
+              await deleteMember(confirmDel.uid);
+              push({ title: 'Employee removed', body: `${confirmDel.name} can no longer sign in.`, tone: 'info' });
+              setConfirmDel(null);
+            } catch {
+              push({ title: "Couldn't remove", body: 'Please try again.', tone: 'warning' });
+            } finally { setDelBusy(false); }
+          }}
+          submitLabel={delBusy ? 'Removing…' : 'Remove employee'}>
+          <p className="rounded-lg bg-rose-50 px-3 py-2.5 text-sm text-rose-800 ring-1 ring-inset ring-rose-100">
+            <b>{confirmDel.name}</b> ({confirmDel.email}) will lose access straight away. Trips, tours and tasks they handled stay —
+            they'll still show <b>{confirmDel.name}</b> as the handler. This can't be undone.
+          </p>
+          <p className="rounded-lg bg-amber-50 px-3 py-2 text-[11px] text-amber-800 ring-1 ring-inset ring-amber-100">
+            Their sign-in email stays registered, so re-inviting <b>{confirmDel.email}</b> later would report "email already in use".
+            If they might come back, set them to <b>Suspended</b> in Edit access instead.
+          </p>
+        </Modal>
+      )}
     </PartnerLayout>
   );
 }

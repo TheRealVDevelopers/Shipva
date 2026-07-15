@@ -6,9 +6,9 @@ import { KpiCard } from '../../components/ui/KpiCard.js';
 import { Table, THead, Th, TBody, Tr, Td } from '../../components/ui/Table.js';
 import { Badge, type BadgeTone } from '../../components/ui/Badge.js';
 import { Button } from '../../components/ui/Button.js';
-import { Modal, Field, TextInput, Select, Row } from '../../components/ui/Modal.js';
+import { Modal, Field, TextInput, DateInput, Select, Row } from '../../components/ui/Modal.js';
 import { HBar } from '../../components/ui/Charts.js';
-import { rupees } from '../../lib/format.js';
+import { rupees, isoToLabel, todayFullLabel } from '../../lib/format.js';
 import { type InvoiceStatus } from '../../lib/mocks.js';
 import { useStore, todayLabel } from '../../lib/store.js';
 import { useNotify } from '../../lib/notify.js';
@@ -20,8 +20,9 @@ const INV_BADGE: Record<InvoiceStatus, { label: string; tone: BadgeTone }> = {
   overdue: { label: 'Overdue', tone: 'danger' },
 };
 
-const EMPTY = { client: '', base: '', gstRate: '18' };
-const dueLabel = () => new Date(Date.now() + 15 * 864e5).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+const EMPTY = { client: '', base: '', gstRate: '18', date: '', dueDate: '' };
+/** Default credit period — 15 days out, but the user can pick any date. */
+const defaultDue = () => isoToLabel(new Date(Date.now() + 15 * 864e5).toISOString().slice(0, 10));
 
 export function Invoices() {
   const { invoices, customers, addInvoice, markInvoicePaid } = useStore();
@@ -52,7 +53,7 @@ export function Invoices() {
 
   function submit() {
     if (!valid) return;
-    addInvoice({ client: f.client, date: todayLabel(), dueDate: dueLabel(), basePaise: Math.round(Number(f.base) * 100), status: 'pending', gstRate: Number(f.gstRate) });
+    addInvoice({ client: f.client, date: f.date || todayFullLabel(), dueDate: f.dueDate || defaultDue(), basePaise: Math.round(Number(f.base) * 100), status: 'pending', gstRate: Number(f.gstRate) });
     setF(EMPTY); setOpen(false);
   }
 
@@ -68,7 +69,7 @@ export function Invoices() {
 
         <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <Card className="lg:col-span-2">
-            <CardHeader title="Vendor Payments" subtitle="GST-compliant, per trip/client" action={<Button size="sm" onClick={() => setOpen(true)}><Plus size={13} /> Add MIS</Button>} />
+            <CardHeader title="Vendor Payments" subtitle="GST-compliant, per trip/client" action={<Button size="sm" onClick={() => { setF({ ...EMPTY, date: todayFullLabel(), dueDate: defaultDue() }); setOpen(true); }}><Plus size={13} /> Add MIS</Button>} />
             <Table>
               <THead>
                 <Tr>
@@ -140,6 +141,10 @@ export function Invoices() {
             {customers.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
           </Select>
         </Field>
+        <Row>
+          <Field label="Invoice date" required><DateInput value={f.date} onChange={(v) => setF({ ...f, date: v })} /></Field>
+          <Field label="Due date" required hint="Defaults to 15 days"><DateInput value={f.dueDate} onChange={(v) => setF({ ...f, dueDate: v })} /></Field>
+        </Row>
         <Row>
           <Field label="Base amount (₹)"><TextInput type="number" value={f.base} onChange={(e) => setF({ ...f, base: e.target.value })} placeholder="52000" /></Field>
           <Field label="GST rate">

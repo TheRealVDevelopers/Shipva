@@ -10,7 +10,7 @@
 import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 import {
-  collection, doc, getDoc, setDoc, updateDoc, onSnapshot, serverTimestamp,
+  collection, deleteDoc, doc, getDoc, setDoc, updateDoc, onSnapshot, serverTimestamp,
 } from 'firebase/firestore';
 import { db, firebaseConfig } from '../firebase.js';
 import type { Role } from './roles.js';
@@ -63,6 +63,20 @@ export function canManageMember(me: Member | null, target: Member): boolean {
   if (me.role === 'owner' || me.role === 'manager') return true;
   if (me.role === 'team_leader') return target.leaderUid === me.uid;
   return false;
+}
+
+/**
+ * Can `me` delete `target`? The client's rule is admin-only, and on top of that
+ * two guards that matter: nobody deletes themselves (you'd lock yourself out
+ * mid-click), and nobody deletes the owner — that's the bootstrap account the
+ * whole org hangs off, and firestore.rules would let it happen.
+ */
+export function canDeleteMember(me: Member | null, target: Member): boolean {
+  if (!me) return false;
+  if (me.role !== 'owner' && me.role !== 'manager') return false;
+  if (me.uid === target.uid) return false;
+  if (target.role === 'owner') return false;
+  return true;
 }
 
 /** The one email allowed to bootstrap itself as owner (matches firestore.rules). */
@@ -164,4 +178,19 @@ export async function updateMember(uid: string, patch: Partial<Member>): Promise
   if (patch.leaderUid !== undefined) data.leaderUid = patch.leaderUid;
   if (patch.mustSetPassword !== undefined) data.mustSetPassword = patch.mustSetPassword;
   await updateDoc(doc(db, 'orgMembers', uid), data);
+}
+
+/**
+ * Remove an employee. This deletes their `orgMembers` record, which is what
+ * grants access — the app checks for it on every sign-in, so they immediately
+ * drop to "no access" and can't reach anything.
+ *
+ * Their Firebase Auth login itself is NOT deleted: the client SDK can only
+ * delete the *currently signed-in* user, so removing someone else's login needs
+ * the Admin SDK in a Cloud Function. The practical effect is the same (no
+ * access), but the email stays registered, so re-inviting that same address
+ * would hit "email already in use". Suspending instead of deleting avoids that.
+ */
+export async function deleteMember(uid: string): Promise<void> {
+  await deleteDoc(doc(db, 'orgMembers', uid));
 }
