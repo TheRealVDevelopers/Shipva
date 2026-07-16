@@ -163,6 +163,19 @@ service cloud.firestore {
       allow create, update, delete: if isOrgAdmin();
     }
 
+    // Shared money — invoices, expenses, fuel logs, payroll and the "raise
+    // request to accountant" flow. Was per-device localStorage, so an expense or
+    // an advance request never reached the accountant. Now org-wide: any member
+    // reads and writes (raising a request is deliberately open to everyone), an
+    // admin deletes. Who can reach the money PAGES is the finer role/page gating
+    // in lib/roles + lib/features (invoices/expenses/payroll are accountant +
+    // owner/manager). Mirrors lib/money.
+    match /orgInvoices/{id} { allow read, create, update: if isOrgMember(); allow delete: if isOrgAdmin(); }
+    match /orgExpenses/{id} { allow read, create, update: if isOrgMember(); allow delete: if isOrgAdmin(); }
+    match /orgFuelLogs/{id} { allow read, create, update: if isOrgMember(); allow delete: if isOrgAdmin(); }
+    match /orgPayroll/{id}  { allow read, create, update: if isOrgMember(); allow delete: if isOrgAdmin(); }
+    match /orgRequests/{id} { allow read, create, update: if isOrgMember(); allow delete: if isOrgAdmin(); }
+
     // Public config (vehicle types, zones, fares) — readable by any signed-in user.
     match /config/{doc} { allow read: if signedIn(); allow write: if false; }
 

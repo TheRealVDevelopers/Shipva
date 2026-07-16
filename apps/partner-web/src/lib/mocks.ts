@@ -215,15 +215,18 @@ export interface Trip {
 
 export type InvoiceStatus = 'paid' | 'pending' | 'overdue';
 export interface Invoice {
+  /** Firestore doc id (assigned on write); `no` is the human invoice number. */
+  id?: string;
   no: string; client: string; date: string; dueDate: string;
   basePaise: number; gstPaise: number; totalPaise: number; status: InvoiceStatus;
 }
 // Demo invoices removed — real billing only.
 
-export interface Expense { date: string; tripLr: string; category: string; amountPaise: number; note: string }
+export interface Expense { id?: string; date: string; tripLr: string; category: string; amountPaise: number; note: string }
 // Demo expenses removed.
 
 export interface FuelLog {
+  id?: string;
   date: string; reg: string; km: number; litres: number; ratePaise: number; costPaise: number; expectedPaise: number; ok: boolean;
 }
 // Demo fuel logs removed.

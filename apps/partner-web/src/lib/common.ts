@@ -27,8 +27,10 @@ function prep(item: Record<string, unknown>, createdAtMs: number): Record<string
 }
 
 /** A shared org collection with the same read-all / write-all access for every
- *  member. `T` carries a client `id` that maps to the Firestore doc id. */
-function sharedCollection<T extends { id: string }>(name: string) {
+ *  member. `T` carries a client `id` that maps to the Firestore doc id (some
+ *  records, e.g. an Expense, only gain their id on the way back out — hence the
+ *  optional constraint). Reused by lib/money for the org's shared money data. */
+export function sharedCollection<T extends { id?: string }>(name: string) {
   const ref = () => collection(db, name);
   return {
     /** Live subscription; newest-added first (by createdAtMs). */

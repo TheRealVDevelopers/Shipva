@@ -1,10 +1,13 @@
 /**
  * Partner data store — the single source of truth for the Transporter OS UI.
  *
- * Phase A: backed by localStorage so records created in the UI persist across
- * refresh. The component API (useStore) is deliberately backend-agnostic — in
- * Phase B the implementation swaps to Firestore (scoped per transporter tenant)
- * without changing any page that consumes it.
+ * The operational and money data now lives in Firestore: trips & tours are
+ * scoped to the signed-in member; reference data (customers/drivers/trucks/
+ * owners) and money (invoices/expenses/fuel/payroll/requests) are shared across
+ * the whole org. Only lightweight per-device config — saved trip points, the
+ * expense-category list and legacy staff — still rides in localStorage. The
+ * component API (useStore) stays backend-agnostic: a page reads `invoices` the
+ * same way whether it came from a blob or a snapshot listener.
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type {
@@ -14,6 +17,7 @@ import { tripSteps, statusFromStep } from './trip.js';
 import { watchTrips, addTripDoc, updateTripDoc, deleteTripDoc } from './trips.js';
 import { watchToursFs, addTourDoc, updateTourDoc, deleteTourDoc } from './tours.js';
 import { customersCol, driversCol, trucksCol, ownersCol } from './common.js';
+import { invoicesCol, expensesCol, fuelLogsCol, payrollCol, requestsCol } from './money.js';
 import { useAuth } from './auth.js';
 
 /** Vendor agreement — absence means "not created yet". */
@@ -249,15 +253,11 @@ export interface MoneyRequest {
  *  team adds their own on top (see addExpenseCategory). */
 const DEFAULT_CATEGORIES = ['Toll', 'RTO/Police', 'Loading', 'Repairs', 'Office', 'Misc'];
 
+/** The little that still lives in localStorage: per-device config, not data. */
 interface StoreShape {
-  invoices: Invoice[];
-  fuelLogs: FuelLog[];
-  expenses: Expense[];
-  payroll: PayrollLine[];
   staff: Staff[];
   savedPoints: SavedPoint[];
   expenseCategories: string[];
-  requests: MoneyRequest[];
 }
 
 interface StoreApi extends StoreShape {
@@ -269,6 +269,12 @@ interface StoreApi extends StoreShape {
   drivers: FleetDriver[];
   trucks: Truck[];
   attached: AttachedTruck[];
+  /** Money — Firestore-backed, shared across the org (see lib/money). */
+  invoices: Invoice[];
+  expenses: Expense[];
+  fuelLogs: FuelLog[];
+  payroll: PayrollLine[];
+  requests: MoneyRequest[];
   addTrip: (t: Omit<Trip, 'lr' | 'vrId' | 'id'>, handledBy?: { uid: string; name: string; leaderUid?: string }) => void;
   updateTripStatus: (id: string, status: TripStatus) => void;
   /** Edit / remove a trip or tour — leadership only (see canEditRecords). */
@@ -278,10 +284,10 @@ interface StoreApi extends StoreShape {
   /** Advance a trip one step along its live timeline; pass a remark when finishing. */
   advanceTrip: (id: string, remark?: string) => void;
   addSavedPoint: (p: SavedPoint) => void;
-  addInvoice: (i: Omit<Invoice, 'no' | 'gstPaise' | 'totalPaise'> & { gstRate?: number }) => void;
+  addInvoice: (i: Omit<Invoice, 'no' | 'gstPaise' | 'totalPaise' | 'id'> & { gstRate?: number }) => void;
   markInvoicePaid: (no: string) => void;
-  addExpense: (e: Expense) => void;
-  addFuelLog: (f: FuelLog) => void;
+  addExpense: (e: Omit<Expense, 'id'>) => void;
+  addFuelLog: (f: Omit<FuelLog, 'id'>) => void;
   addExpenseCategory: (name: string) => void;
   addRequest: (r: Omit<MoneyRequest, 'id' | 'createdOn' | 'status'>) => void;
   resolveRequest: (id: string, status: 'approved' | 'rejected') => void;
@@ -317,20 +323,17 @@ interface StoreApi extends StoreShape {
  * Local blob key. Bumped to v3 when the demo data was retired: v2 holds the old
  * fake invoices/expenses/payroll on every device that ever ran the app, and a
  * new key is the only way to leave them behind — merging over a fresh seed would
- * resurrect them. The old key is deleted on load.
+ * resurrect them. The old key is deleted on load. The money data has since moved
+ * to Firestore, so this blob now only carries per-device config.
  */
 const KEY = 'sarva-partner-store-v3';
 const LEGACY_KEYS = ['shipva-partner-store-v2', 'trips-seeded-v1',
   'ref-customers-seeded-v1', 'ref-drivers-seeded-v1', 'ref-trucks-seeded-v1', 'ref-owners-seeded-v1'];
 
-/** A brand-new org: no demo records, only the default expense categories (which
- *  are configuration, not data). Nothing here fabricates business records — the
- *  team's real data is the only data. */
+/** A brand-new device: only the default expense categories (configuration, not
+ *  data). Money and business records live in Firestore, not here. */
 function seed(): StoreShape {
-  return {
-    invoices: [], expenses: [], fuelLogs: [], payroll: [], staff: [],
-    savedPoints: [], expenseCategories: [...DEFAULT_CATEGORIES], requests: [],
-  };
+  return { staff: [], savedPoints: [], expenseCategories: [...DEFAULT_CATEGORIES] };
 }
 
 function load(): StoreShape {
@@ -348,6 +351,17 @@ const Ctx = createContext<StoreApi | null>(null);
 let counter = 0;
 const uid = () => `${Date.now().toString(36)}${(counter++).toString(36)}`;
 const today = () => new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+
+/** Next invoice number — one past the highest that exists, floored at 1043.
+ *  Derived from the live list rather than a running count, so it survives a
+ *  refresh and two people billing at once collide far less often. */
+function nextInvoiceNo(list: Invoice[]): string {
+  const max = list.reduce((m, i) => {
+    const n = parseInt(i.no.replace(/\D/g, ''), 10);
+    return Number.isFinite(n) ? Math.max(m, n) : m;
+  }, 1042);
+  return `INV-${max + 1}`;
+}
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [s, setS] = useState<StoreShape>(load);
@@ -386,21 +400,30 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     void updateTourDoc(id, patch);
   }, []);
 
-  // ── Shared reference data (customers / drivers / trucks / truck owners) ──────
-  // Firestore-backed and common to the whole org — everyone reads the same lists
-  // and any add shows up for the rest of the team. On the owner's first run we
-  // migrate whatever was in local storage (their additions + the demo seed) into
-  // the shared collections, exactly once (guarded by the empty-collection check
-  // plus a per-collection localStorage flag).
+  // ── Shared org data — reference (customers/drivers/trucks/owners) + money ────
+  // Firestore-backed and common to the whole org: everyone reads the same lists
+  // and any add shows up for the rest of the team. Bound to the signed-in member
+  // because the rules require an org member; cleared on sign-out.
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [drivers, setDrivers] = useState<FleetDriver[]>([]);
   const [trucks, setTrucks] = useState<Truck[]>([]);
   const [attached, setAttached] = useState<AttachedTruck[]>([]);
   const attachedRef = useRef<AttachedTruck[]>([]);
+  // Money — shared too. Invoices and payroll keep a ref so a mutation can resolve
+  // the affected doc id from the human key (invoice `no`) it's called with.
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const invoicesRef = useRef<Invoice[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [fuelLogs, setFuelLogs] = useState<FuelLog[]>([]);
+  const [payroll, setPayroll] = useState<PayrollLine[]>([]);
+  const payrollRef = useRef<PayrollLine[]>([]);
+  const [requests, setRequests] = useState<MoneyRequest[]>([]);
 
   useEffect(() => {
     if (!member) {
       setCustomers([]); setDrivers([]); setTrucks([]); setAttached([]); attachedRef.current = [];
+      setInvoices([]); invoicesRef.current = []; setExpenses([]); setFuelLogs([]);
+      setPayroll([]); payrollRef.current = []; setRequests([]);
       return;
     }
     const unsubs = [
@@ -408,6 +431,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       driversCol.watch(setDrivers),
       trucksCol.watch(setTrucks),
       ownersCol.watch((l) => { setAttached(l); attachedRef.current = l; }),
+      invoicesCol.watch((l) => { setInvoices(l); invoicesRef.current = l; }),
+      expensesCol.watch(setExpenses),
+      fuelLogsCol.watch(setFuelLogs),
+      payrollCol.watch((l) => { setPayroll(l); payrollRef.current = l; }),
+      requestsCol.watch(setRequests),
     ];
     return () => unsubs.forEach((u) => u());
   }, [member?.uid, member?.role]);
@@ -452,23 +480,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const addInvoice = useCallback((i: Omit<Invoice, 'no' | 'gstPaise' | 'totalPaise'> & { gstRate?: number }) => {
-    setS((p) => {
-      const gst = Math.round(i.basePaise * ((i.gstRate ?? 18) / 100));
-      const inv: Invoice = {
-        no: `INV-${1043 + p.invoices.length}`, client: i.client, date: i.date, dueDate: i.dueDate,
-        basePaise: i.basePaise, gstPaise: gst, totalPaise: i.basePaise + gst, status: i.status,
-      };
-      return { ...p, invoices: [inv, ...p.invoices] };
+  const addInvoice = useCallback((i: Omit<Invoice, 'no' | 'gstPaise' | 'totalPaise' | 'id'> & { gstRate?: number }) => {
+    const gst = Math.round(i.basePaise * ((i.gstRate ?? 18) / 100));
+    void invoicesCol.add({
+      no: nextInvoiceNo(invoicesRef.current),
+      client: i.client, date: i.date, dueDate: i.dueDate,
+      basePaise: i.basePaise, gstPaise: gst, totalPaise: i.basePaise + gst, status: i.status,
     });
   }, []);
 
   const markInvoicePaid = useCallback((no: string) => {
-    setS((p) => ({ ...p, invoices: p.invoices.map((i) => (i.no === no ? { ...i, status: 'paid' } : i)) }));
+    const inv = invoicesRef.current.find((i) => i.no === no);
+    if (inv?.id) void invoicesCol.update(inv.id, { status: 'paid' });
   }, []);
 
-  const addExpense = useCallback((e: Expense) => setS((p) => ({ ...p, expenses: [e, ...p.expenses] })), []);
-  const addFuelLog = useCallback((f: FuelLog) => setS((p) => ({ ...p, fuelLogs: [f, ...p.fuelLogs] })), []);
+  const addExpense = useCallback((e: Omit<Expense, 'id'>) => { void expensesCol.add(e); }, []);
+  const addFuelLog = useCallback((f: Omit<FuelLog, 'id'>) => { void fuelLogsCol.add(f); }, []);
 
   const addExpenseCategory = useCallback((name: string) => {
     const n = name.trim();
@@ -478,11 +505,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const addRequest = useCallback((r: Omit<MoneyRequest, 'id' | 'createdOn' | 'status'>) => {
-    setS((p) => ({ ...p, requests: [{ ...r, id: uid(), createdOn: today(), status: 'pending' }, ...p.requests] }));
+    void requestsCol.add({ ...r, createdOn: today(), status: 'pending' });
   }, []);
 
   const resolveRequest = useCallback((id: string, status: 'approved' | 'rejected') => {
-    setS((p) => ({ ...p, requests: p.requests.map((r) => (r.id === id ? { ...r, status } : r)) }));
+    void requestsCol.update(id, { status });
   }, []);
 
   // Reference-data writes go straight to the shared Firestore collections; the
@@ -540,13 +567,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const runPayroll = useCallback(() => {
-    setS((p) => ({ ...p, payroll: p.payroll.map((l) => ({ ...l, status: 'paid' })) }));
+    // Idempotent — settle every 'due' line. No-op until a payroll run is added.
+    payrollRef.current.forEach((l) => { if (l.id && l.status === 'due') void payrollCol.update(l.id, { status: 'paid' }); });
   }, []);
 
   const reset = useCallback(() => setS(seed()), []);
 
   const value = useMemo<StoreApi>(() => ({
     ...s, trips, tours, customers, drivers, trucks, attached,
+    invoices, expenses, fuelLogs, payroll, requests,
     addTrip, updateTripStatus, updateTrip, deleteTrip, deleteTour,
     advanceTrip, addSavedPoint, addInvoice, markInvoicePaid, addExpense, addFuelLog,
     addExpenseCategory, addRequest, resolveRequest, addCustomer, addDriver, addTruck,
@@ -554,6 +583,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setCustomerAgreement, setAttachedAgreement, updateCustomer, deleteCustomer, updateAttached, deleteAttached,
     addStaff, addAttached, recordOwnerPayment, addTour, updateTour, runPayroll, reset,
   }), [s, trips, tours, customers, drivers, trucks, attached,
+    invoices, expenses, fuelLogs, payroll, requests,
     addTrip, updateTripStatus, updateTrip, deleteTrip, deleteTour,
     advanceTrip, addSavedPoint, addInvoice, markInvoicePaid, addExpense, addFuelLog,
     addExpenseCategory, addRequest, resolveRequest, addCustomer, addDriver, addTruck,
