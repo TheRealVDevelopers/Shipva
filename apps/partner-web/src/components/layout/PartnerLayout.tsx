@@ -11,7 +11,7 @@ import { LogoMark } from '../art.js';
 import { subscription } from '../../lib/mocks.js';
 import { FEATURES, type FeatureId } from '../../lib/features.js';
 import { useNotify } from '../../lib/notify.js';
-import { roleLabel } from '../../lib/roles.js';
+import { roleLabel, canExportData } from '../../lib/roles.js';
 import { useAuth } from '../../lib/auth.js';
 import { memberCanAccess } from '../../lib/members.js';
 import { touchActivity } from '../../lib/activity.js';
@@ -122,7 +122,10 @@ const NAV: NavItem[] = [
 
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const { member } = useAuth();
-  const visible = NAV.filter((n) => FEATURES[n.key] && memberCanAccess(member, n.key));
+  // Export carries an extra rule the page permission can't express: Admin + Team
+  // Leader only, per the client. Mirrors the route gate in App.tsx.
+  const visible = NAV.filter((n) => FEATURES[n.key] && memberCanAccess(member, n.key)
+    && (n.key !== 'export' || canExportData(member?.role)));
   let lastGroup: string | undefined;
   return (
     <>

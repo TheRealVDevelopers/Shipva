@@ -17,8 +17,10 @@ export const ROLES: { id: Role; label: string; blurb: string }[] = [
 ];
 
 const OPS: FeatureId[] = ['overview', 'trips', 'tours', 'fleet', 'messages', 'chat'];
-const MONEY: FeatureId[] = ['overview', 'customers', 'invoices', 'expenses', 'payables', 'payroll', 'reports', 'export', 'messages', 'chat'];
-const LEAD: FeatureId[] = ['overview', 'trips', 'tours', 'fleet', 'messages', 'chat', 'team'];
+// No 'export' here: downloading data is Admin + Team Leader only (see
+// canExportData), so an accountant gets the money pages but not the export.
+const MONEY: FeatureId[] = ['overview', 'customers', 'invoices', 'expenses', 'payables', 'payroll', 'reports', 'messages', 'chat'];
+const LEAD: FeatureId[] = ['overview', 'trips', 'tours', 'fleet', 'messages', 'chat', 'team', 'export'];
 
 /** Default sections each role gets when inviting them. 'all' = everything enabled. */
 export const ROLE_ACCESS: Record<Role, FeatureId[] | 'all'> = {
@@ -41,6 +43,20 @@ export const isOrgAdminRole = (role: Role): boolean => role === 'owner' || role 
  * status, POC tour updation) — they just can't rewrite or destroy a record.
  */
 export const canEditRecords = (role: Role | undefined): boolean =>
+  !!role && (isOrgAdminRole(role) || role === 'team_leader');
+
+/**
+ * Who may download data. The client's rule, stated plainly: "that export could
+ * only be downloaded by ADMIN & TL(Team Leader)."
+ *
+ * This is deliberately a ROLE check rather than a page permission. A member's
+ * stored `pages` predates the rule, so an accountant who was already granted the
+ * Export page would otherwise keep it — changing the role defaults alone only
+ * affects who gets invited next. It's the same set as canEditRecords today, but
+ * kept separate on purpose: "may rewrite a record" and "may take the data out of
+ * the building" are different questions and shouldn't drift together by accident.
+ */
+export const canExportData = (role: Role | undefined): boolean =>
   !!role && (isOrgAdminRole(role) || role === 'team_leader');
 
 /** Default explicit page list to pre-tick when inviting a non-admin role. */

@@ -25,6 +25,7 @@ import { LogoMark } from './components/art.js';
 import { FEATURES, type FeatureId } from './lib/features.js';
 import { useAuth } from './lib/auth.js';
 import { memberCanAccess } from './lib/members.js';
+import { canExportData } from './lib/roles.js';
 
 function Splash() {
   return (
@@ -44,8 +45,10 @@ export function App() {
   if (status !== 'ready' || !member) return <Login />;
 
   /** Register a /p/* route only when its feature is enabled AND this member may access it. */
-  const Gated = ({ id, path, element }: { id: FeatureId; path: string; element: JSX.Element }) =>
-    FEATURES[id] && memberCanAccess(member, id) ? <Route path={path} element={element} /> : null;
+  // `when` carries an extra rule the page permission can't express — see the
+  // export route, which is role-gated on top of the member's granted pages.
+  const Gated = ({ id, path, element, when = true }: { id: FeatureId; path: string; element: JSX.Element; when?: boolean }) =>
+    FEATURES[id] && when && memberCanAccess(member, id) ? <Route path={path} element={element} /> : null;
 
   return (
     <Routes>
@@ -73,7 +76,9 @@ export function App() {
       {Gated({ id: 'team', path: '/p/team', element: <Team /> })}
       {Gated({ id: 'messages', path: '/p/messages', element: <Messages /> })}
       {Gated({ id: 'chat', path: '/p/chat', element: <Chat /> })}
-      {Gated({ id: 'export', path: '/p/export', element: <ExportData /> })}
+      {/* Export is Admin + Team Leader only, per the client — role-gated on top
+          of the page permission, since a member's granted pages predate the rule. */}
+      {Gated({ id: 'export', path: '/p/export', element: <ExportData />, when: canExportData(member?.role) })}
       {Gated({ id: 'loads', path: '/p/loads', element: <LoadBoard /> })}
       {Gated({ id: 'jobs', path: '/p/jobs', element: <ActiveJobs /> })}
       {Gated({ id: 'subscription', path: '/p/subscription', element: <Subscription /> })}
