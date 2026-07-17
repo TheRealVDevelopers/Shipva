@@ -17,9 +17,7 @@ export const ROLES: { id: Role; label: string; blurb: string }[] = [
 ];
 
 const OPS: FeatureId[] = ['overview', 'trips', 'tours', 'fleet', 'messages', 'chat'];
-// No 'export' here: downloading data is Admin + Team Leader only (see
-// canExportData), so an accountant gets the money pages but not the export.
-const MONEY: FeatureId[] = ['overview', 'customers', 'invoices', 'expenses', 'payables', 'payroll', 'reports', 'messages', 'chat'];
+const MONEY: FeatureId[] = ['overview', 'customers', 'invoices', 'expenses', 'payables', 'payroll', 'reports', 'export', 'messages', 'chat'];
 const LEAD: FeatureId[] = ['overview', 'trips', 'tours', 'fleet', 'messages', 'chat', 'team', 'export'];
 
 /** Default sections each role gets when inviting them. 'all' = everything enabled. */
@@ -46,18 +44,20 @@ export const canEditRecords = (role: Role | undefined): boolean =>
   !!role && (isOrgAdminRole(role) || role === 'team_leader');
 
 /**
- * Who may download data. The client's rule, stated plainly: "that export could
- * only be downloaded by ADMIN & TL(Team Leader)."
+ * Who may download data. The change request says "that export could only be
+ * downloaded by ADMIN & TL(Team Leader)" — the accountant is a DELIBERATE
+ * addition on the user's instruction, because their job is the ledgers and the
+ * reports and the export is how they do it. Don't "fix" this back to the PDF.
+ * Supervisors remain the ones who can't take data out.
  *
  * This is deliberately a ROLE check rather than a page permission. A member's
- * stored `pages` predates the rule, so an accountant who was already granted the
- * Export page would otherwise keep it — changing the role defaults alone only
- * affects who gets invited next. It's the same set as canEditRecords today, but
- * kept separate on purpose: "may rewrite a record" and "may take the data out of
- * the building" are different questions and shouldn't drift together by accident.
+ * stored `pages` predates the rule, so gating on defaults alone would only
+ * affect who gets invited next. Kept separate from canEditRecords on purpose:
+ * "may rewrite a record" and "may take the data out of the building" are
+ * different questions and shouldn't drift together by accident.
  */
 export const canExportData = (role: Role | undefined): boolean =>
-  !!role && (isOrgAdminRole(role) || role === 'team_leader');
+  !!role && (isOrgAdminRole(role) || role === 'team_leader' || role === 'accountant');
 
 /** Default explicit page list to pre-tick when inviting a non-admin role. */
 export function defaultPages(role: Role): FeatureId[] {
