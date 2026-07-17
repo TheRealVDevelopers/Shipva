@@ -26,12 +26,7 @@ import {
   watchTruckTypes, addTruckType, removeTruckType, addStandardTruckTypes, optionsFor,
   type TruckType,
 } from '../../lib/truckTypes.js';
-import type { VehicleType } from '@shipva/shared-types';
-
 const TABS = ['Drivers', 'Trucks'] as const;
-// The driver's own vehicle type still uses the fixed marketplace vocabulary —
-// only the TRUCK type is the admin's list (see lib/truckTypes).
-const VEHICLE_TYPES: VehicleType[] = ['truck', 'pickup', 'tempo', 'mini_truck', 'reefer', 'auto', 'bike'];
 
 /** A document only counts as on file when BOTH the number and the photo are
  *  present — that's what the client means by "with image upload". We report the
@@ -56,25 +51,29 @@ function missingDocs<T>(specs: DocSpec<T>[], r: T): string[] {
 export const driverMissing = (d: FleetDriver): string[] => missingDocs(DRIVER_DOCS, d);
 export const truckMissing = (t: Truck): string[] => missingDocs(TRUCK_DOCS, t);
 
-const DRV_EMPTY = { name: '', phone: '', vehicleReg: '', vehicleType: 'truck' as VehicleType, aadhaar: '', licenseNo: '', pan: '' };
+const DRV_EMPTY = { name: '', phone: '', vendor: '', aadhaar: '', licenseNo: '', pan: '' };
 // Truck type starts blank — the options are the admin's list, which may be empty
 // until they set it. Defaulting to a value that isn't on their list would save a
 // type nobody chose.
 const TRK_EMPTY = { reg: '', type: '', capacityKg: '' };
 
-export function Fleet() {
+/** One page, two registers — which one is decided by the route (see App.tsx). */
+export function Fleet({ register }: { register: 'drivers' | 'trucks' }) {
   const {
-    drivers, trucks, addDriver, addTruck, setDriverDocs, setTruckDocs,
+    drivers, trucks, attached, addDriver, addTruck, setDriverDocs, setTruckDocs,
     updateDriver, updateTruck, deleteDriver, deleteTruck,
   } = useStore();
   const { member } = useAuth();
   const { push } = useNotify();
   const isAdmin = member?.role === 'owner' || member?.role === 'manager';
+  // The "pre-registered vendor" list the client wants on the driver form — the
+  // truck owners already in the register, by the name they trade under.
+  const vendorNames = [...new Set(attached.map((a) => a.transporterName?.trim() || a.owner.trim()).filter(Boolean))].sort();
   // Editing/deleting a record is leadership-only. Verifying documents stays
   // admin-only (isAdmin) — that's a control gate, not routine editing.
   const canEdit = canEditRecords(member?.role);
 
-  const [tab, setTab] = useState<(typeof TABS)[number]>('Drivers');
+  const tab: (typeof TABS)[number] = register === 'trucks' ? 'Trucks' : 'Drivers';
   const [add, setAdd] = useState<null | 'driver' | 'truck'>(null);
   const [nd, setNd] = useState(DRV_EMPTY);
   const [nt, setNt] = useState(TRK_EMPTY);
@@ -110,7 +109,6 @@ export function Fleet() {
   const ndErrs = {
     name: nameError(nd.name, { label: 'Full name' }),
     phone: phoneError(nd.phone),
-    vehicleReg: vehicleRegError(nd.vehicleReg, { required: false }),
     aadhaar: aadhaarError(nd.aadhaar),
     licenseNo: licenceError(nd.licenseNo),
     pan: panError(nd.pan),
@@ -120,7 +118,7 @@ export function Fleet() {
     if (!allClear(ndErrs)) return;
     addDriver({
       name: nd.name.trim(), phone: normalizePhone(nd.phone),
-      vehicleReg: nd.vehicleReg.trim().toUpperCase(), vehicleType: nd.vehicleType,
+      ...(nd.vendor ? { vendor: nd.vendor } : {}),
       dutyStatus: 'offline', kycStatus: 'pending', ratingAvg: 0, tripsToday: 0,
       aadhaar: nd.aadhaar.trim(), licenseNo: nd.licenseNo.trim().toUpperCase(), pan: nd.pan.trim().toUpperCase(),
       verified: false, // explicit: absent means a legacy record, not a new one
@@ -193,7 +191,9 @@ export function Fleet() {
   }
 
   return (
-    <PartnerLayout title="Trucks & Drivers" subtitle={`${drivers.length} drivers · ${trucks.length} trucks`}>
+    <PartnerLayout
+      title={tab === 'Drivers' ? 'Driver Register' : 'Truck Register'}
+      subtitle={tab === 'Drivers' ? `${drivers.length} drivers` : `${trucks.length} trucks`}>
       <div className="space-y-4">
         {(driversPending > 0 || trucksPending > 0) && (
           <div className="flex items-center gap-2.5 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800 ring-1 ring-inset ring-amber-200">
@@ -208,15 +208,10 @@ export function Fleet() {
           </div>
         )}
 
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1">
-            {TABS.map((t) => (
-              <button key={t} onClick={() => setTab(t)}
-                className={`rounded-lg px-4 py-1.5 text-xs font-bold ${tab === t ? 'bg-primary-500 text-white' : 'bg-white text-neutral-700 ring-1 ring-inset ring-neutral-200'}`}>
-                {t}
-              </button>
-            ))}
-          </div>
+        {/* The Drivers/Trucks tab bar is gone — the two registers are their own
+            entries under Vendors Register now, so tabbing here would be a
+            second way to say the same thing. */}
+        <div className="flex items-center justify-end">
           <Button size="sm" onClick={() => { setTried(false); setAdd(tab === 'Drivers' ? 'driver' : 'truck'); }}>
             <Plus size={12} /> {tab === 'Drivers' ? 'Onboard driver' : 'Add truck'}
           </Button>
@@ -225,7 +220,7 @@ export function Fleet() {
         {tab === 'Drivers' ? (
           <Card>
             <Table>
-              <THead><Tr><Th>Driver</Th><Th>Vehicle</Th><Th>Duty</Th><Th>Documents</Th><Th>Rating</Th><Th></Th></Tr></THead>
+              <THead><Tr><Th>Driver</Th><Th>Vendor</Th><Th>Duty</Th><Th>Documents</Th><Th>Rating</Th><Th></Th></Tr></THead>
               <TBody>
                 {drivers.map((d) => {
                   const miss = driverMissing(d);
@@ -237,7 +232,9 @@ export function Fleet() {
                           <div><div className="font-bold text-neutral-900">{d.name}</div><div className="flex items-center gap-1 text-xs text-neutral-500"><Phone size={10} /> {d.phone}</div></div>
                         </div>
                       </Td>
-                      <Td><div className="flex items-center gap-2"><VehicleArt type={d.vehicleType} className="h-6 w-9 shrink-0" /><span className="font-mono text-xs text-neutral-700">{d.vehicleReg || '—'}</span></div></Td>
+                      <Td>{d.vendor
+                        ? <span className="text-xs font-semibold text-neutral-700">{d.vendor}</span>
+                        : <span className="text-xs text-neutral-400">Own fleet</span>}</Td>
                       <Td><DutyBadge status={d.dutyStatus} /></Td>
                       <Td><DocState missing={miss} verified={isVerified(d)} /></Td>
                       <Td>{d.ratingAvg > 0 ? <span className="inline-flex items-center gap-1 text-sm"><Star size={12} className="fill-amber-400 text-amber-400" /> {d.ratingAvg}</span> : <span className="text-xs text-neutral-400">new</span>}</Td>
@@ -299,6 +296,14 @@ export function Fleet() {
             Fill every field marked <span className="text-rose-500">*</span> to onboard this driver.
           </div>
         )}
+        {/* A driver belongs to a vendor, not to a vehicle — the vehicle is
+            decided per trip. Hence the vendor picker here and no vehicle fields. */}
+        <Field label="Vendor" hint={attached.length ? 'The truck owner this driver runs under — blank means own fleet' : 'No truck owners registered yet — leave blank for own fleet'}>
+          <Select value={nd.vendor} onChange={(e) => setNd({ ...nd, vendor: e.target.value })}>
+            <option value="">Own fleet</option>
+            {vendorNames.map((v) => <option key={v} value={v}>{v}</option>)}
+          </Select>
+        </Field>
         <Row>
           <Field label="Full name" required error={tried ? ndErrs.name : undefined}>
             <TextInput value={nd.name} onChange={(e) => setNd({ ...nd, name: e.target.value })} placeholder="Ramesh Yadav" />
@@ -315,18 +320,8 @@ export function Fleet() {
             <TextInput value={nd.licenseNo} onChange={(e) => setNd({ ...nd, licenseNo: e.target.value.toUpperCase() })} placeholder="KA0120200012345" />
           </Field>
         </Row>
-        <Row>
-          <Field label="PAN" required error={tried ? ndErrs.pan : undefined}>
-            <TextInput value={nd.pan} onChange={(e) => setNd({ ...nd, pan: e.target.value.toUpperCase() })} placeholder="ABCDE1234F" />
-          </Field>
-          <Field label="Vehicle type">
-            <Select value={nd.vehicleType} onChange={(e) => setNd({ ...nd, vehicleType: e.target.value as VehicleType })}>
-              {VEHICLE_TYPES.map((v) => <option key={v} value={v}>{v.replaceAll('_', ' ')}</option>)}
-            </Select>
-          </Field>
-        </Row>
-        <Field label="Vehicle number" hint="Optional" error={tried ? ndErrs.vehicleReg : undefined}>
-          <TextInput value={nd.vehicleReg} onChange={(e) => setNd({ ...nd, vehicleReg: e.target.value.toUpperCase() })} placeholder="KA01AB1234" />
+        <Field label="PAN" required error={tried ? ndErrs.pan : undefined}>
+          <TextInput value={nd.pan} onChange={(e) => setNd({ ...nd, pan: e.target.value.toUpperCase() })} placeholder="ABCDE1234F" />
         </Field>
         <p className="rounded-lg bg-amber-50 px-3 py-2 text-[11px] text-amber-800 ring-1 ring-inset ring-amber-100">Upload the document photos next — the driver shows as pending until every document has both a number and a photo.</p>
       </Modal>
@@ -387,7 +382,7 @@ export function Fleet() {
       {editDriver && (
         <Modal open onClose={() => setEditDriverId(null)} title={`Edit · ${editDriver.name}`} subtitle="Details only — documents are managed separately"
           onSubmit={() => { setEditDriverId(null); }} submitLabel="Done">
-          <EditDriverBody driver={editDriver} onSave={(patch) => updateDriver(editDriver.id, patch)} />
+          <EditDriverBody driver={editDriver} vendorNames={vendorNames} onSave={(patch) => updateDriver(editDriver.id, patch)} />
         </Modal>
       )}
 
@@ -451,33 +446,37 @@ function VerifyPanel({ record, missing, isAdmin, onVerify }: {
   );
 }
 
-function EditDriverBody({ driver, onSave }: { driver: FleetDriver; onSave: (p: Partial<FleetDriver>) => void }) {
+// Mirrors the onboard form: a driver's vendor, not their vehicle.
+function EditDriverBody({ driver, vendorNames, onSave }: {
+  driver: FleetDriver; vendorNames: string[]; onSave: (p: Partial<FleetDriver>) => void;
+}) {
   const [name, setName] = useState(driver.name);
   const [phone, setPhone] = useState(driver.phone);
-  const [vehicleReg, setVehicleReg] = useState(driver.vehicleReg);
-  const [vehicleType, setVehicleType] = useState<VehicleType>(driver.vehicleType);
+  const [vendor, setVendor] = useState(driver.vendor ?? '');
   const errs = {
     name: nameError(name, { label: 'Full name' }),
     phone: phoneError(phone),
-    vehicleReg: vehicleRegError(vehicleReg, { required: false }),
   };
-  const dirty = name !== driver.name || phone !== driver.phone || vehicleReg !== driver.vehicleReg || vehicleType !== driver.vehicleType;
+  const dirty = name !== driver.name || phone !== driver.phone || vendor !== (driver.vendor ?? '');
+  // An older record may name a vendor that's since been renamed or removed —
+  // keep it selectable so editing the name can't silently reassign the driver.
+  const options = vendor && !vendorNames.includes(vendor) ? [vendor, ...vendorNames] : vendorNames;
   return (
     <div className="space-y-3.5">
       <Row>
         <Field label="Full name" required error={errs.name}><TextInput value={name} onChange={(e) => setName(e.target.value)} /></Field>
         <Field label="Phone" required error={errs.phone}><TextInput inputMode="numeric" maxLength={10} value={phone} onChange={(e) => setPhone(e.target.value)} /></Field>
       </Row>
-      <Row>
-        <Field label="Vehicle number" hint="Optional" error={errs.vehicleReg}><TextInput value={vehicleReg} onChange={(e) => setVehicleReg(e.target.value.toUpperCase())} /></Field>
-        <Field label="Vehicle type">
-          <Select value={vehicleType} onChange={(e) => setVehicleType(e.target.value as VehicleType)}>
-            {VEHICLE_TYPES.map((v) => <option key={v} value={v}>{v.replaceAll('_', ' ')}</option>)}
-          </Select>
-        </Field>
-      </Row>
+      <Field label="Vendor" hint="The truck owner this driver runs under — blank means own fleet">
+        <Select value={vendor} onChange={(e) => setVendor(e.target.value)}>
+          <option value="">Own fleet</option>
+          {options.map((v) => <option key={v} value={v}>{v}</option>)}
+        </Select>
+      </Field>
       <button type="button" disabled={!dirty || !allClear(errs)}
-        onClick={() => onSave({ name: name.trim(), phone: normalizePhone(phone), vehicleReg: vehicleReg.trim().toUpperCase(), vehicleType })}
+        // Empty string, not undefined: the shared-collection writer strips
+        // undefined keys, so clearing a vendor that way would silently no-op.
+        onClick={() => onSave({ name: name.trim(), phone: normalizePhone(phone), vendor: vendor || '' })}
         className="w-full rounded-lg bg-primary-500 py-2 text-xs font-bold text-white hover:bg-primary-600 disabled:opacity-40">
         Save changes
       </button>

@@ -55,7 +55,13 @@ export function App() {
 
       {Gated({ id: 'trips', path: '/p/trips', element: <Trips /> })}
       {Gated({ id: 'tours', path: '/p/tours', element: <Tours /> })}
-      {Gated({ id: 'fleet', path: '/p/fleet', element: <Fleet /> })}
+      {/* The Trucks & Drivers page is now the two registers under Vendors
+          Register. Same 'fleet' permission for both — splitting the feature id
+          would silently drop access for every member already granted 'fleet'.
+          /p/fleet stays as a redirect so old links keep working. */}
+      {Gated({ id: 'fleet', path: '/p/drivers', element: <Fleet register="drivers" /> })}
+      {Gated({ id: 'fleet', path: '/p/trucks', element: <Fleet register="trucks" /> })}
+      <Route path="/p/fleet" element={<Navigate to="/p/drivers" replace />} />
       {Gated({ id: 'documents', path: '/p/documents', element: <Documents /> })}
       {Gated({ id: 'customers', path: '/p/customers', element: <Customers /> })}
       {Gated({ id: 'payables', path: '/p/payables', element: <Payables /> })}

@@ -35,7 +35,11 @@ export const counters = {
 };
 
 export interface FleetDriver {
-  id: string; name: string; phone: string; vehicleReg: string; vehicleType: VehicleType;
+  id: string; name: string; phone: string;
+  /** A driver belongs to a vendor, not to a vehicle — the vehicle is chosen per
+   *  trip. Both are optional: the Driver Register no longer collects them, and
+   *  older records (and the inline add-driver on a trip) still carry them. */
+  vehicleReg?: string | undefined; vehicleType?: VehicleType | undefined;
   dutyStatus: DutyStatus; kycStatus: KycStatus; ratingAvg: number; tripsToday: number;
   /** Vendor (truck owner) this driver belongs to; empty/undefined = own fleet. */
   vendor?: string | undefined;

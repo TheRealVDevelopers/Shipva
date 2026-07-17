@@ -96,10 +96,14 @@ const NAV: NavItem[] = [
   { key: 'overview', to: '/p', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { key: 'trips', to: '/p/trips', label: 'Trips', icon: ClipboardList, group: 'Operations' },
   { key: 'tours', to: '/p/tours', label: 'Amazon Tours', icon: Route, group: 'Operations' },
-  { key: 'fleet', to: '/p/fleet', label: 'Trucks & Drivers', icon: Truck, group: 'Operations' },
   { key: 'documents', to: '/p/documents', label: 'Documents', icon: FileCheck2, group: 'Operations' },
-  { key: 'customers', to: '/p/customers', label: 'Transporters', icon: Users, group: 'Vendors' },
-  { key: 'payables', to: '/p/payables', label: 'Truck Owners', icon: HandCoins, group: 'Vendors' },
+  // Vendors Register — the client's structure: transporters and truck owners,
+  // plus the Trucks & Drivers page split into its two registers. All four are
+  // the same vendor book, so Trucks & Drivers no longer sits under Operations.
+  { key: 'customers', to: '/p/customers', label: 'Transporters', icon: Users, group: 'Vendors Register' },
+  { key: 'payables', to: '/p/payables', label: 'Truck Owners', icon: HandCoins, group: 'Vendors Register' },
+  { key: 'fleet', to: '/p/trucks', label: 'Truck Register', icon: Truck, group: 'Vendors Register' },
+  { key: 'fleet', to: '/p/drivers', label: 'Driver Register', icon: Users, group: 'Vendors Register' },
   { key: 'invoices', to: '/p/invoices', label: 'Vendor Payments', icon: FileText, group: 'Accounts' },
   { key: 'expenses', to: '/p/expenses', label: 'Expenses & Fuel', icon: Fuel, group: 'Accounts' },
   { key: 'payroll', to: '/p/payroll', label: 'Payroll', icon: Wallet, group: 'Accounts' },
