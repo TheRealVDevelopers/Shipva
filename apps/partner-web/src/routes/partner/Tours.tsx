@@ -6,10 +6,14 @@ import {
 import { PartnerLayout } from '../../components/layout/PartnerLayout.js';
 import { Modal, Field, TextInput, DateTimeInput, Select, Row } from '../../components/ui/Modal.js';
 import { ImageUpload } from '../../components/ui/ImageUpload.js';
-import { useStore, todayLabel, type Tour, type TourLeg, type TourLegStop } from '../../lib/store.js';
+import {
+  useStore, todayLabel, requestStatusLabel, dieselRequestFor,
+  type Tour, type TourLeg, type TourLegStop,
+} from '../../lib/store.js';
 import { useAuth } from '../../lib/auth.js';
 import { watchMembers, teamOf, type Member } from '../../lib/members.js';
-import { canEditRecords } from '../../lib/roles.js';
+import { canEditRecords, roleLabel } from '../../lib/roles.js';
+import { Badge } from '../../components/ui/Badge.js';
 import { vridHolder, updateTourLegs } from '../../lib/tours.js';
 import { exportTourSheet } from '../../lib/exportTourSheet.js';
 import { vendorMessage, driverMessage, dieselRequestMessage, waLink } from '../../lib/tourMessages.js';
@@ -472,10 +476,11 @@ function DieselRequest({ tour, onClose, onSave }: {
   tour: Tour; onClose: () => void; onSave: (id: string, patch: Partial<Tour>) => void;
 }) {
   const { push } = useNotify();
+  const { member } = useAuth();
+  const { requests, addRequest } = useStore();
   const [gpayName, setGpayName] = useState(tour.gpayName ?? '');
   const [gpayNumber, setGpayNumber] = useState(tour.gpayNumber ?? '');
   const [advanceAmount, setAdvanceAmount] = useState(tour.advanceAmount ?? '');
-  const [paidPending, setPaidPending] = useState(tour.paidPending || 'Pending');
 
   const errs = {
     gpayName: requiredError(gpayName, 'Name'),
@@ -488,16 +493,35 @@ function DieselRequest({ tour, onClose, onSave }: {
   // Preview exactly what will be sent, built from the same builder as the send.
   const preview = dieselRequestMessage({ ...tour, gpayName, gpayNumber, advanceAmount });
 
+  // One request per route: re-sending the message must not stack up a second
+  // pending row for the accountant to chase.
+  const existing = dieselRequestFor(requests, tour.id);
+
   function save(andSend: boolean) {
     setTried(true);
     if (!ready) return;
-    const patch = { gpayName: gpayName.trim(), gpayNumber: normalizePhone(gpayNumber), advanceAmount: advanceAmount.trim(), paidPending };
+    const patch = { gpayName: gpayName.trim(), gpayNumber: normalizePhone(gpayNumber), advanceAmount: advanceAmount.trim() };
     onSave(tour.id, patch);
+
+    // The request itself goes to Expenses & Fuel, where it's marked paid or
+    // rejected — the status is no longer something this form decides.
+    if (!existing) {
+      addRequest({
+        raisedBy: member ? `${member.name} · ${roleLabel(member.role)}` : 'Staff',
+        kind: 'diesel',
+        title: `Diesel advance · ${gpayName.trim()}`,
+        amountPaise: Math.round(Number(advanceAmount) * 100),
+        tourId: tour.id,
+        tourCode: tour.tourId || tour.vrId || '',
+        note: `G-pay ${normalizePhone(gpayNumber)} · ${tour.vehicleId}`,
+      });
+    }
+
     if (andSend) {
       window.open(waLink(gpayNumber, dieselRequestMessage({ ...tour, ...patch })), '_blank');
-      push({ title: 'Diesel request sent', body: `₹${advanceAmount} to ${gpayName.trim()}.`, tone: 'success' });
+      push({ title: 'Diesel request sent', body: `₹${advanceAmount} to ${gpayName.trim()} — now pending in Expenses & Fuel.`, tone: 'success' });
     } else {
-      push({ title: 'Diesel request saved', body: `₹${advanceAmount} for ${tour.tourId}.`, tone: 'success' });
+      push({ title: 'Diesel request saved', body: `₹${advanceAmount} for ${tour.tourId} — pending in Expenses & Fuel.`, tone: 'success' });
     }
     onClose();
   }
@@ -513,14 +537,16 @@ function DieselRequest({ tour, onClose, onSave }: {
           <TextInput inputMode="numeric" maxLength={10} value={gpayNumber} onChange={(e) => setGpayNumber(e.target.value)} placeholder="9611264801" />
         </Field>
       </Row>
-      <Row>
-        <Field label="Advance Amount (₹)" required error={tried ? errs.advanceAmount : undefined}>
-          <TextInput type="number" value={advanceAmount} onChange={(e) => setAdvanceAmount(e.target.value)} placeholder="5000" />
-        </Field>
-        <Field label="Paid / Pending">
-          <Select value={paidPending} onChange={(e) => setPaidPending(e.target.value)}><option>Pending</option><option>Paid</option></Select>
-        </Field>
-      </Row>
+      <Field label="Advance Amount (₹)" required error={tried ? errs.advanceAmount : undefined}>
+        <TextInput type="number" value={advanceAmount} onChange={(e) => setAdvanceAmount(e.target.value)} placeholder="5000" />
+      </Field>
+
+      {/* Paid/Pending is no longer typed here — the request goes to Expenses &
+          Fuel and whoever handles the money marks it paid or rejects it. */}
+      <div className="flex items-center justify-between rounded-lg bg-sky-50 px-3 py-2 text-[11px] text-sky-800 ring-1 ring-inset ring-sky-100">
+        <span>{existing ? 'Already raised — status is set in Expenses & Fuel.' : 'This will appear in Expenses & Fuel to be marked paid or rejected.'}</span>
+        {existing && <Badge tone={existing.status === 'approved' ? 'success' : existing.status === 'rejected' ? 'danger' : 'warning'}>{requestStatusLabel(existing)}</Badge>}
+      </div>
 
       <div className="rounded-xl p-3 ring-1 ring-inset" style={{ background: '#F7F8F8', borderColor: '#D5D9D9' }}>
         <div className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-neutral-500">Message preview</div>
@@ -545,6 +571,11 @@ function TourCard({ t, isAdmin, canEdit, onOperate, onDiesel, onEdit, onDelete, 
   const pct = allStops.length ? Math.round((done / allStops.length) * 100) : 0;
   const pill = statusPill(t.amzStatus);
   const vlist = legs.length ? legs.map((l) => l.vrid) : (t.vrIds ?? (t.vrId ? [t.vrId] : []));
+
+  // The diesel decision is made in Expenses & Fuel; show it here so the POC
+  // running the line can see whether the advance actually went out.
+  const { requests } = useStore();
+  const diesel = dieselRequestFor(requests, t.id);
 
   const [copied, setCopied] = useState(false);
 
@@ -610,6 +641,11 @@ function TourCard({ t, isAdmin, canEdit, onOperate, onDiesel, onEdit, onDelete, 
           </div>
           <div className="flex items-center gap-1.5">
             <button onClick={onDiesel} className="inline-flex items-center gap-1 rounded-lg px-3 py-2 text-xs font-extrabold shadow-sm" style={{ background: ORANGE, color: INK }}><Fuel size={13} /> Diesel Request</button>
+            {diesel && (
+              <Badge tone={diesel.status === 'approved' ? 'success' : diesel.status === 'rejected' ? 'danger' : 'warning'}>
+                <Fuel size={10} /> {requestStatusLabel(diesel)}
+              </Badge>
+            )}
             {/* Kept until the POC updation moves to Trips › In Transit — otherwise
                 there'd be nowhere to record check-ins, KM and photos meanwhile. */}
             <button onClick={onOperate} className="inline-flex items-center gap-1 rounded-lg px-2.5 py-2 text-xs font-bold ring-1 ring-inset" style={{ color: INK, borderColor: '#D5D9D9', background: '#fff' }}><Navigation size={12} /> Update</button>

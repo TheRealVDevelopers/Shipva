@@ -163,6 +163,14 @@ service cloud.firestore {
       allow create, update, delete: if isOrgAdmin();
     }
 
+    // Truck types — same rule, same reason: "The drop-down box should be
+    // customizable by ADMIN so that the option given by ADMIN should be
+    // available for employees." Mirrors lib/truckTypes.
+    match /orgTruckTypes/{id} {
+      allow read: if isOrgMember();
+      allow create, update, delete: if isOrgAdmin();
+    }
+
     // Shared money — invoices, expenses, fuel logs, payroll and the "raise
     // request to accountant" flow. Was per-device localStorage, so an expense or
     // an advance request never reached the accountant. Now org-wide: any member

@@ -9,7 +9,7 @@ import { Button } from '../../components/ui/Button.js';
 import { Modal, Field, TextInput, DateInput, Select, Row } from '../../components/ui/Modal.js';
 import { Donut } from '../../components/ui/Charts.js';
 import { rupees, todayFullLabel } from '../../lib/format.js';
-import { useStore, todayLabel } from '../../lib/store.js';
+import { useStore, todayLabel, requestStatusLabel } from '../../lib/store.js';
 import { roleLabel } from '../../lib/roles.js';
 import { useAuth } from '../../lib/auth.js';
 import { useNotify } from '../../lib/notify.js';
@@ -87,7 +87,7 @@ export function Expenses() {
     setR(REQ_EMPTY); setOpen(null);
   }
 
-  const kindTone: Record<string, 'accent' | 'primary' | 'info' | 'neutral'> = { expense: 'accent', advance: 'primary', trip: 'info', other: 'neutral' };
+  const kindTone: Record<string, 'accent' | 'primary' | 'info' | 'neutral'> = { expense: 'accent', advance: 'primary', trip: 'info', other: 'neutral', diesel: 'accent' };
 
   return (
     <PartnerLayout title="Expenses & Fuel" subtitle="Trip costs, fuel, leakage & requests">
@@ -190,17 +190,21 @@ export function Expenses() {
                     {x.amountPaise != null && <span className="font-extrabold text-neutral-900">{rupees(x.amountPaise)}</span>}
                   </div>
                   <div className="mt-0.5 text-[11px] text-neutral-500">
-                    {x.raisedBy} · {x.createdOn}{x.tripLr ? ` · ${x.tripLr}` : ''}{x.note ? ` · ${x.note}` : ''}
+                    {x.raisedBy} · {x.createdOn}
+                    {x.tourCode ? ` · ${x.tourCode}` : ''}{x.tripLr ? ` · ${x.tripLr}` : ''}{x.note ? ` · ${x.note}` : ''}
                   </div>
                 </div>
                 {x.status === 'pending' ? (
                   <div className="flex items-center gap-2">
                     <Button size="sm" variant="secondary" onClick={() => resolveRequest(x.id, 'rejected')}><X size={13} /> Reject</Button>
-                    <Button size="sm" onClick={() => resolveRequest(x.id, 'approved')}><Check size={13} /> Approve</Button>
+                    {/* A diesel advance is "paid", not "approved" — the client's word. */}
+                    <Button size="sm" onClick={() => resolveRequest(x.id, 'approved')}>
+                      <Check size={13} /> {x.kind === 'diesel' ? 'Mark paid' : 'Approve'}
+                    </Button>
                   </div>
                 ) : (
                   <Badge tone={x.status === 'approved' ? 'success' : 'danger'}>
-                    {x.status === 'approved' ? <><Check size={11} /> Approved</> : <><X size={11} /> Rejected</>}
+                    {x.status === 'approved' ? <><Check size={11} /> {requestStatusLabel(x)}</> : <><X size={11} /> Rejected</>}
                   </Badge>
                 )}
               </div>

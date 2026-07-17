@@ -49,7 +49,11 @@ export interface FleetDriver {
 // Demo drivers removed — the org is live, drivers come from Firestore only.
 
 export interface Truck {
-  id: string; reg: string; type: VehicleType; capacityKg: number; status: 'available' | 'on_trip' | 'maintenance'; docsOk: boolean;
+  id: string; reg: string;
+  /** Admin-managed label, not a fixed union — the client sets the list (see
+   *  lib/truckTypes). Existing records carry the old VehicleType values. */
+  type: string;
+  capacityKg: number; status: 'available' | 'on_trip' | 'maintenance'; docsOk: boolean;
   /** Box size — the "vehicle type" Amazon cares about (10ft/14ft/17ft…). */
   feet?: string | undefined;
   /** Vendor (truck owner) this vehicle belongs to; empty/undefined = own fleet. */

@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Phone, Star, Plus, Truck as TruckIcon, FileCheck2, AlertTriangle, ShieldCheck,
-  ShieldAlert, Pencil, Trash2, BadgeCheck,
+  ShieldAlert, Pencil, Trash2, BadgeCheck, X,
 } from 'lucide-react';
 import { PartnerLayout } from '../../components/layout/PartnerLayout.js';
 import { Card } from '../../components/ui/Card.js';
@@ -22,9 +22,15 @@ import {
   positiveError, normalizePhone, allClear,
 } from '../../lib/validate.js';
 import { isVerified, type FleetDriver, type Truck } from '../../lib/mocks.js';
+import {
+  watchTruckTypes, addTruckType, removeTruckType, addStandardTruckTypes, optionsFor,
+  type TruckType,
+} from '../../lib/truckTypes.js';
 import type { VehicleType } from '@shipva/shared-types';
 
 const TABS = ['Drivers', 'Trucks'] as const;
+// The driver's own vehicle type still uses the fixed marketplace vocabulary —
+// only the TRUCK type is the admin's list (see lib/truckTypes).
 const VEHICLE_TYPES: VehicleType[] = ['truck', 'pickup', 'tempo', 'mini_truck', 'reefer', 'auto', 'bike'];
 
 /** A document only counts as on file when BOTH the number and the photo are
@@ -51,7 +57,10 @@ export const driverMissing = (d: FleetDriver): string[] => missingDocs(DRIVER_DO
 export const truckMissing = (t: Truck): string[] => missingDocs(TRUCK_DOCS, t);
 
 const DRV_EMPTY = { name: '', phone: '', vehicleReg: '', vehicleType: 'truck' as VehicleType, aadhaar: '', licenseNo: '', pan: '' };
-const TRK_EMPTY = { reg: '', type: 'truck' as VehicleType, capacityKg: '' };
+// Truck type starts blank — the options are the admin's list, which may be empty
+// until they set it. Defaulting to a value that isn't on their list would save a
+// type nobody chose.
+const TRK_EMPTY = { reg: '', type: '', capacityKg: '' };
 
 export function Fleet() {
   const {
@@ -333,11 +342,7 @@ export function Fleet() {
           <TextInput value={nt.reg} onChange={(e) => setNt({ ...nt, reg: e.target.value.toUpperCase() })} placeholder="KA01AB1234" />
         </Field>
         <Row>
-          <Field label="Type">
-            <Select value={nt.type} onChange={(e) => setNt({ ...nt, type: e.target.value as VehicleType })}>
-              {VEHICLE_TYPES.map((v) => <option key={v} value={v}>{v.replaceAll('_', ' ')}</option>)}
-            </Select>
-          </Field>
+          <TruckTypeField value={nt.type} onChange={(v) => setNt({ ...nt, type: v })} />
           <Field label="Capacity (kg)" required error={tried ? ntErrs.capacityKg : undefined}>
             <TextInput type="number" value={nt.capacityKg} onChange={(e) => setNt({ ...nt, capacityKg: e.target.value })} placeholder="7000" />
           </Field>
@@ -480,34 +485,85 @@ function EditDriverBody({ driver, onSave }: { driver: FleetDriver; onSave: (p: P
   );
 }
 
+// Status is deliberately NOT editable here — the client asked for it to go. It
+// still exists on the record (the list and the fleet KPIs read it); it's just
+// no longer something a person types.
 function EditTruckBody({ truck, onSave }: { truck: Truck; onSave: (p: Partial<Truck>) => void }) {
   const [reg, setReg] = useState(truck.reg);
-  const [type, setType] = useState<VehicleType>(truck.type);
+  const [type, setType] = useState(truck.type);
   const [capacityKg, setCapacityKg] = useState(String(truck.capacityKg));
-  const [status, setStatus] = useState(truck.status);
   const errs = { reg: vehicleRegError(reg), capacityKg: positiveError(capacityKg, 'Capacity') };
-  const dirty = reg !== truck.reg || type !== truck.type || Number(capacityKg) !== truck.capacityKg || status !== truck.status;
+  const dirty = reg !== truck.reg || type !== truck.type || Number(capacityKg) !== truck.capacityKg;
   return (
     <div className="space-y-3.5">
       <Field label="Registration no" required error={errs.reg}><TextInput value={reg} onChange={(e) => setReg(e.target.value.toUpperCase())} /></Field>
       <Row>
-        <Field label="Type">
-          <Select value={type} onChange={(e) => setType(e.target.value as VehicleType)}>
-            {VEHICLE_TYPES.map((v) => <option key={v} value={v}>{v.replaceAll('_', ' ')}</option>)}
-          </Select>
-        </Field>
+        <TruckTypeField value={type} onChange={setType} />
         <Field label="Capacity (kg)" required error={errs.capacityKg}><TextInput type="number" value={capacityKg} onChange={(e) => setCapacityKg(e.target.value)} /></Field>
       </Row>
-      <Field label="Status">
-        <Select value={status} onChange={(e) => setStatus(e.target.value as Truck['status'])}>
-          <option value="available">available</option><option value="on_trip">on trip</option><option value="maintenance">maintenance</option>
-        </Select>
-      </Field>
       <button type="button" disabled={!dirty || !allClear(errs)}
-        onClick={() => onSave({ reg: reg.trim().toUpperCase(), type, capacityKg: Number(capacityKg), status })}
+        onClick={() => onSave({ reg: reg.trim().toUpperCase(), type, capacityKg: Number(capacityKg) })}
         className="w-full rounded-lg bg-primary-500 py-2 text-xs font-bold text-white hover:bg-primary-600 disabled:opacity-40">
         Save changes
       </button>
+    </div>
+  );
+}
+
+/**
+ * "Truck Type" (was "Type") — the admin's list, per the client: the admin sets
+ * the options, employees only pick. An admin gets the manage block inline so
+ * they never have to leave the form they're filling.
+ */
+function TruckTypeField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { member } = useAuth();
+  const { push } = useNotify();
+  const isAdmin = member?.role === 'owner' || member?.role === 'manager';
+  const [types, setTypes] = useState<TruckType[]>([]);
+  const [newType, setNewType] = useState('');
+  useEffect(() => watchTruckTypes(setTypes), []);
+  const options = optionsFor(types, value);
+
+  async function add() {
+    const l = newType.trim();
+    if (!l) return;
+    await addTruckType(l);
+    onChange(l);
+    setNewType('');
+  }
+
+  return (
+    <div className="space-y-2">
+      <Field label="Truck Type" hint={isAdmin ? 'You maintain this list — employees only pick' : 'Set by your admin'}>
+        <Select value={value} onChange={(e) => onChange(e.target.value)} disabled={options.length === 0}>
+          {options.length === 0 && <option value="">No truck types yet</option>}
+          {options.map((t) => <option key={t} value={t}>{t.replaceAll('_', ' ')}</option>)}
+        </Select>
+      </Field>
+      {isAdmin && (
+        <div className="rounded-xl p-2.5 ring-1 ring-inset ring-neutral-200" style={{ background: '#F7F8F8' }}>
+          {types.length === 0 && (
+            <button type="button"
+              onClick={async () => { const n = await addStandardTruckTypes(types); push({ title: 'Truck types added', body: `${n} standard types.`, tone: 'success' }); }}
+              className="mb-2 w-full rounded-lg bg-primary-500 py-1.5 text-[11px] font-bold text-white hover:bg-primary-600">
+              Add the standard types
+            </button>
+          )}
+          <div className="mb-2 flex flex-wrap gap-1.5">
+            {types.map((t) => (
+              <span key={t.id} className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-[11px] font-medium text-neutral-700 ring-1 ring-inset ring-neutral-200">
+                {t.label.replaceAll('_', ' ')}
+                <button type="button" onClick={() => void removeTruckType(t.id)} className="text-neutral-300 hover:text-rose-500" title={`Remove ${t.label}`}><X size={11} /></button>
+              </span>
+            ))}
+          </div>
+          <div className="flex items-center gap-2">
+            <TextInput value={newType} onChange={(e) => setNewType(e.target.value)} placeholder="Add a truck type…" className="text-xs" />
+            <button type="button" onClick={() => void add()} disabled={!newType.trim()}
+              className="shrink-0 rounded-lg bg-neutral-800 px-2.5 py-2 text-xs font-bold text-white disabled:opacity-40"><Plus size={12} /></button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

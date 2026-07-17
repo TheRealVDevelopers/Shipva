@@ -245,10 +245,27 @@ export interface SavedPoint { label: string; mapUrl?: string }
 /** A money/approval request a worker raises for the accountant to action. */
 export interface MoneyRequest {
   id: string; createdOn: string; raisedBy: string;
-  kind: 'expense' | 'advance' | 'trip' | 'other';
+  kind: 'expense' | 'advance' | 'trip' | 'other' | 'diesel';
   title: string; note?: string; amountPaise?: number; tripLr?: string;
+  /** A diesel request links back to the Amazon route it was raised from, so the
+   *  paid/rejected decision made in Expenses & Fuel can be shown on the run. */
+  tourId?: string; tourCode?: string;
   status: 'pending' | 'approved' | 'rejected';
 }
+
+/**
+ * What a resolved request is called. The client asked for diesel requests to
+ * read "Paid / Reject"; every other kind is an approval. It's the same stored
+ * state either way — only the word changes, so there's one approval model.
+ */
+export const requestStatusLabel = (r: MoneyRequest): string =>
+  r.status === 'pending' ? 'Pending'
+    : r.status === 'rejected' ? 'Rejected'
+      : r.kind === 'diesel' ? 'Paid' : 'Approved';
+
+/** The open diesel request for a route, if there is one. */
+export const dieselRequestFor = (requests: MoneyRequest[], tourId?: string): MoneyRequest | undefined =>
+  tourId ? requests.find((r) => r.kind === 'diesel' && r.tourId === tourId) : undefined;
 /** Default expense categories. Not demo data — these are configuration, and the
  *  team adds their own on top (see addExpenseCategory). */
 const DEFAULT_CATEGORIES = ['Toll', 'RTO/Police', 'Loading', 'Repairs', 'Office', 'Misc'];

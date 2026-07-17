@@ -25,8 +25,10 @@ function Wheels({ x1, x2, y, r = 7 }: { x1: number; x2: number; y: number; r?: n
   );
 }
 
-/** Friendly vehicle illustration, recognisably different per category. */
-export function VehicleArt({ type, className }: { type: VehicleType; className?: string }) {
+/** Friendly vehicle illustration, recognisably different per category. Takes a
+ *  plain string because truck types are the admin's list now (see
+ *  lib/truckTypes) — anything unrecognised falls through to the truck art. */
+export function VehicleArt({ type, className }: { type: string; className?: string }) {
   const common = { className, viewBox: '0 0 84 56', xmlns: 'http://www.w3.org/2000/svg' as const };
   switch (type) {
     case 'bike':
