@@ -11,6 +11,9 @@ import { Badge, type BadgeTone } from '../../components/ui/Badge.js';
 import { Button } from '../../components/ui/Button.js';
 import { Modal, Field, TextInput, DateInput, Select, Row } from '../../components/ui/Modal.js';
 import { ImageUpload } from '../../components/ui/ImageUpload.js';
+import { VendorDocs } from '../../components/VendorDocs.js';
+// Aliased: this page already has a `kycPending` KPI count for the whole list.
+import { kycPending as docsKycPending, SIGN_BACK_DAYS, type VendorDocKind } from '../../lib/vendorDocs.js';
 import { rupees, todayFullLabel, isoToLabel } from '../../lib/format.js';
 import {
   useStore, todayLabel, ownerStageOf, kycOf, STAGE_LABEL,
@@ -73,6 +76,10 @@ export function Payables() {
   const [pay, setPay] = useState({ id: '', amount: '' });
   const [kycForId, setKycForId] = useState<string | null>(null);
   const kycFor = kycForId ? attached.find((a) => a.id === kycForId) ?? null : null;
+  // Held by id and derived live, so uploading a signed copy re-renders the panel
+  // instead of freezing the record as it was when the dialog opened.
+  const [docsForId, setDocsForId] = useState<string | null>(null);
+  const docsFor = docsForId ? attached.find((a) => a.id === docsForId) ?? null : null;
   const [confirmDel, setConfirmDel] = useState<AttachedTruck | null>(null);
 
   const totalPayable = attached.reduce((s, a) => s + a.balancePaise, 0);
@@ -154,12 +161,47 @@ export function Payables() {
 
   function issueLoi(a: AttachedTruck) {
     const { start, end } = trialWindow();
-    updateAttached(a.id, { stage: 'trial', trialStart: start, trialEnd: end, loiIssuedOn: todayFullLabel() });
-    printJoiningLetter(
-      { name: a.transporterName || a.owner, contact: a.owner, place: [a.addressLine1, a.city].filter(Boolean).join(', '), phone: a.phone },
-      { startDate: start, endDate: end },
-    );
+    updateAttached(a.id, {
+      stage: 'trial', trialStart: start, trialEnd: end,
+      loiIssuedOn: todayFullLabel(),
+      // Drives the 7-day signed-back clock — see lib/vendorDocs.
+      loiIssuedAtMs: Date.now(),
+    });
+    printJoiningLetter(ownerParty(a), { startDate: start, endDate: end, employeeName: member?.name });
     push({ title: '7-day trial started', body: `Letter of Intent issued to ${a.owner} · trial ends ${end}.`, tone: 'success' });
+  }
+
+  const ownerParty = (a: AttachedTruck) => ({
+    name: a.transporterName || a.owner, contact: a.owner,
+    place: [a.addressLine1, a.city].filter(Boolean).join(', '), phone: a.phone,
+  });
+
+  /** Same paperwork loop as a transporter, minus the rate card — a truck owner
+   *  doesn't carry one. */
+  function sendDoc(a: AttachedTruck, kind: VendorDocKind) {
+    const emp = member?.name;
+    if (kind === 'loi') {
+      // Re-sending must not restart the trial or the 7-day clock.
+      if (!a.loiIssuedOn) { issueLoi(a); return; }
+      printJoiningLetter(ownerParty(a), { startDate: a.trialStart, endDate: a.trialEnd, employeeName: emp });
+      return;
+    }
+    if (kind === 'agreement') {
+      const ag = a.agreement ?? { createdOn: todayLabel(), effectiveFrom: todayLabel(), durationMonths: 12 };
+      printAgreement('truck-owner', {
+        name: a.transporterName || a.owner,
+        ...(a.gstin ? { gstin: a.gstin } : {}),
+        place: [a.addressLine1, a.city].filter(Boolean).join(', '), phone: a.phone,
+      }, ag, emp);
+      if (!a.agreementSentOn) updateAttached(a.id, { agreementSentOn: todayFullLabel(), agreementSentAtMs: Date.now() });
+    }
+  }
+
+  /** '' clears — the writer drops undefined keys, so undefined would silently
+   *  keep the old file. */
+  function setSigned(a: AttachedTruck, kind: VendorDocKind, img: string | undefined) {
+    const v = img ?? '';
+    updateAttached(a.id, kind === 'loi' ? { loiSignedImg: v } : { agreementSignedImg: v });
   }
 
   function setKyc(a: AttachedTruck, status: KycState) {
@@ -283,6 +325,11 @@ export function Payables() {
                           ? <button onClick={() => printAgreement('truck-owner', { name: a.owner, gstin: a.gstin ?? '', place: [a.addressLine1, a.city].filter(Boolean).join(', '), phone: a.phone }, a.agreement!)}
                               className="inline-flex items-center gap-1 text-xs font-bold text-primary-600 hover:text-primary-700"><Download size={12} /> Agreement</button>
                           : <Button size="sm" onClick={() => openAgreement(a)}><FileWarning size={12} /> Create agreement</Button>)}
+                        <button onClick={() => setDocsForId(a.id)}
+                          className="inline-flex items-center gap-1 text-xs font-bold text-neutral-600 hover:text-primary-600" title="Joining letter & agreement">
+                          <FileText size={12} /> Documents
+                          {docsKycPending(a) && <span className="ml-0.5 inline-block h-1.5 w-1.5 rounded-full bg-rose-500" title="KYC pending" />}
+                        </button>
                         {canEdit && <button onClick={() => startEdit(a)} className="rounded-lg p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-primary-600" title="Edit owner"><Pencil size={14} /></button>}
                         {canEdit && <button onClick={() => setConfirmDel(a)} className="rounded-lg p-1.5 text-neutral-400 hover:bg-rose-50 hover:text-rose-600" title="Delete owner"><Trash2 size={14} /></button>}
                       </div>
@@ -485,6 +532,27 @@ export function Payables() {
         </Field>
         <Field label="Amount (₹)" required><TextInput type="number" value={pay.amount} onChange={(e) => setPay({ ...pay, amount: e.target.value })} placeholder="20000" /></Field>
       </Modal>
+
+      {/* Joining letter → agreement, and the signed copies back. No rate card:
+          a truck owner doesn't carry one. */}
+      {docsFor && (
+        <Modal open onClose={() => setDocsForId(null)} title={`Documents · ${docsFor.owner}`}
+          subtitle="Send each one filled in, then upload the signed copy the vendor returns"
+          onSubmit={() => setDocsForId(null)} submitLabel="Done" wide>
+          {docsKycPending(docsFor) && (
+            <p className="rounded-lg bg-rose-50 px-3 py-2 text-[11px] font-semibold text-rose-800 ring-1 ring-inset ring-rose-100">
+              KYC pending — the joining letter went out over {SIGN_BACK_DAYS} days ago and no signed copy has come back.
+            </p>
+          )}
+          <VendorDocs
+            state={docsFor}
+            path={`documents/owners/${docsFor.id}`}
+            hide={['rateCard']}
+            onSend={(kind) => sendDoc(docsFor, kind)}
+            onSigned={(kind, img) => setSigned(docsFor, kind, img)}
+          />
+        </Modal>
+      )}
 
       {/* Delete */}
       {confirmDel && (

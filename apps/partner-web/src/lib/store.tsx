@@ -18,6 +18,7 @@ import { watchTrips, addTripDoc, updateTripDoc, deleteTripDoc } from './trips.js
 import { watchToursFs, addTourDoc, updateTourDoc, deleteTourDoc } from './tours.js';
 import { customersCol, driversCol, trucksCol, ownersCol } from './common.js';
 import { invoicesCol, expensesCol, fuelLogsCol, payrollCol, requestsCol } from './money.js';
+import type { VendorDocState } from './vendorDocs.js';
 import { useAuth } from './auth.js';
 
 /** Vendor agreement — absence means "not created yet". */
@@ -47,7 +48,7 @@ export type EntityType = 'proprietorship' | 'partnership' | 'pvt_ltd' | 'llp' | 
  * address + email; the signature block needs an authorised signatory; and
  * Annexure B is the rate contract.
  */
-export interface Customer {
+export interface Customer extends VendorDocState {
   id: string;
   /** Legal entity name — the "OWNER" in the Service Agreement party block. */
   name: string;
@@ -100,7 +101,7 @@ export interface Customer {
   stage?: OnboardStage;
   trialStart?: string;
   trialEnd?: string;
-  loiIssuedOn?: string;
+  /** `loiIssuedOn` and the rest of the paperwork loop come from VendorDocState. */
   agreementApprovedOn?: string;
   agreementApprovedBy?: string;
   outstandingPaise: number;
@@ -131,7 +132,7 @@ export type KycState = 'pending' | 'verified' | 'rejected';
  * field. `owner` stays the owner's own name (so existing records keep working);
  * `transporterName` is the company they run under, when different.
  */
-export interface AttachedTruck {
+export interface AttachedTruck extends VendorDocState {
   id: string;
   /** The person/entity who owns the vehicle. */
   owner: string;
@@ -166,11 +167,11 @@ export interface AttachedTruck {
   bankIfsc?: string;
   bankName?: string;
   upiId?: string;
-  /** Same onboarding ladder as a transporter: 7-day letter, then the agreement. */
+  /** Same onboarding ladder as a transporter: 7-day letter, then the agreement.
+   *  `loiIssuedOn` and the paperwork loop come from VendorDocState. */
   stage?: OnboardStage;
   trialStart?: string;
   trialEnd?: string;
-  loiIssuedOn?: string;
   agreementApprovedOn?: string;
   agreementApprovedBy?: string;
   balancePaise: number;

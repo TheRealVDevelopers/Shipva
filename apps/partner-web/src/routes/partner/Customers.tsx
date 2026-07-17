@@ -11,7 +11,10 @@ import { Badge, type BadgeTone } from '../../components/ui/Badge.js';
 import { Button } from '../../components/ui/Button.js';
 import { Modal, Field, TextInput, DateInput, Select, Row } from '../../components/ui/Modal.js';
 import { ImageUpload } from '../../components/ui/ImageUpload.js';
+import { VendorDocs } from '../../components/VendorDocs.js';
 import { watchTruckTypes, optionsFor, type TruckType } from '../../lib/truckTypes.js';
+import { kycPending, SIGN_BACK_DAYS, type VendorDocKind } from '../../lib/vendorDocs.js';
+import { printRateCard } from '../../lib/rateCard.js';
 import { rupees, todayFullLabel, isoToLabel, todayIso } from '../../lib/format.js';
 import {
   useStore, todayLabel, stageOf, STAGE_LABEL,
@@ -104,6 +107,10 @@ export function Customers() {
 
   const [agForId, setAgForId] = useState<string | null>(null);
   const agFor = agForId ? customers.find((c) => c.id === agForId) ?? null : null;
+  // Held by id and derived live, so uploading a signed copy re-renders the panel
+  // instead of freezing the record as it was when the dialog opened.
+  const [docsForId, setDocsForId] = useState<string | null>(null);
+  const docsFor = docsForId ? customers.find((c) => c.id === docsForId) ?? null : null;
   const [ag, setAg] = useState(AG_EMPTY);
   const [confirmDel, setConfirmDel] = useState<Customer | null>(null);
 
@@ -219,12 +226,62 @@ export function Customers() {
   /** Draft → trial: print the client's Letter of Intent and start the 7 days. */
   function issueLoi(c: Customer) {
     const { start, end } = trialWindow();
-    updateCustomer(c.id, { stage: 'trial', trialStart: start, trialEnd: end, loiIssuedOn: todayFullLabel() });
+    updateCustomer(c.id, {
+      stage: 'trial', trialStart: start, trialEnd: end,
+      loiIssuedOn: todayFullLabel(),
+      // The epoch drives the 7-day signed-back clock — see lib/vendorDocs.
+      loiIssuedAtMs: Date.now(),
+    });
     printJoiningLetter(
       { name: c.name, contact: c.contactName ?? '', place: [c.addressLine1, c.city].filter(Boolean).join(', '), phone: c.phone, email: c.email ?? '' },
-      { startDate: start, endDate: end },
+      { startDate: start, endDate: end, employeeName: member?.name },
     );
     push({ title: '7-day trial started', body: `Letter of Intent issued to ${c.name} · trial ends ${end}.`, tone: 'success' });
+  }
+
+  const vendorParty = (c: Customer) => ({
+    name: c.name, contact: c.contactName ?? '',
+    place: [c.addressLine1, c.city].filter(Boolean).join(', '),
+    phone: c.phone, email: c.email ?? '', gstin: c.gstin,
+  });
+
+  /** Generate a document filled in, and stamp the day it went out. */
+  function sendDoc(c: Customer, kind: VendorDocKind) {
+    const emp = member?.name;
+    const on = todayFullLabel();
+    const at = Date.now();
+    if (kind === 'rateCard') {
+      printRateCard(vendorParty(c), {
+        avgMonthlyKm: c.avgMonthlyKm, workingHrs: c.workingHrs,
+        workingDaysPerMonth: c.workingDaysPerMonth, vehicleType: c.vehicleType,
+        monthlyCostPaise: c.monthlyCostPaise, extraKmPaise: c.extraKmPaise,
+        tollParkingPaise: c.tollParkingPaise,
+      }, emp);
+      if (!c.rateCardSentOn) updateCustomer(c.id, { rateCardSentOn: on, rateCardSentAtMs: at });
+      return;
+    }
+    if (kind === 'loi') {
+      // Re-sending must not restart the trial or the 7-day clock.
+      if (!c.loiIssuedOn) { issueLoi(c); return; }
+      printJoiningLetter(vendorParty(c), { startDate: c.trialStart, endDate: c.trialEnd, employeeName: emp });
+      return;
+    }
+    // The agreement goes out to be signed before it's approved, so fall back to
+    // a provisional one built from their rate contract when none exists yet.
+    const ag = c.agreement ?? {
+      createdOn: todayLabel(), effectiveFrom: todayLabel(), durationMonths: 12,
+      ...(c.ratePerKmPaise ? { ratePerKmPaise: c.ratePerKmPaise } : {}),
+    };
+    printAgreement('customer', { name: c.name, gstin: c.gstin, place: [c.addressLine1, c.city].filter(Boolean).join(', '), phone: c.phone }, ag, emp);
+    if (!c.agreementSentOn) updateCustomer(c.id, { agreementSentOn: on, agreementSentAtMs: at });
+  }
+
+  /** The signed copy came back — or was removed. '' clears it (the writer drops
+   *  undefined keys, so undefined would silently keep the old file). */
+  function setSigned(c: Customer, kind: VendorDocKind, img: string | undefined) {
+    const v = img ?? '';
+    updateCustomer(c.id, kind === 'rateCard' ? { rateCardSignedImg: v }
+      : kind === 'loi' ? { loiSignedImg: v } : { agreementSignedImg: v });
   }
 
   function openAgreement(c: Customer) {
@@ -320,6 +377,11 @@ export function Customers() {
                           <button onClick={() => printAgreement('customer', { name: c.name, gstin: c.gstin, place: [c.addressLine1, c.city].filter(Boolean).join(', '), phone: c.phone }, c.agreement!)}
                             className="inline-flex items-center gap-1 text-xs font-bold text-primary-600 hover:text-primary-700"><Download size={12} /> Agreement</button>
                         )}
+                        <button onClick={() => setDocsForId(c.id)}
+                          className="inline-flex items-center gap-1 text-xs font-bold text-neutral-600 hover:text-primary-600" title="Rate card, joining letter & agreement">
+                          <FileText size={12} /> Documents
+                          {kycPending(c) && <span className="ml-0.5 inline-block h-1.5 w-1.5 rounded-full bg-rose-500" title="KYC pending" />}
+                        </button>
                         {canEdit && <button onClick={() => startEdit(c)} className="rounded-lg p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-primary-600" title="Edit transporter"><Pencil size={14} /></button>}
                         {canEdit && <button onClick={() => setConfirmDel(c)} className="rounded-lg p-1.5 text-neutral-400 hover:bg-rose-50 hover:text-rose-600" title="Delete transporter"><Trash2 size={14} /></button>}
                       </div>
@@ -520,6 +582,25 @@ export function Customers() {
           <button type="button" onClick={() => approveAgreement(false)} className="font-bold text-emerald-700 hover:underline">Approve without download</button>
         </div>
       </Modal>
+
+      {/* Rate card → joining letter → agreement, and the signed copies back */}
+      {docsFor && (
+        <Modal open onClose={() => setDocsForId(null)} title={`Documents · ${docsFor.name}`}
+          subtitle="Send each one filled in, then upload the signed copy the vendor returns"
+          onSubmit={() => setDocsForId(null)} submitLabel="Done" wide>
+          {kycPending(docsFor) && (
+            <p className="rounded-lg bg-rose-50 px-3 py-2 text-[11px] font-semibold text-rose-800 ring-1 ring-inset ring-rose-100">
+              KYC pending — the joining letter went out over {SIGN_BACK_DAYS} days ago and no signed copy has come back.
+            </p>
+          )}
+          <VendorDocs
+            state={docsFor}
+            path={`documents/transporters/${docsFor.id}`}
+            onSend={(kind) => sendDoc(docsFor, kind)}
+            onSigned={(kind, img) => setSigned(docsFor, kind, img)}
+          />
+        </Modal>
+      )}
 
       {/* Delete */}
       {confirmDel && (
