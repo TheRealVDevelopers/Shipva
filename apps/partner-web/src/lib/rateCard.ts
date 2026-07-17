@@ -23,12 +23,14 @@ export interface RateCardParty {
 
 export interface RateCardFigures {
   avgMonthlyKm?: number | undefined;
-  workingHrs?: number | undefined;
-  workingDaysPerMonth?: number | undefined;
+  /** Free text — their own card reads "24 hrs /day", "Monthly Calendar Days
+   *  (28-31 days)" and "At Actuals". None of those are numbers. */
+  workingHrs?: string | undefined;
+  workingDaysPerMonth?: string | undefined;
   vehicleType?: string | undefined;
   monthlyCostPaise?: number | undefined;
   extraKmPaise?: number | undefined;
-  tollParkingPaise?: number | undefined;
+  tollParking?: string | undefined;
 }
 
 const CSS = `
@@ -53,16 +55,18 @@ const fmtDate = (d: Date) => d.toLocaleDateString('en-IN', { day: 'numeric', mon
 /** Rupees from paise, grouped Indian-style. Blank when the row isn't used. */
 const money = (paise?: number) => (paise ? `₹${(paise / 100).toLocaleString('en-IN')}` : '—');
 const num = (n?: number) => (n ? String(n) : '—');
+const text = (s?: string) => (s && s.trim() ? s.trim() : '—');
 
 export function printRateCard(v: RateCardParty, r: RateCardFigures, employeeName?: string): void {
+  // Row order is the client's Img 1.1, which is their own S L V rate card.
   const rows: [string, string][] = [
     ['Average Monthly KM', num(r.avgMonthlyKm)],
-    ['Working hrs', num(r.workingHrs)],
-    ['Working Days/Month', num(r.workingDaysPerMonth)],
+    ['Working hrs', text(r.workingHrs)],
+    ['Working Days/Month', text(r.workingDaysPerMonth)],
     ['Vehicle Types', r.vehicleType ? r.vehicleType.replaceAll('_', ' ') : '—'],
     ['Monthly cost per Vehicle', money(r.monthlyCostPaise)],
     ['Extra KM Charge per Vehicle', money(r.extraKmPaise)],
-    ['Toll / Parking', money(r.tollParkingPaise)],
+    ['Toll / Parking', text(r.tollParking)],
   ];
 
   const inner = `

@@ -93,9 +93,12 @@ export interface Customer extends VendorDocState {
   extraKmPaise?: number;
   avgMonthlyKm?: number;
   vehicleType?: string;
-  workingHrs?: number;
-  workingDaysPerMonth?: number;
-  tollParkingPaise?: number;
+  /** Free text, not numbers — the client's own rate card fills these with
+   *  "24 hrs /day", "Monthly Calendar Days (28-31 days)" and "At Actuals".
+   *  A number box can't hold any of them. */
+  workingHrs?: string;
+  workingDaysPerMonth?: string;
+  tollParking?: string;
   /** Onboarding progress. Absent on records that predate onboarding — those are
    *  grandfathered as `active` (see stageOf), since they're already trading. */
   stage?: OnboardStage;

@@ -166,9 +166,9 @@ export function Customers() {
       extraKm: c.extraKmPaise ? String(c.extraKmPaise / 100) : '',
       avgMonthlyKm: c.avgMonthlyKm ? String(c.avgMonthlyKm) : '',
       vehicleType: c.vehicleType ?? '',
-      workingHrs: c.workingHrs ? String(c.workingHrs) : '',
-      workingDays: c.workingDaysPerMonth ? String(c.workingDaysPerMonth) : '',
-      tollParking: c.tollParkingPaise ? String(c.tollParkingPaise / 100) : '',
+      workingHrs: c.workingHrs ?? '',
+      workingDays: c.workingDaysPerMonth ?? '',
+      tollParking: c.tollParking ?? '',
       gstinImg: c.gstinImg, panImg: c.panImg, aadhaarImg: c.aadhaarImg,
       cancelledChequeImg: c.cancelledChequeImg,
     });
@@ -200,9 +200,9 @@ export function Customers() {
       extraKmPaise: Math.round(Number(f.extraKm || '0') * 100),
       avgMonthlyKm: Number(f.avgMonthlyKm || '0'),
       vehicleType: f.vehicleType.trim(),
-      workingHrs: Number(f.workingHrs || '0'),
-      workingDaysPerMonth: Number(f.workingDays || '0'),
-      tollParkingPaise: Math.round(Number(f.tollParking || '0') * 100),
+      workingHrs: f.workingHrs.trim(),
+      workingDaysPerMonth: f.workingDays.trim(),
+      tollParking: f.tollParking.trim(),
       // '' not undefined: the shared-collection writer strips undefined keys, so
       // removing a document that way would silently leave the old one in place.
       gstinImg: f.gstinImg ?? '', panImg: f.panImg ?? '', aadhaarImg: f.aadhaarImg ?? '',
@@ -255,7 +255,7 @@ export function Customers() {
         avgMonthlyKm: c.avgMonthlyKm, workingHrs: c.workingHrs,
         workingDaysPerMonth: c.workingDaysPerMonth, vehicleType: c.vehicleType,
         monthlyCostPaise: c.monthlyCostPaise, extraKmPaise: c.extraKmPaise,
-        tollParkingPaise: c.tollParkingPaise,
+        tollParking: c.tollParking,
       }, emp);
       if (!c.rateCardSentOn) updateCustomer(c.id, { rateCardSentOn: on, rateCardSentAtMs: at });
       return;
@@ -540,17 +540,18 @@ export function Customers() {
             </p>
             <Row>
               <Field label="Average Monthly KM"><TextInput type="number" value={f.avgMonthlyKm} onChange={(e) => setF({ ...f, avgMonthlyKm: e.target.value })} placeholder="6000" /></Field>
-              <Field label="Working hrs" hint="Per day"><TextInput type="number" value={f.workingHrs} onChange={(e) => setF({ ...f, workingHrs: e.target.value })} placeholder="12" /></Field>
+              <Field label="Working hrs"><TextInput value={f.workingHrs} onChange={(e) => setF({ ...f, workingHrs: e.target.value })} placeholder="24 hrs /day" /></Field>
             </Row>
             <Row>
-              <Field label="Working Days/Month"><TextInput type="number" value={f.workingDays} onChange={(e) => setF({ ...f, workingDays: e.target.value })} placeholder="26" /></Field>
+              <Field label="Working Days/Month"><TextInput value={f.workingDays} onChange={(e) => setF({ ...f, workingDays: e.target.value })} placeholder="Monthly Calendar Days (28-31 days)" /></Field>
               <VehicleTypesField value={f.vehicleType} onChange={(v) => setF({ ...f, vehicleType: v })} />
             </Row>
             <Row>
               <Field label="Monthly cost per Vehicle (₹)"><TextInput type="number" value={f.monthlyCost} onChange={(e) => setF({ ...f, monthlyCost: e.target.value })} placeholder="170000" /></Field>
               <Field label="Extra KM Charge per Vehicle (₹)"><TextInput type="number" value={f.extraKm} onChange={(e) => setF({ ...f, extraKm: e.target.value })} placeholder="12" /></Field>
             </Row>
-            <Field label="Toll / Parking (₹)" hint="Monthly allowance, if it's on the contract"><TextInput type="number" value={f.tollParking} onChange={(e) => setF({ ...f, tollParking: e.target.value })} placeholder="3000" /></Field>
+            {/* Free text, not a number: their own card says "At Actuals". */}
+            <Field label="Toll / Parking"><TextInput value={f.tollParking} onChange={(e) => setF({ ...f, tollParking: e.target.value })} placeholder="At Actuals" /></Field>
           </>
         )}
 
