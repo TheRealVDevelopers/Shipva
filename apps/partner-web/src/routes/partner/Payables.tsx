@@ -10,6 +10,7 @@ import { Table, THead, Th, TBody, Tr, Td } from '../../components/ui/Table.js';
 import { Badge, type BadgeTone } from '../../components/ui/Badge.js';
 import { Button } from '../../components/ui/Button.js';
 import { Modal, Field, TextInput, DateInput, Select, Row } from '../../components/ui/Modal.js';
+import { ImageUpload } from '../../components/ui/ImageUpload.js';
 import { rupees, todayFullLabel, isoToLabel } from '../../lib/format.js';
 import {
   useStore, todayLabel, ownerStageOf, kycOf, STAGE_LABEL,
@@ -37,6 +38,10 @@ const EMPTY = {
   pan: '', aadhaar: '', gstin: '',
   addressLine1: '', addressLine2: '', city: '', state: '', pincode: '',
   bankAccountName: '', bankAccountNo: '', bankIfsc: '', bankName: '', upiId: '',
+  // Document images — no GST certificate, per the client.
+  panImg: undefined as string | undefined,
+  aadhaarImg: undefined as string | undefined,
+  cancelledChequeImg: undefined as string | undefined,
 };
 type Form = typeof EMPTY;
 
@@ -110,6 +115,7 @@ export function Payables() {
       pan: a.pan ?? '', aadhaar: a.aadhaar ?? '', gstin: a.gstin ?? '',
       addressLine1: a.addressLine1 ?? '', addressLine2: a.addressLine2 ?? '', city: a.city ?? '', state: a.state ?? '', pincode: a.pincode ?? '',
       bankAccountName: a.bankAccountName ?? '', bankAccountNo: a.bankAccountNo ?? '', bankIfsc: a.bankIfsc ?? '', bankName: a.bankName ?? '', upiId: a.upiId ?? '',
+      panImg: a.panImg, aadhaarImg: a.aadhaarImg, cancelledChequeImg: a.cancelledChequeImg,
     });
     setStep(1); setTried(false); setEditId(a.id); setOpen(true);
   }
@@ -128,6 +134,9 @@ export function Payables() {
       city: f.city.trim(), state: f.state.trim(), pincode: f.pincode.trim(),
       bankAccountName: f.bankAccountName.trim(), bankAccountNo: f.bankAccountNo.trim(),
       bankIfsc: f.bankIfsc.trim().toUpperCase(), bankName: f.bankName.trim(), upiId: f.upiId.trim(),
+      // '' not undefined: the shared-collection writer strips undefined keys, so
+      // removing a document that way would silently leave the old one in place.
+      panImg: f.panImg ?? '', aadhaarImg: f.aadhaarImg ?? '', cancelledChequeImg: f.cancelledChequeImg ?? '',
     };
   }
   function submit() {
@@ -342,6 +351,18 @@ export function Payables() {
                 <TextInput inputMode="numeric" value={f.aadhaar} onChange={(e) => setF({ ...f, aadhaar: e.target.value })} placeholder="4821 7745 9012" />
               </Field>
             </Row>
+            {/* Same document uploads as a transporter — but no GST certificate:
+                the client's "same goes for Truck Owners except the GST part".
+                The GSTIN number itself stays, since owner-drivers who do have
+                one still need it on their invoice. */}
+            <Row>
+              <Field label="PAN card">
+                <ImageUpload value={f.panImg} onChange={(v) => setF({ ...f, panImg: v })} label="Upload PAN" path={`documents/owners/${editId ?? 'new'}/pan`} />
+              </Field>
+              <Field label="Aadhaar card">
+                <ImageUpload value={f.aadhaarImg} onChange={(v) => setF({ ...f, aadhaarImg: v })} label="Upload Aadhaar" path={`documents/owners/${editId ?? 'new'}/aadhaar`} />
+              </Field>
+            </Row>
             <Field label="GSTIN" hint="Optional — many owner-drivers aren't registered" error={tried ? errs.gstin : undefined}>
               <TextInput value={f.gstin} onChange={(e) => setF({ ...f, gstin: e.target.value.toUpperCase() })} placeholder="29ABCDE1234F1Z5" />
             </Field>
@@ -389,6 +410,9 @@ export function Payables() {
                 <TextInput value={f.upiId} onChange={(e) => setF({ ...f, upiId: e.target.value })} placeholder="name@okhdfcbank" />
               </Field>
             </Row>
+            <Field label="Cancelled cheque" hint="Proves the account belongs to them before any payout goes out">
+              <ImageUpload value={f.cancelledChequeImg} onChange={(v) => setF({ ...f, cancelledChequeImg: v })} label="Upload cancelled cheque" path={`documents/owners/${editId ?? 'new'}/cheque`} />
+            </Field>
           </>
         )}
 

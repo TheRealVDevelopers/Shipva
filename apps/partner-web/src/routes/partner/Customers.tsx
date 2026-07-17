@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Plus, Phone, Building2, Receipt, FileText, FileWarning, Download, ShieldCheck,
   Clock, FileSignature, ChevronLeft, Pencil, Trash2, BadgeCheck,
@@ -10,6 +10,8 @@ import { Table, THead, Th, TBody, Tr, Td } from '../../components/ui/Table.js';
 import { Badge, type BadgeTone } from '../../components/ui/Badge.js';
 import { Button } from '../../components/ui/Button.js';
 import { Modal, Field, TextInput, DateInput, Select, Row } from '../../components/ui/Modal.js';
+import { ImageUpload } from '../../components/ui/ImageUpload.js';
+import { watchTruckTypes, optionsFor, type TruckType } from '../../lib/truckTypes.js';
 import { rupees, todayFullLabel, isoToLabel, todayIso } from '../../lib/format.js';
 import {
   useStore, todayLabel, stageOf, STAGE_LABEL,
@@ -36,6 +38,25 @@ const STAGE_TONE: Record<OnboardStage, BadgeTone> = {
   draft: 'neutral', trial: 'accent', agreement_pending: 'warning', active: 'success', rejected: 'danger',
 };
 
+/**
+ * "Vehicle Types" on the rate card. It's the only row in the client's Img 1.1
+ * without "manual update from employee" beside it — so it isn't typed, it's
+ * picked from the admin's list, the same list the Truck Register uses.
+ */
+function VehicleTypesField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [types, setTypes] = useState<TruckType[]>([]);
+  useEffect(() => watchTruckTypes(setTypes), []);
+  const options = optionsFor(types, value);
+  return (
+    <Field label="Vehicle Types" hint={types.length ? 'From your admin’s truck-type list' : 'Your admin sets this list in the Truck Register'}>
+      <Select value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value="">{options.length ? 'Select a vehicle type' : 'No truck types yet'}</option>
+        {options.map((t) => <option key={t} value={t}>{t.replaceAll('_', ' ')}</option>)}
+      </Select>
+    </Field>
+  );
+}
+
 const EMPTY = {
   name: '', entityType: 'proprietorship' as EntityType, gstin: '', pan: '', aadhaar: '',
   contactName: '', phone: '', phone2: '', email: '',
@@ -43,6 +64,13 @@ const EMPTY = {
   bankAccountName: '', bankAccountNo: '', bankIfsc: '', bankName: '', upiId: '',
   signatoryName: '', signatoryTitle: '',
   rate: '', monthlyCost: '', extraKm: '', avgMonthlyKm: '', vehicleType: '',
+  // Img 1.1 additions.
+  workingHrs: '', workingDays: '', tollParking: '',
+  // Document images — the upload under each number.
+  gstinImg: undefined as string | undefined,
+  panImg: undefined as string | undefined,
+  aadhaarImg: undefined as string | undefined,
+  cancelledChequeImg: undefined as string | undefined,
 };
 type Form = typeof EMPTY;
 
@@ -131,6 +159,11 @@ export function Customers() {
       extraKm: c.extraKmPaise ? String(c.extraKmPaise / 100) : '',
       avgMonthlyKm: c.avgMonthlyKm ? String(c.avgMonthlyKm) : '',
       vehicleType: c.vehicleType ?? '',
+      workingHrs: c.workingHrs ? String(c.workingHrs) : '',
+      workingDays: c.workingDaysPerMonth ? String(c.workingDaysPerMonth) : '',
+      tollParking: c.tollParkingPaise ? String(c.tollParkingPaise / 100) : '',
+      gstinImg: c.gstinImg, panImg: c.panImg, aadhaarImg: c.aadhaarImg,
+      cancelledChequeImg: c.cancelledChequeImg,
     });
     setStep(1); setTried(false); setEditId(c.id); setOpen(true);
   }
@@ -153,11 +186,20 @@ export function Customers() {
       bankAccountName: f.bankAccountName.trim(), bankAccountNo: f.bankAccountNo.trim(),
       bankIfsc: f.bankIfsc.trim().toUpperCase(), bankName: f.bankName.trim(), upiId: f.upiId.trim(),
       signatoryName: f.signatoryName.trim(), signatoryTitle: f.signatoryTitle.trim(),
+      // Not collected any more (Img 1.1 has no per-km rate) — startEdit still
+      // loads it, so editing an old per-km record preserves what it holds.
       ratePerKmPaise: Math.round(Number(f.rate || '0') * 100),
       monthlyCostPaise: Math.round(Number(f.monthlyCost || '0') * 100),
       extraKmPaise: Math.round(Number(f.extraKm || '0') * 100),
       avgMonthlyKm: Number(f.avgMonthlyKm || '0'),
       vehicleType: f.vehicleType.trim(),
+      workingHrs: Number(f.workingHrs || '0'),
+      workingDaysPerMonth: Number(f.workingDays || '0'),
+      tollParkingPaise: Math.round(Number(f.tollParking || '0') * 100),
+      // '' not undefined: the shared-collection writer strips undefined keys, so
+      // removing a document that way would silently leave the old one in place.
+      gstinImg: f.gstinImg ?? '', panImg: f.panImg ?? '', aadhaarImg: f.aadhaarImg ?? '',
+      cancelledChequeImg: f.cancelledChequeImg ?? '',
     };
   }
 
@@ -321,8 +363,14 @@ export function Customers() {
                 {ENTITY_TYPES.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
               </Select>
             </Field>
+            {/* Each identity document gets its own upload right under the number
+                it belongs to — the client's "uploading of documents option below
+                every section". */}
             <Field label="GSTIN" hint="Leave blank if they aren't GST-registered — then Aadhaar is required" error={tried ? errs.gstin : undefined}>
               <TextInput value={f.gstin} onChange={(e) => setF({ ...f, gstin: e.target.value.toUpperCase() })} placeholder="29ABCDE1234F1Z5" />
+            </Field>
+            <Field label="GST certificate">
+              <ImageUpload value={f.gstinImg} onChange={(v) => setF({ ...f, gstinImg: v })} label="Upload GST certificate" path={`documents/transporters/${editId ?? 'new'}/gstin`} />
             </Field>
             <Row>
               <Field label="PAN" required hint="Needed for TDS" error={tried ? errs.pan : undefined}>
@@ -330,6 +378,14 @@ export function Customers() {
               </Field>
               <Field label="Aadhaar" required={!hasGst} hint={hasGst ? 'Not needed — GST registered' : 'Required without a GSTIN'} error={tried ? errs.aadhaar : undefined}>
                 <TextInput inputMode="numeric" disabled={hasGst} value={f.aadhaar} onChange={(e) => setF({ ...f, aadhaar: e.target.value })} placeholder="4821 7745 9012" />
+              </Field>
+            </Row>
+            <Row>
+              <Field label="PAN card">
+                <ImageUpload value={f.panImg} onChange={(v) => setF({ ...f, panImg: v })} label="Upload PAN" path={`documents/transporters/${editId ?? 'new'}/pan`} />
+              </Field>
+              <Field label="Aadhaar card">
+                <ImageUpload value={f.aadhaarImg} onChange={(v) => setF({ ...f, aadhaarImg: v })} label="Upload Aadhaar" path={`documents/transporters/${editId ?? 'new'}/aadhaar`} />
               </Field>
             </Row>
           </>
@@ -397,6 +453,9 @@ export function Customers() {
                 <TextInput value={f.upiId} onChange={(e) => setF({ ...f, upiId: e.target.value })} placeholder="name@okhdfcbank" />
               </Field>
             </Row>
+            <Field label="Cancelled cheque" hint="Proves the account belongs to them before any payout goes out">
+              <ImageUpload value={f.cancelledChequeImg} onChange={(v) => setF({ ...f, cancelledChequeImg: v })} label="Upload cancelled cheque" path={`documents/transporters/${editId ?? 'new'}/cheque`} />
+            </Field>
           </>
         )}
 
@@ -410,18 +469,26 @@ export function Customers() {
                 <TextInput value={f.signatoryTitle} onChange={(e) => setF({ ...f, signatoryTitle: e.target.value })} placeholder="Proprietor" />
               </Field>
             </Row>
+            {/* Rate contract — Annexure B, in the client's own "Img 1.1" shape.
+                Their real contracts are monthly (₹1,70,000/mo + ₹12/extra km),
+                which is why Img 1.1 has no per-km rate — so this form no longer
+                asks for one. Existing per-km records keep whatever they hold. */}
             <p className="rounded-lg bg-primary-50 px-3 py-2 text-[11px] text-primary-800 ring-1 ring-inset ring-primary-100">
-              Rate contract — Annexure B of the Service Agreement. Fill whichever applies: a per-km rate, or a monthly cost per vehicle with an extra-KM charge.
+              Rate contract — Annexure B of the Service Agreement.
             </p>
             <Row>
-              <Field label="Rate (₹/km)" hint="Per-km contracts"><TextInput type="number" value={f.rate} onChange={(e) => setF({ ...f, rate: e.target.value })} placeholder="42" /></Field>
-              <Field label="Vehicle type" hint="e.g. 14FT_TRUCK"><TextInput value={f.vehicleType} onChange={(e) => setF({ ...f, vehicleType: e.target.value })} placeholder="14FT_TRUCK" /></Field>
+              <Field label="Average Monthly KM"><TextInput type="number" value={f.avgMonthlyKm} onChange={(e) => setF({ ...f, avgMonthlyKm: e.target.value })} placeholder="6000" /></Field>
+              <Field label="Working hrs" hint="Per day"><TextInput type="number" value={f.workingHrs} onChange={(e) => setF({ ...f, workingHrs: e.target.value })} placeholder="12" /></Field>
             </Row>
             <Row>
-              <Field label="Monthly cost per vehicle (₹)" hint="Monthly contracts"><TextInput type="number" value={f.monthlyCost} onChange={(e) => setF({ ...f, monthlyCost: e.target.value })} placeholder="170000" /></Field>
-              <Field label="Extra KM charge (₹)"><TextInput type="number" value={f.extraKm} onChange={(e) => setF({ ...f, extraKm: e.target.value })} placeholder="12" /></Field>
+              <Field label="Working Days/Month"><TextInput type="number" value={f.workingDays} onChange={(e) => setF({ ...f, workingDays: e.target.value })} placeholder="26" /></Field>
+              <VehicleTypesField value={f.vehicleType} onChange={(v) => setF({ ...f, vehicleType: v })} />
             </Row>
-            <Field label="Average monthly KM"><TextInput type="number" value={f.avgMonthlyKm} onChange={(e) => setF({ ...f, avgMonthlyKm: e.target.value })} placeholder="6000" /></Field>
+            <Row>
+              <Field label="Monthly cost per Vehicle (₹)"><TextInput type="number" value={f.monthlyCost} onChange={(e) => setF({ ...f, monthlyCost: e.target.value })} placeholder="170000" /></Field>
+              <Field label="Extra KM Charge per Vehicle (₹)"><TextInput type="number" value={f.extraKm} onChange={(e) => setF({ ...f, extraKm: e.target.value })} placeholder="12" /></Field>
+            </Row>
+            <Field label="Toll / Parking (₹)" hint="Monthly allowance, if it's on the contract"><TextInput type="number" value={f.tollParking} onChange={(e) => setF({ ...f, tollParking: e.target.value })} placeholder="3000" /></Field>
           </>
         )}
 

@@ -78,12 +78,23 @@ export interface Customer {
   /** Who signs for them (agreement signature block). */
   signatoryName?: string;
   signatoryTitle?: string;
-  /** Rate contract — Annexure B of the Service Agreement. */
+  /** Identity documents — the client wants an upload under every number. */
+  gstinImg?: string | undefined;
+  panImg?: string | undefined;
+  aadhaarImg?: string | undefined;
+  /** Proves the bank account is theirs before a payout goes out. */
+  cancelledChequeImg?: string | undefined;
+  /** Rate contract — Annexure B of the Service Agreement, in the client's
+   *  "Img 1.1" shape. `ratePerKmPaise` is no longer collected (their contracts
+   *  are monthly); it stays for records that already carry a per-km rate. */
   ratePerKmPaise: number;
   monthlyCostPaise?: number;
   extraKmPaise?: number;
   avgMonthlyKm?: number;
   vehicleType?: string;
+  workingHrs?: number;
+  workingDaysPerMonth?: number;
+  tollParkingPaise?: number;
   /** Onboarding progress. Absent on records that predate onboarding — those are
    *  grandfathered as `active` (see stageOf), since they're already trading. */
   stage?: OnboardStage;
@@ -137,6 +148,12 @@ export interface AttachedTruck {
   kycStatus?: KycState;
   kycVerifiedBy?: string;
   kycVerifiedOn?: string;
+  /** Identity documents. No GST certificate here — the client's "same goes for
+   *  Truck Owners except the GST part". */
+  panImg?: string | undefined;
+  aadhaarImg?: string | undefined;
+  /** Proves the bank account is theirs before a payout goes out. */
+  cancelledChequeImg?: string | undefined;
   /** Address. */
   addressLine1?: string;
   addressLine2?: string;
