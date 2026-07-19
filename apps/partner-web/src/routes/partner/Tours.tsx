@@ -63,7 +63,7 @@ const fmtDTShort = (v?: string) => {
 };
 
 export function Tours() {
-  const { tours, drivers, trucks, attached, customers, addTour, updateTour, deleteTour } = useStore();
+  const { tours, drivers, trucks, attached, customers, addTour, updateTour, archiveTour } = useStore();
   const { member } = useAuth();
   const isAdmin = member?.role === 'owner' || member?.role === 'manager';
   const canAssign = isAdmin || member?.role === 'team_leader';
@@ -178,10 +178,10 @@ export function Tours() {
 
   function doDelete() {
     if (!confirmDel) return;
-    deleteTour(confirmDel);
+    archiveTour(confirmDel);
     push({
-      title: 'Route deleted',
-      body: `${confirmDel.tourId || 'Route'} removed — its VRID${tourVridCount(confirmDel) === 1 ? '' : 's'} freed for reuse.`,
+      title: 'Route cancelled',
+      body: `${confirmDel.tourId || 'Route'} archived — its VRID${tourVridCount(confirmDel) === 1 ? '' : 's'} freed for reuse. The record is kept.`,
       tone: 'info',
     });
     setConfirmDel(null);
@@ -249,15 +249,17 @@ export function Tours() {
     } finally { setBusy(false); }
   }
 
-  const shown = tours.filter((t) => {
+  // Cancelled/archived routes are kept in Firestore but never shown.
+  const live = tours.filter((t) => !t.archived);
+  const shown = live.filter((t) => {
     if (tab === 'Shared' && !isShared(t)) return false;
     if (!q) return true;
     const hay = `${t.tourId} ${(t.legs ?? []).map((l) => l.vrid).join(' ')} ${(t.vrIds ?? []).join(' ')} ${t.vehicleId} ${t.amzEquipmentType} ${t.vendorName} ${t.driver} ${t.ownerName ?? ''}`.toLowerCase();
     return hay.includes(q.toLowerCase());
   });
 
-  const inTransit = tours.filter((t) => t.amzStatus === 'IN PROGRESS').length;
-  const completed = tours.filter((t) => t.amzStatus === 'COMPLETED').length;
+  const inTransit = live.filter((t) => t.amzStatus === 'IN PROGRESS').length;
+  const completed = live.filter((t) => t.amzStatus === 'COMPLETED').length;
   const advTotal = tours.reduce((s, t) => s + (Number(t.advanceAmount) || 0), 0);
   const operating = operateId ? tours.find((t) => t.id === operateId) ?? null : null;
 
@@ -451,13 +453,13 @@ export function Tours() {
         <DieselRequest tour={diesel} onClose={() => setDieselId(null)} onSave={updateTour} />
       )}
 
-      {/* Delete route */}
+      {/* Cancel / archive route — never a hard delete (the client's rule). */}
       {confirmDel && (
-        <Modal open onClose={() => setConfirmDel(null)} title={`Delete ${confirmDel.tourId || 'this route'}?`}
-          subtitle="This removes the route for everyone" onSubmit={doDelete} submitLabel="Delete route">
-          <p className="rounded-lg bg-rose-50 px-3 py-2.5 text-sm text-rose-800 ring-1 ring-inset ring-rose-100">
-            <b>{confirmDel.tourId || 'This route'}</b>{confirmDel.driver ? ` (${confirmDel.driver}, ${confirmDel.vehicleId})` : ''} will be removed for the whole team,
-            along with any check-ins, KM readings and photos the POC recorded against it. This can't be undone.
+        <Modal open onClose={() => setConfirmDel(null)} title={`Cancel ${confirmDel.tourId || 'this route'}?`}
+          subtitle="Archived, not deleted" onSubmit={doDelete} submitLabel="Cancel route">
+          <p className="rounded-lg bg-amber-50 px-3 py-2.5 text-sm text-amber-800 ring-1 ring-inset ring-amber-100">
+            <b>{confirmDel.tourId || 'This route'}</b>{confirmDel.driver ? ` (${confirmDel.driver}, ${confirmDel.vehicleId})` : ''} will be <b>archived and removed from the board</b> for the whole team.
+            The record is kept — including any check-ins, KM readings and photos the POC recorded — nothing is permanently deleted.
           </p>
           <p className="rounded-lg bg-sky-50 px-3 py-2 text-[11px] text-sky-800 ring-1 ring-inset ring-sky-100">
             Its VRID{tourVridCount(confirmDel) === 1 ? '' : 's'} — <b>{tourVridList(confirmDel).join(', ') || '—'}</b> — will be released, so {tourVridCount(confirmDel) === 1 ? 'it' : 'they'} can be entered on a new route.
@@ -656,7 +658,7 @@ function TourCard({ t, isAdmin, canEdit, onOperate, onDiesel, onEdit, onDelete, 
             {canEdit && (
               <>
                 <button onClick={onEdit} className="rounded-lg p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-primary-600" title="Edit route"><Pencil size={14} /></button>
-                <button onClick={onDelete} className="rounded-lg p-1.5 text-neutral-400 hover:bg-rose-50 hover:text-rose-600" title="Delete route"><Trash2 size={14} /></button>
+                <button onClick={onDelete} className="rounded-lg p-1.5 text-neutral-400 hover:bg-amber-50 hover:text-amber-600" title="Cancel / archive route"><Trash2 size={14} /></button>
               </>
             )}
           </div>

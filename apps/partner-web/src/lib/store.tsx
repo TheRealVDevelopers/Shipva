@@ -14,8 +14,8 @@ import type {
   Trip, Invoice, Expense, FuelLog, FleetDriver, Truck, PayrollLine, Staff, TripStatus,
 } from './mocks.js';
 import { tripSteps, statusFromStep } from './trip.js';
-import { watchTrips, addTripDoc, updateTripDoc, deleteTripDoc } from './trips.js';
-import { watchToursFs, addTourDoc, updateTourDoc, deleteTourDoc } from './tours.js';
+import { watchTrips, addTripDoc, updateTripDoc, archiveTripDoc } from './trips.js';
+import { watchToursFs, addTourDoc, updateTourDoc, archiveTourDoc } from './tours.js';
 import { customersCol, driversCol, trucksCol, ownersCol } from './common.js';
 import { invoicesCol, expensesCol, fuelLogsCol, payrollCol, requestsCol } from './money.js';
 import type { VendorDocState } from './vendorDocs.js';
@@ -259,6 +259,10 @@ export interface Tour {
   sharedVendor?: boolean; sharedDriver?: boolean;
   /** Reported delays, oldest first — the audit log. */
   reports?: DelayReport[];
+  /** Cancelled/archived — kept for the record, hidden from the board. The client's
+   *  rule: never permanently delete; archive or cancel instead. */
+  archived?: boolean;
+  archivedAtMs?: number;
 }
 
 /** A remembered pickup/drop location, suggested while typing a new trip. */
@@ -315,10 +319,12 @@ interface StoreApi extends StoreShape {
   requests: MoneyRequest[];
   addTrip: (t: Omit<Trip, 'lr' | 'vrId' | 'id'>, handledBy?: { uid: string; name: string; leaderUid?: string }) => void;
   updateTripStatus: (id: string, status: TripStatus) => void;
-  /** Edit / remove a trip or tour — leadership only (see canEditRecords). */
+  /** Edit a trip or tour — leadership only (see canEditRecords). */
   updateTrip: (id: string, patch: Partial<Trip>) => void;
-  deleteTrip: (id: string) => void;
-  deleteTour: (t: Tour) => void;
+  /** Cancel/archive — never a hard delete (the client's rule). Kept for the
+   *  record, hidden from the board; a tour's VRIDs are freed. */
+  archiveTrip: (id: string) => void;
+  archiveTour: (t: Tour) => void;
   /** Advance a trip one step along its live timeline; pass a remark when finishing. */
   advanceTrip: (id: string, remark?: string) => void;
   addSavedPoint: (p: SavedPoint) => void;
@@ -488,8 +494,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const updateTrip = useCallback((id: string, patch: Partial<Trip>) => { void updateTripDoc(id, patch); }, []);
-  const deleteTrip = useCallback((id: string) => { void deleteTripDoc(id); }, []);
-  const deleteTour = useCallback((t: Tour) => { void deleteTourDoc(t); }, []);
+  const archiveTrip = useCallback((id: string) => { void archiveTripDoc(id); }, []);
+  const archiveTour = useCallback((t: Tour) => { void archiveTourDoc(t); }, []);
 
   const advanceTrip = useCallback((id: string, remark?: string) => {
     const t = tripsRef.current.find((x) => x.id === id);
@@ -614,7 +620,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const value = useMemo<StoreApi>(() => ({
     ...s, trips, tours, customers, drivers, trucks, attached,
     invoices, expenses, fuelLogs, payroll, requests,
-    addTrip, updateTripStatus, updateTrip, deleteTrip, deleteTour,
+    addTrip, updateTripStatus, updateTrip, archiveTrip, archiveTour,
     advanceTrip, addSavedPoint, addInvoice, markInvoicePaid, addExpense, addFuelLog,
     addExpenseCategory, addRequest, resolveRequest, addCustomer, addDriver, addTruck,
     setDriverDocs, setTruckDocs, updateDriver, updateTruck, deleteDriver, deleteTruck,
@@ -622,7 +628,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     addStaff, addAttached, recordOwnerPayment, addTour, updateTour, runPayroll, reset,
   }), [s, trips, tours, customers, drivers, trucks, attached,
     invoices, expenses, fuelLogs, payroll, requests,
-    addTrip, updateTripStatus, updateTrip, deleteTrip, deleteTour,
+    addTrip, updateTripStatus, updateTrip, archiveTrip, archiveTour,
     advanceTrip, addSavedPoint, addInvoice, markInvoicePaid, addExpense, addFuelLog,
     addExpenseCategory, addRequest, resolveRequest, addCustomer, addDriver, addTruck,
     setDriverDocs, setTruckDocs, updateDriver, updateTruck, deleteDriver, deleteTruck,

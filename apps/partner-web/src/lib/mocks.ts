@@ -200,6 +200,10 @@ export interface Trip {
   points?: TripPoint[];
   /** Progress along the live status timeline (0 = just assigned). */
   stepIndex?: number;
+  /** Cancelled/archived — kept for the record, hidden from the board. The client's
+   *  rule: never permanently delete; archive or cancel instead. */
+  archived?: boolean | undefined;
+  archivedAtMs?: number | undefined;
   /** Free-text note captured when the trip is finished (e.g. "police checkpost delay"). */
   remark?: string;
   /** Reported delays — same audit log a tour keeps. Typed loosely here to avoid

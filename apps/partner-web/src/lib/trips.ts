@@ -83,3 +83,9 @@ export async function deleteTripDoc(id: string): Promise<void> {
   await deleteDoc(doc(db, 'orgTrips', id));
 }
 
+/** Cancel/archive a trip — the client's "do not permanently delete". The record
+ *  stays for the audit trail; the board hides it. */
+export async function archiveTripDoc(id: string): Promise<void> {
+  await updateDoc(doc(db, 'orgTrips', id), { archived: true, archivedAtMs: Date.now() });
+}
+

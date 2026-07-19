@@ -130,9 +130,13 @@ export function fromTrip(t: Trip): BoardItem {
   };
 }
 
-/** Both kinds, newest first, in one list. */
+/** Both kinds, newest first, in one list. Cancelled/archived runs are kept in
+ *  Firestore for the record but never appear on the board. */
 export function buildBoard(tours: Tour[], trips: Trip[]): BoardItem[] {
-  return [...tours.map(fromTour), ...trips.map(fromTrip)].sort((a, b) => b.startMs - a.startMs);
+  return [
+    ...tours.filter((t) => !t.archived).map(fromTour),
+    ...trips.filter((t) => !t.archived).map(fromTrip),
+  ].sort((a, b) => b.startMs - a.startMs);
 }
 
 export const inLane = (i: BoardItem, lane: Lane): boolean => i.lane === lane;

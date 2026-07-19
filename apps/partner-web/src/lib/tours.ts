@@ -174,3 +174,12 @@ export async function deleteTourDoc(t: Tour): Promise<void> {
   const vrids = tourVrids(t);
   await Promise.allSettled(vrids.map((v) => releaseVrid(v)));
 }
+
+/** Cancel/archive a tour — the client's "do not permanently delete". The record
+ *  stays (archived, hidden from the board) but its VRIDs are released, since a
+ *  cancelled run's VR IDs should be free to re-assign. */
+export async function archiveTourDoc(t: Tour): Promise<void> {
+  await updateDoc(doc(db, 'orgTours', t.id), { archived: true, archivedAtMs: Date.now() });
+  const vrids = tourVrids(t);
+  await Promise.allSettled(vrids.map((v) => releaseVrid(v)));
+}

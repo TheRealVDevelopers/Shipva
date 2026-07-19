@@ -176,7 +176,7 @@ function BoardRow({ item, expanded, onToggle, showOwner, canEdit, onReport, onTr
               {canEdit && (
                 <>
                   <button onClick={onEdit} className="rounded-lg p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-primary-600" title={isTour ? 'Edit on the Amazon Tours board' : 'Edit trip'}><Pencil size={14} /></button>
-                  {!isTour && <button onClick={onDelete} className="rounded-lg p-1.5 text-neutral-400 hover:bg-rose-50 hover:text-rose-600" title="Delete trip"><Trash2 size={14} /></button>}
+                  {!isTour && <button onClick={onDelete} className="rounded-lg p-1.5 text-neutral-400 hover:bg-amber-50 hover:text-amber-600" title="Cancel / archive trip"><Trash2 size={14} /></button>}
                 </>
               )}
             </div>
@@ -188,7 +188,7 @@ function BoardRow({ item, expanded, onToggle, showOwner, canEdit, onReport, onTr
 }
 
 export function Trips() {
-  const { trips, tours, drivers, trucks, customers, savedPoints, addTrip, addSavedPoint, addDriver, advanceTrip, updateTrip, deleteTrip, updateTour } = useStore();
+  const { trips, tours, drivers, trucks, customers, savedPoints, addTrip, addSavedPoint, addDriver, advanceTrip, updateTrip, archiveTrip, updateTour } = useStore();
   const { member } = useAuth();
   const isAdmin = member?.role === 'owner' || member?.role === 'manager';
   const canAssign = isAdmin || member?.role === 'team_leader';
@@ -290,8 +290,8 @@ export function Trips() {
 
   function doDelete() {
     if (!confirmDel?.id) return;
-    deleteTrip(confirmDel.id);
-    push({ title: 'Trip deleted', body: `${confirmDel.lr} removed.`, tone: 'info' });
+    archiveTrip(confirmDel.id);
+    push({ title: 'Trip cancelled', body: `${confirmDel.lr} archived — kept for the record.`, tone: 'info' });
     setConfirmDel(null);
   }
   function setMode(mode: 'single' | 'multi') {
@@ -649,13 +649,13 @@ export function Trips() {
 
       {tracked && <TrackModal trip={tracked} onClose={() => setTrackId(null)} onAdvance={advanceTrip} showOwner={isAdmin} />}
 
-      {/* Delete trip */}
+      {/* Cancel / archive trip — never a hard delete (the client's rule). */}
       {confirmDel && (
-        <Modal open onClose={() => setConfirmDel(null)} title={`Delete ${confirmDel.lr}?`} subtitle="This removes the trip for everyone"
-          onSubmit={doDelete} submitLabel="Delete trip">
-          <p className="rounded-lg bg-rose-50 px-3 py-2.5 text-sm text-rose-800 ring-1 ring-inset ring-rose-100">
-            <b>{confirmDel.lr}</b> ({confirmDel.from} → {confirmDel.to}, {confirmDel.driver}) will be removed for the whole team.
-            {confirmDel.status !== 'closed' && <> This trip is still <b>in progress</b>.</>} Any invoice already raised against it stays. This can't be undone.
+        <Modal open onClose={() => setConfirmDel(null)} title={`Cancel ${confirmDel.lr}?`} subtitle="Archived, not deleted"
+          onSubmit={doDelete} submitLabel="Cancel trip">
+          <p className="rounded-lg bg-amber-50 px-3 py-2.5 text-sm text-amber-800 ring-1 ring-inset ring-amber-100">
+            <b>{confirmDel.lr}</b> ({confirmDel.from} → {confirmDel.to}, {confirmDel.driver}) will be <b>archived and removed from the board</b> for the whole team.
+            {confirmDel.status !== 'closed' && <> This trip is still <b>in progress</b>.</>} The record is kept — nothing is permanently deleted — and any invoice raised against it stays.
           </p>
         </Modal>
       )}
