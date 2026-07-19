@@ -25,13 +25,15 @@ export const FEATURES: Record<FeatureId, boolean> = {
   payables: true,      // Vendors — truck owners
   invoices: true,      // Accountant
   expenses: true,      // Accountant
-  payroll: true,       // Accountant
   reports: true,       // Accountant
   messages: true,      // WhatsApp message generation
   chat: true,          // Internal chat
   export: true,        // Data export (Excel)
 
   // ── Hidden (kept in code, not shown to the user) ─────────
+  // Payroll: removed at the client's request. Nothing in the app created a
+  // payroll line, so the page was always empty; the code stays for later.
+  payroll: false,
   documents: false,
   earnings: false,
   loads: false,

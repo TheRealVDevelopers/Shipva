@@ -92,11 +92,6 @@ export function ExportData() {
         s.attached.map((a): Cell[] => [a.owner, a.reg, a.phone, a.trips, rupeeCell(a.balancePaise)])),
     },
     {
-      name: 'Payroll', desc: 'Salaries, bhatta, net', count: s.payroll.length,
-      run: () => exportRows(`${brandSlug}-payroll`, ['Name', 'Role', 'Base (₹)', 'Bhatta (₹)', 'Deductions (₹)', 'Net (₹)', 'Status'],
-        s.payroll.map((p): Cell[] => [p.name, p.role, rupeeCell(p.basePaise), rupeeCell(p.bhattaPaise), rupeeCell(p.deductionsPaise), rupeeCell(p.netPaise), p.status])),
-    },
-    {
       name: 'Drivers', desc: 'Fleet drivers', count: s.drivers.length,
       run: () => exportRows(`${brandSlug}-drivers`, ['Name', 'Phone', 'Vehicle', 'Type', 'Duty', 'KYC', 'Rating'],
         s.drivers.map((d): Cell[] => [d.name, d.phone, d.vehicleReg, d.vehicleType, d.dutyStatus, d.kycStatus, d.ratingAvg])),
