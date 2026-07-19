@@ -1,19 +1,17 @@
 /**
- * Amazon export — matches the client's "Export file Amazon.xlsx" exactly.
+ * Amazon export — the client's "Export file Amazon.xlsx" shape, CORRECTED.
  *
- * 67 columns, ONE ROW PER VR ID (leg), six stops. Each stop is a block of
+ * 70 columns, ONE ROW PER VR ID (leg), six stops. Each stop is a regular block of
  * name / yard-arrival / arrival-time-per-POC / Sarva-POC-updated-time / feedback,
  * then the same for departure. "Sarva POC Updated Time" is when the POC recorded
  * the stop — in this app that IS the actual arrival/departure stamp, since the
  * POC updates the website at the stop, so the two columns coincide. "Feedback" is
  * the POC's per-stop note.
  *
- * Deliberate quirk, replicated from their file: **Stop 3 has no departure
- * time / POC / feedback columns** (6 columns where every other stop has 9). It's
- * almost certainly an oversight in their template, but "ensure the export matches
- * it exactly" means we reproduce it — an extra column here shifts every trailing
- * column and files data under the wrong header when they paste into their sheet.
- * Flagged to the client separately (see the defects note).
+ * NOTE: their sample file was 67 columns because Stop 3 was missing its three
+ * departure columns (Departure Time / POC Updated Time / Feedback) — an oversight
+ * we flagged. On the client's instruction we now emit the FULL nine-column block
+ * for every stop, so Stop 3 matches the rest and the sheet is 70 columns.
  */
 import type { Tour, TourLeg } from './store.js';
 
@@ -45,8 +43,8 @@ function headers(): string[] {
     'Sarva Express Equipment Type', 'Amazon Relay Equipment Type', 'Driver', 'Vehicle ID', 'Driver Number', "VENDOR'S NAME",
   ];
   for (let n = 1; n <= 6; n++) {
+    // Every stop gets the full nine columns now — Stop 3 included (corrected).
     h.push(`Stop ${n}`, `Stop ${n} Yard Arrival`, `Stop ${n} Arrival Time, Accordingly, POC In Website`, 'Sarva POC Updated Time', 'Feedback', `Stop ${n} Yard Departure`);
-    if (n === 3) continue; // Stop 3: no departure time / POC / feedback in their sheet
     h.push(`Stop ${n} Departure Time, Accordingly, POC In Website`, 'Sarva POC Updated Time', 'Feedback');
   }
   h.push('Sarva Status', 'PRESENT / Absent', 'No Load\\ Load', 'Advance / Adhoc Amount', 'Paid / Pending');
@@ -70,9 +68,6 @@ function legRow(t: Tour, leg: TourLeg): string[] {
       actualDT(s?.actualArrival),    // Sarva POC Updated Time (= when the POC updated)
       s?.feedback ?? '',             // Feedback (POC's per-stop note)
       schedDT(s?.departureAt),       // Yard Departure (scheduled)
-    );
-    if (n === 2) continue;           // Stop 3 (index 2) stops here — their quirk
-    row.push(
       actualDT(s?.actualDeparture),  // Departure Time, per the POC's check-out
       actualDT(s?.actualDeparture),  // Sarva POC Updated Time
       '',                            // Feedback — the stop note sits on arrival
@@ -114,7 +109,7 @@ export function exportAmazonSheet(tours: Tour[]): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `Export file Amazon - ${new Date().toISOString().slice(0, 10)}.xls`;
+  a.download = `Amazon Export - ${new Date().toISOString().slice(0, 10)}.xls`;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
