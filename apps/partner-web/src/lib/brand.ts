@@ -1,9 +1,12 @@
 /**
  * White-label brand config. The whole app reads its product name, tagline and
  * operating-company chrome from here, so one codebase ships under multiple
- * brands. Pick the brand at build time with VITE_BRAND (defaults to ShipVa):
+ * brands. Pick the brand at build time with VITE_BRAND. This deployment ships as
+ * Sarva Express, so that is the DEFAULT — a plain `npm run build` (no env file,
+ * as in this repo) must not fall back to the ShipVa demo brand. Override for
+ * another brand with VITE_BRAND, e.g.:
  *
- *   VITE_BRAND=sarva-express npm run build -w @shipva/partner-web
+ *   VITE_BRAND=shipva npm run build -w @shipva/partner-web
  */
 import sarvaIcon from '../assets/sarva-icon.png';
 import sarvaLogo from '../assets/sarva-logo.png';
@@ -43,9 +46,9 @@ const BRANDS: Record<string, Brand> = {
   },
 };
 
-const key = ((import.meta.env.VITE_BRAND as string | undefined) ?? 'shipva').toLowerCase();
+const key = ((import.meta.env.VITE_BRAND as string | undefined) ?? 'sarva-express').toLowerCase();
 
-export const BRAND: Brand = BRANDS[key] ?? BRANDS.shipva!;
+export const BRAND: Brand = BRANDS[key] ?? BRANDS['sarva-express']!;
 
 /** Two-letter initials for the avatar, derived from the operating company. */
 export const companyInitials = BRAND.company

@@ -1,0 +1,8 @@
+{
+  "hosting": {
+    "site": "sarva-express-253f2",
+    "public": "apps/partner-web/dist",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "rewrites": [{ "source": "**", "destination": "/index.html" }]
+  }
+}
