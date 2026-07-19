@@ -7,9 +7,11 @@ import { PartnerLayout } from '../../components/layout/PartnerLayout.js';
 import { Modal, Field, TextInput, DateTimeInput, Select, Row } from '../../components/ui/Modal.js';
 import { ImageUpload } from '../../components/ui/ImageUpload.js';
 import {
-  useStore, todayLabel, requestStatusLabel, dieselRequestFor,
+  useStore, todayLabel, requestStatusLabel, dieselRequestFor, stageOf, ownerStageOf,
   type Tour, type TourLeg, type TourLegStop,
 } from '../../lib/store.js';
+import { isVerified } from '../../lib/mocks.js';
+import { vendorStatus } from '../../lib/vendorDocs.js';
 import { useAuth } from '../../lib/auth.js';
 import { watchMembers, teamOf, type Member } from '../../lib/members.js';
 import { canEditRecords, roleLabel } from '../../lib/roles.js';
@@ -136,10 +138,29 @@ export function Tours() {
 
   const stopComplete = (s: StopDraft) => s.name.trim() && s.mapUrl.trim() && s.arrivalAt && s.departureAt;
   const legComplete = (l: LegDraft) => l.vrid.trim() && !l.error && l.stops.length > 0 && l.stops.every(stopComplete);
+  // Block-if-not-approved (the client's rule): a vendor past their day-9
+  // agreement deadline, or a truck/driver not yet document-verified, cannot be
+  // put on a route. Own-fleet has no vendor to block.
+  const selectedVendor = f.vendor && f.vendor !== OWN_FLEET
+    ? (customers.find((c) => c.name === f.vendor)
+        ?? attached.find((a) => (a.transporterName?.trim() || a.owner.trim()) === f.vendor))
+    : undefined;
+  const vendorBlocked = (() => {
+    if (!selectedVendor) return false;
+    const isOwner = 'owner' in selectedVendor;
+    const approved = isOwner ? ownerStageOf(selectedVendor) === 'active' : stageOf(selectedVendor) === 'active';
+    return vendorStatus(selectedVendor, { approved, hide: isOwner ? ['rateCard'] : [] }).level === 'blocked';
+  })();
+  const selDriver = drivers.find((d) => d.name === f.driver);
+  const selTruck = trucks.find((t) => t.reg === f.vehicleId);
+  const driverUnverified = !!selDriver && !isVerified(selDriver);
+  const truckUnverified = !!selTruck && !isVerified(selTruck);
+
   // G-pay & advance are no longer part of creating a route — they're asked for
   // in the Diesel Request. Requiring them here would make the form unsavable.
   const baseComplete = !!(f.serviceAt && f.vendor && f.driver && f.vehicleId && f.tourId.trim());
-  const valid = baseComplete && legs.length > 0 && legs.every(legComplete);
+  const valid = baseComplete && legs.length > 0 && legs.every(legComplete)
+    && !vendorBlocked && !driverUnverified && !truckUnverified;
 
   const missing: string[] = [];
   if (!f.serviceAt) missing.push('service date & time');
@@ -148,6 +169,13 @@ export function Tours() {
   if (!f.vehicleId) missing.push('vehicle');
   if (!f.tourId.trim()) missing.push('trip ID');
   if (!legs.every(legComplete)) missing.push('complete every VRID & its stops');
+
+  // Hard blocks are shown apart from missing fields — a blocked vendor or an
+  // unverified truck can't be assigned no matter what else is filled in.
+  const blocks: string[] = [];
+  if (vendorBlocked) blocks.push(`${f.vendor} is blocked — agreement overdue (past day ${8 + 1}). Approve it in Vendors Register first.`);
+  if (driverUnverified) blocks.push(`Driver ${f.driver} isn't document-verified yet.`);
+  if (truckUnverified) blocks.push(`Vehicle ${f.vehicleId} isn't document-verified yet.`);
 
   function resetForm() {
     const now = new Date(); now.setSeconds(0, 0);
@@ -425,7 +453,12 @@ export function Tours() {
         {/* Assigning the POC is a separate step now — it happens after Create
             route, so building the line and handing it to someone don't get
             muddled into one form (client's call). */}
-        {!valid && <p className="text-[11px] font-semibold" style={{ color: '#B15C00' }}>To create, still needed: {missing.join(' · ')}.</p>}
+        {blocks.length > 0 && (
+          <div className="rounded-lg bg-rose-50 px-3 py-2 text-[11px] font-semibold text-rose-700 ring-1 ring-inset ring-rose-100">
+            {blocks.map((b, i) => <div key={i} className="flex items-start gap-1.5"><AlertTriangle size={12} className="mt-px shrink-0" /> {b}</div>)}
+          </div>
+        )}
+        {missing.length > 0 && <p className="text-[11px] font-semibold" style={{ color: '#B15C00' }}>To create, still needed: {missing.join(' · ')}.</p>}
       </Modal>
 
       {/* ── Step 2: assign the freshly created route to a POC ─────────────── */}
