@@ -16,6 +16,7 @@ import { useAuth } from '../../lib/auth.js';
 import { rupees } from '../../lib/format.js';
 import { type TripStatus } from '../../lib/mocks.js';
 import { useStore } from '../../lib/store.js';
+import { buildBoard, inLane, type Lane } from '../../lib/board.js';
 import { BRAND } from '../../lib/brand.js';
 
 const TRIP_BADGE: Record<TripStatus, { label: string; tone: BadgeTone }> = {
@@ -45,8 +46,14 @@ function QuickAction({ to, icon, label }: { to: string; icon: React.ReactNode; l
 }
 
 export function Overview() {
-  const { trips, trucks, invoices, expenses, fuelLogs, payroll, drivers } = useStore();
+  const { trips, tours, trucks, invoices, expenses, fuelLogs, payroll, drivers } = useStore();
   const { member } = useAuth();
+  // "Trips by status" was counting ordinary trips only, so an operation that
+  // runs on Amazon tours saw 0 / 0 / 0. Count both, through the shared board
+  // lanes, the same way the Trips page groups them.
+  const board = buildBoard(tours, trips);
+  const laneCount = (lane: Lane) => board.filter((i) => inLane(i, lane)).length;
+  const tourLaneCount = (lane: Lane) => board.filter((i) => i.kind === 'tour' && inLane(i, lane)).length;
   const isLead = member?.role === 'owner' || member?.role === 'manager' || member?.role === 'team_leader';
   const inr = (n: number) => rupees(n);
 
@@ -63,16 +70,27 @@ export function Overview() {
   const marginPct = revenue > 0 ? Math.round((profit / revenue) * 100) : 0;
   const outstanding = invoices.filter((i) => i.status !== 'paid').reduce((s, i) => s + i.totalPaise, 0);
   const collected = invoices.filter((i) => i.status === 'paid').reduce((s, i) => s + i.totalPaise, 0);
-  const activeTrips = trips.filter((t) => t.status !== 'closed').length;
+  const activeTrips = board.filter((i) => !inLane(i, 'Completed')).length;
   const fuelActual = fuelLogs.reduce((s, f) => s + f.costPaise, 0);
   const fuelExpected = fuelLogs.reduce((s, f) => s + f.expectedPaise, 0);
   const fuelLeak = Math.max(0, fuelActual - fuelExpected);
   const collectPct = (collected + outstanding) > 0 ? Math.round((collected / (collected + outstanding)) * 100) : 0;
 
-  const statusCount = (st: TripStatus) => trips.filter((t) => t.status === st).length;
-  const scheduled = statusCount('assigned');
-  const ongoing = statusCount('loading') + statusCount('in_transit') + statusCount('at_drop') + statusCount('pod_pending');
-  const completed = statusCount('closed');
+  // The six-state breakdown is trip-specific; tours have no such states, so fold
+  // each tour into the representative bucket for its lane. That keeps the bar and
+  // legend populated for a tour-only operation instead of showing an empty strip.
+  const statusCount = (st: TripStatus) => {
+    const t = trips.filter((x) => x.status === st).length;
+    if (st === 'assigned') return t + tourLaneCount('Upcoming');
+    if (st === 'in_transit') return t + tourLaneCount('In Transit');
+    if (st === 'closed') return t + tourLaneCount('Completed');
+    return t;
+  };
+  // The three headline cards are the client's "Trips by status" — count by lane
+  // so they match the Trips page exactly.
+  const scheduled = laneCount('Upcoming');
+  const ongoing = laneCount('In Transit');
+  const completed = laneCount('Completed');
 
   const payrollTotal = payroll.reduce((s, p) => s + p.netPaise, 0);
   const catTotal = (labels: string[]) => expenses.filter((e) => labels.includes(e.category)).reduce((s, e) => s + e.amountPaise, 0);

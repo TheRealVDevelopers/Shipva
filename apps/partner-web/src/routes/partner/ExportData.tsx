@@ -6,6 +6,7 @@ import { Button } from '../../components/ui/Button.js';
 import { Modal } from '../../components/ui/Modal.js';
 import { Badge } from '../../components/ui/Badge.js';
 import { exportRows, rupeeCell, type Cell } from '../../lib/exportExcel.js';
+import { brandSlug } from '../../lib/brand.js';
 import { exportTourSheet } from '../../lib/exportTourSheet.js';
 import { parseTourSheet, matchExisting, type ParseResult } from '../../lib/importTourSheet.js';
 import { useStore, type Tour } from '../../lib/store.js';
@@ -62,47 +63,47 @@ export function ExportData() {
   const datasets: { name: string; desc: string; count: number; run: () => void }[] = [
     {
       name: 'Trips', desc: 'LRs, routes, freight, status, handled-by', count: s.trips.length,
-      run: () => exportRows('shipva-trips', ['VR ID', 'LR', 'Date', 'From', 'To', 'Driver', 'Vehicle', 'Material', 'Weight (kg)', 'Freight (₹)', 'E-way', 'Status', 'Handled by'],
+      run: () => exportRows(`${brandSlug}-trips`, ['VR ID', 'LR', 'Date', 'From', 'To', 'Driver', 'Vehicle', 'Material', 'Weight (kg)', 'Freight (₹)', 'E-way', 'Status', 'Handled by'],
         s.trips.map((t): Cell[] => [t.vrId ?? '', t.lr, t.date, t.from, t.to, t.driver, t.vehicleReg, t.material, t.weightKg, rupeeCell(t.freightPaise), t.ewayBill ? 'Yes' : 'No', t.status, t.ownerName ?? ''])),
     },
     {
       name: 'Invoices', desc: 'GST invoices & totals', count: s.invoices.length,
-      run: () => exportRows('shipva-invoices', ['Invoice', 'Client', 'Date', 'Due', 'Base (₹)', 'GST (₹)', 'Total (₹)', 'Status'],
+      run: () => exportRows(`${brandSlug}-invoices`, ['Invoice', 'Client', 'Date', 'Due', 'Base (₹)', 'GST (₹)', 'Total (₹)', 'Status'],
         s.invoices.map((i): Cell[] => [i.no, i.client, i.date, i.dueDate, rupeeCell(i.basePaise), rupeeCell(i.gstPaise), rupeeCell(i.totalPaise), i.status])),
     },
     {
       name: 'Expenses', desc: 'Trip costs by category', count: s.expenses.length,
-      run: () => exportRows('shipva-expenses', ['Date', 'Trip', 'Category', 'Note', 'Amount (₹)'],
+      run: () => exportRows(`${brandSlug}-expenses`, ['Date', 'Trip', 'Category', 'Note', 'Amount (₹)'],
         s.expenses.map((e): Cell[] => [e.date, e.tripLr, e.category, e.note, rupeeCell(e.amountPaise)])),
     },
     {
       name: 'Fuel logs', desc: 'Diesel & leakage', count: s.fuelLogs.length,
-      run: () => exportRows('shipva-fuel', ['Date', 'Vehicle', 'Km', 'Litres', 'Actual (₹)', 'Expected (₹)', 'OK'],
+      run: () => exportRows(`${brandSlug}-fuel`, ['Date', 'Vehicle', 'Km', 'Litres', 'Actual (₹)', 'Expected (₹)', 'OK'],
         s.fuelLogs.map((f): Cell[] => [f.date, f.reg, f.km, f.litres, rupeeCell(f.costPaise), rupeeCell(f.expectedPaise), f.ok ? 'Yes' : 'Flag'])),
     },
     {
       name: 'Customers', desc: 'Clients & rate contracts', count: s.customers.length,
-      run: () => exportRows('shipva-customers', ['Company', 'GSTIN', 'City', 'Phone', 'Rate/km (₹)', 'Outstanding (₹)'],
+      run: () => exportRows(`${brandSlug}-customers`, ['Company', 'GSTIN', 'City', 'Phone', 'Rate/km (₹)', 'Outstanding (₹)'],
         s.customers.map((c): Cell[] => [c.name, c.gstin, c.city, c.phone, rupeeCell(c.ratePerKmPaise), rupeeCell(c.outstandingPaise)])),
     },
     {
       name: 'Payables', desc: 'Truck-owner balances', count: s.attached.length,
-      run: () => exportRows('shipva-payables', ['Owner', 'Vehicle', 'Phone', 'Trips', 'Balance (₹)'],
+      run: () => exportRows(`${brandSlug}-payables`, ['Owner', 'Vehicle', 'Phone', 'Trips', 'Balance (₹)'],
         s.attached.map((a): Cell[] => [a.owner, a.reg, a.phone, a.trips, rupeeCell(a.balancePaise)])),
     },
     {
       name: 'Payroll', desc: 'Salaries, bhatta, net', count: s.payroll.length,
-      run: () => exportRows('shipva-payroll', ['Name', 'Role', 'Base (₹)', 'Bhatta (₹)', 'Deductions (₹)', 'Net (₹)', 'Status'],
+      run: () => exportRows(`${brandSlug}-payroll`, ['Name', 'Role', 'Base (₹)', 'Bhatta (₹)', 'Deductions (₹)', 'Net (₹)', 'Status'],
         s.payroll.map((p): Cell[] => [p.name, p.role, rupeeCell(p.basePaise), rupeeCell(p.bhattaPaise), rupeeCell(p.deductionsPaise), rupeeCell(p.netPaise), p.status])),
     },
     {
       name: 'Drivers', desc: 'Fleet drivers', count: s.drivers.length,
-      run: () => exportRows('shipva-drivers', ['Name', 'Phone', 'Vehicle', 'Type', 'Duty', 'KYC', 'Rating'],
+      run: () => exportRows(`${brandSlug}-drivers`, ['Name', 'Phone', 'Vehicle', 'Type', 'Duty', 'KYC', 'Rating'],
         s.drivers.map((d): Cell[] => [d.name, d.phone, d.vehicleReg, d.vehicleType, d.dutyStatus, d.kycStatus, d.ratingAvg])),
     },
     {
       name: 'Trucks', desc: 'Owned vehicles', count: s.trucks.length,
-      run: () => exportRows('shipva-trucks', ['Reg', 'Type', 'Capacity (kg)', 'Status', 'Docs OK'],
+      run: () => exportRows(`${brandSlug}-trucks`, ['Reg', 'Type', 'Capacity (kg)', 'Status', 'Docs OK'],
         s.trucks.map((t): Cell[] => [t.reg, t.type, t.capacityKg, t.status, t.docsOk ? 'Yes' : 'No'])),
     },
   ];

@@ -50,3 +50,7 @@ export const BRAND: Brand = BRANDS[key] ?? BRANDS.shipva!;
 /** Two-letter initials for the avatar, derived from the operating company. */
 export const companyInitials = BRAND.company
   .split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase();
+
+/** File-name-safe slug of the product name, for exported downloads — so a Sarva
+ *  Express export is "sarva-express-trips.csv", not "shipva-trips.csv". */
+export const brandSlug = BRAND.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
