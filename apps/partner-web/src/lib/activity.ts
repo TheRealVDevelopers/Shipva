@@ -67,9 +67,21 @@ export async function setBreak(uid: string, name: string, onBreak: boolean): Pro
 }
 
 export function watchAllToday(cb: (list: Activity[]) => void): () => void {
-  return onSnapshot(query(collection(db, 'orgActivity'), where('date', '==', todayKey())), (qs) => {
+  return watchActivityByDate(todayKey(), cb);
+}
+
+/** Every member's activity for one day (YYYY-MM-DD) — powers the activity log. */
+export function watchActivityByDate(date: string, cb: (list: Activity[]) => void): () => void {
+  return onSnapshot(query(collection(db, 'orgActivity'), where('date', '==', date)), (qs) => {
     cb(qs.docs.map((d) => fromSnap(d.data())));
   });
+}
+
+/** Break time in a day, derived: the span present minus time counted active.
+ *  The model tracks active time and a break flag, not a break tally, so this is
+ *  the honest approximation — never negative. */
+export function breakMs(a: Activity): number {
+  return Math.max(0, (a.lastAtMs - a.firstAtMs) - a.activeMs);
 }
 
 export function watchActivity(uid: string, cb: (a: Activity | null) => void): () => void {

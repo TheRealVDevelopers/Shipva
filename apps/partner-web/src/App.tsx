@@ -4,6 +4,7 @@ import { Overview } from './routes/partner/Overview.js';
 import { Trips } from './routes/partner/Trips.js';
 import { Tours } from './routes/partner/Tours.js';
 import { Team } from './routes/partner/Team.js';
+import { Activity } from './routes/partner/Activity.js';
 import { Customers } from './routes/partner/Customers.js';
 import { Documents } from './routes/partner/Documents.js';
 import { Invoices } from './routes/partner/Invoices.js';
@@ -74,6 +75,8 @@ export function App() {
       {Gated({ id: 'reports', path: '/p/reports', element: <Reports /> })}
       {Gated({ id: 'earnings', path: '/p/earnings', element: <Earnings /> })}
       {Gated({ id: 'team', path: '/p/team', element: <Team /> })}
+      {/* Activity log — leadership only, like the export (management view). */}
+      {Gated({ id: 'activity', path: '/p/activity', element: <Activity />, when: canExportData(member?.role) })}
       {Gated({ id: 'messages', path: '/p/messages', element: <Messages /> })}
       {Gated({ id: 'chat', path: '/p/chat', element: <Chat /> })}
       {/* Export is Admin + Team Leader only, per the client — role-gated on top

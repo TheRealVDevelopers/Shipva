@@ -5,7 +5,7 @@ import {
   HandCoins, BarChart3, TrendingUp, PackageSearch, Navigation, BadgeCheck, Building2,
   Settings as SettingsIcon, MessageCircle, MessagesSquare, FileSpreadsheet,
   Bell, Menu, X, Volume2, VolumeX, CheckCheck, LogOut, User as UserIcon, BookOpen, ExternalLink,
-  type LucideIcon,
+  Clock, type LucideIcon,
 } from 'lucide-react';
 import { LogoMark } from '../art.js';
 import { subscription } from '../../lib/mocks.js';
@@ -110,6 +110,7 @@ const NAV: NavItem[] = [
   { key: 'reports', to: '/p/reports', label: 'Reports', icon: BarChart3, group: 'Accounts' },
   { key: 'earnings', to: '/p/earnings', label: 'Earnings', icon: TrendingUp, group: 'Accounts' },
   { key: 'team', to: '/p/team', label: 'Team & Roles', icon: UserCog, group: 'Admin' },
+  { key: 'activity', to: '/p/activity', label: 'Activity Log', icon: Clock, group: 'Admin' },
   { key: 'messages', to: '/p/messages', label: 'WhatsApp', icon: MessageCircle, group: 'Tools' },
   { key: 'chat', to: '/p/chat', label: 'Team Chat', icon: MessagesSquare, group: 'Tools' },
   { key: 'export', to: '/p/export', label: 'Data Export', icon: FileSpreadsheet, group: 'Tools' },
@@ -122,10 +123,11 @@ const NAV: NavItem[] = [
 
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const { member } = useAuth();
-  // Export carries an extra rule the page permission can't express: Admin + Team
-  // Leader only, per the client. Mirrors the route gate in App.tsx.
+  // Export and the activity log carry an extra rule the page permission can't
+  // express: Admin + Team Leader only, per the client. Mirrors App.tsx.
+  const leadershipOnly = (k: FeatureId) => k === 'export' || k === 'activity';
   const visible = NAV.filter((n) => FEATURES[n.key] && memberCanAccess(member, n.key)
-    && (n.key !== 'export' || canExportData(member?.role)));
+    && (!leadershipOnly(n.key) || canExportData(member?.role)));
   let lastGroup: string | undefined;
   return (
     <>

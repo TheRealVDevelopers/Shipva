@@ -7,7 +7,7 @@
  * back to `true` to re-enable a section — nothing is deleted.
  */
 export type FeatureId =
-  | 'overview' | 'trips' | 'tours' | 'fleet' | 'team'
+  | 'overview' | 'trips' | 'tours' | 'fleet' | 'team' | 'activity'
   | 'customers' | 'payables'
   | 'invoices' | 'expenses' | 'payroll' | 'reports'
   | 'messages' | 'chat' | 'export'
@@ -17,6 +17,7 @@ export const FEATURES: Record<FeatureId, boolean> = {
   // ── Enabled for this client ──────────────────────────────
   overview: true,      // Admin dashboard home
   team: true,          // Admin — roles & staff
+  activity: true,      // Admin — employee activity log
   trips: true,         // Trip & route assignment
   tours: true,         // Amazon relay tours (55-col sheet)
   fleet: true,         // Truck & driver management

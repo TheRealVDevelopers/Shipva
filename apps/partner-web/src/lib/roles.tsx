@@ -18,7 +18,7 @@ export const ROLES: { id: Role; label: string; blurb: string }[] = [
 
 const OPS: FeatureId[] = ['overview', 'trips', 'tours', 'fleet', 'messages', 'chat'];
 const MONEY: FeatureId[] = ['overview', 'customers', 'invoices', 'expenses', 'payables', 'payroll', 'reports', 'export', 'messages', 'chat'];
-const LEAD: FeatureId[] = ['overview', 'trips', 'tours', 'fleet', 'messages', 'chat', 'team', 'export'];
+const LEAD: FeatureId[] = ['overview', 'trips', 'tours', 'fleet', 'messages', 'chat', 'team', 'export', 'activity'];
 
 /** Default sections each role gets when inviting them. 'all' = everything enabled. */
 export const ROLE_ACCESS: Record<Role, FeatureId[] | 'all'> = {
