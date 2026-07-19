@@ -62,6 +62,8 @@ export interface Truck {
   feet?: string | undefined;
   /** Vendor (truck owner) this vehicle belongs to; empty/undefined = own fleet. */
   vendor?: string | undefined;
+  /** Next scheduled service — powers the dashboard maintenance reminder. */
+  serviceDueDate?: string | undefined;
   /** Compliance documents — empty/undefined = not submitted. */
   rc?: string; insuranceNo?: string; insuranceExpiry?: string; fitnessNo?: string; fitnessExpiry?: string;
   /** Uploaded document images (compressed data-URLs; real storage with backend). */

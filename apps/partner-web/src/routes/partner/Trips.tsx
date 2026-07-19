@@ -17,7 +17,7 @@ import {
   requiredError, positiveError, normalizePhone, allClear,
 } from '../../lib/validate.js';
 import { isVerified, type Trip, type TripPoint } from '../../lib/mocks.js';
-import { useStore, stageOf, type Customer, type DelayReport } from '../../lib/store.js';
+import { useStore, stageOf, dieselRequestFor, requestStatusLabel, type Customer, type DelayReport, type Tour } from '../../lib/store.js';
 import { buildBoard, inLane, matches, sortForLane, isOverdue, type BoardItem, type Lane } from '../../lib/board.js';
 import { ReportDelay } from '../../components/ReportDelay.js';
 import { TourOperate } from './Tours.js';
@@ -203,7 +203,7 @@ function BoardRow({ item, expanded, onToggle, showOwner, canEdit, onReport, onTr
 }
 
 export function Trips() {
-  const { trips, tours, drivers, trucks, customers, savedPoints, addTrip, addSavedPoint, addDriver, advanceTrip, updateTrip, archiveTrip, updateTour } = useStore();
+  const { trips, tours, drivers, trucks, customers, requests, savedPoints, addTrip, addSavedPoint, addDriver, advanceTrip, updateTrip, archiveTrip, updateTour } = useStore();
   const { member } = useAuth();
   const isAdmin = member?.role === 'owner' || member?.role === 'manager';
   const canAssign = isAdmin || member?.role === 'team_leader';
@@ -263,16 +263,47 @@ export function Trips() {
     filter,
   );
 
-  /** Export exactly what's on screen — the tab, dates and search applied. */
+  /** Export exactly what's on screen — the tab, dates and search applied. The
+   *  full column set the client listed on page 2: trip ID, client, vehicle,
+   *  driver, routes, load, arrival/departure, VR IDs, ETAs, revised ETAs, delay +
+   *  reason codes, diesel request, source/dest KM, POD, remarks, feedback,
+   *  status and last-updated. (No trip sample sheet was supplied, so the order is
+   *  this list; layout will be matched once a sample arrives.) */
   function exportShown() {
-    exportRows(`sarva-${filter.toLowerCase().replace(/\s+/g, '-')}`,
-      ['Type', 'ID', 'VR IDs', 'Date', 'Route', 'Driver', 'Vehicle', 'Vehicle type', 'Distance', 'Status', 'Handled by'],
-      shown.map((i): Cell[] => [
-        i.kind === 'tour' ? 'Amazon tour' : 'Trip',
-        i.code, i.vrids.join(', '), i.dateLabel,
-        i.stops.map((s) => s.name).join(' → '),
-        i.driver, i.vehicle, i.vehicleType, i.distanceLabel, i.lane, i.ownerName,
-      ]));
+    const fmtTs = (ms?: number) => (ms ? new Date(ms).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false }) : '');
+    const stopTimes = (i: BoardItem, key: 'arrivalAt' | 'departureAt') => i.stops.map((s) => s[key] || '').filter(Boolean).map(fmtPlan).join(' · ');
+    exportRows(`sarva-trips-${filter.toLowerCase().replace(/\s+/g, '-')}`,
+      ['Type', 'Trip ID', 'Client / Vendor', 'Vehicle', 'Vehicle type', 'Driver', 'Driver no',
+        'Route', 'Load', 'Scheduled arrivals', 'Scheduled departures', 'VR IDs',
+        'ETA', 'Revised ETA', 'Delay reason(s)', 'Diesel request', 'Source→Dest KM',
+        'POD', 'Remarks', 'Feedback', 'Status', 'Last updated'],
+      shown.map((i): Cell[] => {
+        const t = i.kind === 'tour' ? (i.source as Tour) : null;
+        const trip = i.kind === 'trip' ? (i.source as Trip) : null;
+        const reps = i.source.reports ?? [];
+        const diesel = t ? dieselRequestFor(requests, t.id) : undefined;
+        const km = t ? [t.startKm, t.endKm].filter(Boolean).join('→') : '';
+        return [
+          i.kind === 'tour' ? 'Amazon tour' : 'Trip',
+          i.code,
+          t ? (t.vendorName ?? '') : (trip?.customer ?? ''),
+          i.vehicle, i.vehicleType, i.driver, i.driverNumber,
+          i.stops.map((s) => s.name).join(' → '),
+          i.legs.map((l) => l.loadType).filter(Boolean).join(', '),
+          stopTimes(i, 'arrivalAt'), stopTimes(i, 'departureAt'),
+          i.vrids.join(', '),
+          i.nextUpdateMs ? fmtActual(i.nextUpdateMs) : '',
+          reps.map((r) => r.estimatedAt).filter(Boolean).join(' · '),
+          reps.map((r) => `${r.event}: ${r.reason}`).join(' · '),
+          diesel ? requestStatusLabel(diesel) : '',
+          km || i.distanceLabel,
+          t?.podGiven ? 'Received' : '',
+          [t?.remarks, trip?.remark].filter(Boolean).join(' · '),
+          t?.feedback ?? '',
+          i.lane,
+          fmtTs(i.lastUpdatedMs),
+        ];
+      }));
     push({ title: 'Exported', body: `${shown.length} run${shown.length === 1 ? '' : 's'} downloaded.`, tone: 'success' });
   }
 

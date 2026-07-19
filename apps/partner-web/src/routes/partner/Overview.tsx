@@ -152,9 +152,9 @@ export function Overview() {
     return isNaN(t) ? null : { reg, doc, days: Math.round((t - nowMs) / 86400000) };
   };
   const liveAlerts: Alert[] = [
-    ...trucks.flatMap((t) => [mkAlert(t.reg, 'Insurance', t.insuranceExpiry), mkAlert(t.reg, 'Fitness', t.fitnessExpiry)]),
+    ...trucks.flatMap((t) => [mkAlert(t.reg, 'Insurance', t.insuranceExpiry), mkAlert(t.reg, 'Fitness', t.fitnessExpiry), mkAlert(t.reg, 'Service due', t.serviceDueDate)]),
     ...drivers.map((d) => mkAlert(d.name, 'Licence', d.licenseExpiry)),
-  ].filter((x): x is Alert => x !== null && x.days <= 60).sort((a, b) => a.days - b.days).slice(0, 5);
+  ].filter((x): x is Alert => x !== null && x.days <= 60).sort((a, b) => a.days - b.days).slice(0, 6);
 
   // ── Operations pulse (team leader / admin) ──────────────────────────────────
   const activeRuns = board.filter((i) => !inLane(i, 'Completed'));

@@ -511,8 +511,9 @@ function EditTruckBody({ truck, vendorNames, onSave }: {
   const [type, setType] = useState(truck.type);
   const [capacityKg, setCapacityKg] = useState(String(truck.capacityKg));
   const [vendor, setVendor] = useState(truck.vendor ?? '');
+  const [serviceDue, setServiceDue] = useState(truck.serviceDueDate ?? '');
   const errs = { reg: vehicleRegError(reg), capacityKg: positiveError(capacityKg, 'Capacity') };
-  const dirty = reg !== truck.reg || type !== truck.type || Number(capacityKg) !== truck.capacityKg || vendor !== (truck.vendor ?? '');
+  const dirty = reg !== truck.reg || type !== truck.type || Number(capacityKg) !== truck.capacityKg || vendor !== (truck.vendor ?? '') || serviceDue !== (truck.serviceDueDate ?? '');
   const options = vendor && !vendorNames.includes(vendor) ? [vendor, ...vendorNames] : vendorNames;
   return (
     <div className="space-y-3.5">
@@ -527,9 +528,13 @@ function EditTruckBody({ truck, vendorNames, onSave }: {
         <TruckTypeField value={type} onChange={setType} />
         <Field label="Capacity (kg)" required error={errs.capacityKg}><TextInput type="number" value={capacityKg} onChange={(e) => setCapacityKg(e.target.value)} /></Field>
       </Row>
+      {/* Next service — drives the dashboard maintenance reminder. */}
+      <Field label="Next service due" hint="Optional — shows as a maintenance reminder on the dashboard">
+        <DateInput value={serviceDue} onChange={setServiceDue} />
+      </Field>
       <button type="button" disabled={!dirty || !allClear(errs)}
         // '' not undefined: the shared-collection writer strips undefined keys.
-        onClick={() => onSave({ reg: reg.trim().toUpperCase(), type, capacityKg: Number(capacityKg), vendor: vendor || '' })}
+        onClick={() => onSave({ reg: reg.trim().toUpperCase(), type, capacityKg: Number(capacityKg), vendor: vendor || '', serviceDueDate: serviceDue || '' })}
         className="w-full rounded-lg bg-primary-500 py-2 text-xs font-bold text-white hover:bg-primary-600 disabled:opacity-40">
         Save changes
       </button>
