@@ -50,8 +50,41 @@ export interface BoardItem {
   distanceLabel: string;
   ownerUid: string;
   ownerName: string;
+  /** Earliest scheduled stop time not yet stamped — the next expected update.
+   *  Drives Upcoming's "earliest first" and In Transit's overdue detection. */
+  nextUpdateMs?: number | undefined;
+  /** Most recent actual check-in/out stamp — "last updated". */
+  lastUpdatedMs?: number | undefined;
   /** The record behind it, for actions that need the real thing. */
   source: Tour | Trip;
+}
+
+const parseDt = (dt?: string): number | undefined => {
+  if (!dt) return undefined;
+  const t = new Date(dt).getTime();
+  return Number.isNaN(t) ? undefined : t;
+};
+
+/** From a run's stops: the next scheduled time still awaiting a stamp, and the
+ *  latest actual stamp. Used for schedule-based sorting and overdue detection. */
+function timingOf(legs: { stops: BoardStop[] }[]): { nextUpdateMs?: number | undefined; lastUpdatedMs?: number | undefined } {
+  let next: number | undefined;
+  let last: number | undefined;
+  for (const leg of legs) for (const s of leg.stops) {
+    for (const a of [s.actualArrival, s.actualDeparture]) {
+      if (typeof a === 'number') last = last === undefined ? a : Math.max(last, a);
+    }
+    const pending: [string | undefined, number | undefined][] = [
+      [s.arrivalAt, s.actualArrival], [s.departureAt, s.actualDeparture],
+    ];
+    for (const [sched, actual] of pending) {
+      if (actual === undefined) {
+        const m = parseDt(sched);
+        if (m !== undefined) next = next === undefined ? m : Math.min(next, m);
+      }
+    }
+  }
+  return { nextUpdateMs: next, lastUpdatedMs: last };
 }
 
 const tourLane = (t: Tour): Lane =>
@@ -101,6 +134,7 @@ export function fromTour(t: Tour): BoardItem {
     legs,
     distanceLabel: km ? `${km} km` : '',
     ownerUid: t.ownerUid ?? '', ownerName: t.ownerName ?? '',
+    ...timingOf(legs),
     source: t,
   };
 }
@@ -140,6 +174,32 @@ export function buildBoard(tours: Tour[], trips: Trip[]): BoardItem[] {
 }
 
 export const inLane = (i: BoardItem, lane: Lane): boolean => i.lane === lane;
+
+/** An In-Transit run whose next scheduled update time has passed with no stamp.
+ *  The client wants these marked "pending" and pinned to the top. */
+export function isOverdue(i: BoardItem, now = Date.now()): boolean {
+  return i.lane === 'In Transit' && i.nextUpdateMs !== undefined && i.nextUpdateMs < now;
+}
+
+/**
+ * Lane-specific ordering, per the client's page 2:
+ *  - Upcoming: by scheduled/reporting time, earliest first (not creation order);
+ *  - In Transit: overdue ("pending") first, then by next expected update time;
+ *  - Completed: most recently finished first.
+ */
+export function sortForLane(items: BoardItem[], lane: Lane, now = Date.now()): BoardItem[] {
+  const sched = (i: BoardItem) => i.nextUpdateMs ?? i.startMs;
+  const copy = [...items];
+  if (lane === 'Upcoming') return copy.sort((a, b) => sched(a) - sched(b));
+  if (lane === 'In Transit') {
+    return copy.sort((a, b) => {
+      const oa = isOverdue(a, now) ? 0 : 1;
+      const ob = isOverdue(b, now) ? 0 : 1;
+      return oa - ob || sched(a) - sched(b);
+    });
+  }
+  return copy.sort((a, b) => b.startMs - a.startMs); // Completed: newest first
+}
 
 /** Free-text search across the fields people actually search by. */
 export function matches(i: BoardItem, q: string): boolean {

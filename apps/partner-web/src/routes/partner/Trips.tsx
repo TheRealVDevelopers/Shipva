@@ -18,7 +18,7 @@ import {
 } from '../../lib/validate.js';
 import { isVerified, type Trip, type TripPoint } from '../../lib/mocks.js';
 import { useStore, stageOf, type Customer, type DelayReport } from '../../lib/store.js';
-import { buildBoard, inLane, matches, type BoardItem, type Lane } from '../../lib/board.js';
+import { buildBoard, inLane, matches, sortForLane, isOverdue, type BoardItem, type Lane } from '../../lib/board.js';
 import { ReportDelay } from '../../components/ReportDelay.js';
 import { useAuth } from '../../lib/auth.js';
 import { watchMembers, teamOf, type Member } from '../../lib/members.js';
@@ -70,9 +70,10 @@ function BoardRow({ item, expanded, onToggle, showOwner, canEdit, onReport, onTr
   const next = trip ? steps[cur + 1] : undefined;
   const finished = trip ? cur >= steps.length - 1 : item.lane === 'Completed';
   const reports = item.source.reports ?? [];
+  const overdue = isOverdue(item);
 
   return (
-    <div className={expanded ? 'bg-primary-50/20' : ''}>
+    <div className={`${overdue ? 'border-l-2 border-rose-400 bg-rose-50/30' : ''} ${expanded ? 'bg-primary-50/20' : ''}`}>
       {/* Collapsed line */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-3 hover:bg-neutral-50/70">
         <button onClick={onToggle} className="flex min-w-0 flex-1 items-center gap-2 text-left" aria-expanded={expanded}>
@@ -90,7 +91,13 @@ function BoardRow({ item, expanded, onToggle, showOwner, canEdit, onReport, onTr
           {item.distanceLabel && <span className="font-semibold text-neutral-700">{item.distanceLabel}</span>}
           {item.vehicleType && <span>{item.vehicleType}</span>}
           <span className="font-mono">{item.vehicle || '—'}</span>
-          <Badge tone={LANE_TONE[item.lane]}>{item.lane}</Badge>
+          {/* Overdue on its next scheduled update — the client's "mark as pending". */}
+          {overdue
+            ? <span title={item.nextUpdateMs ? `Update was due ${fmtActual(item.nextUpdateMs)}` : 'Update overdue'}><Badge tone="danger"><AlertTriangle size={10} /> Pending</Badge></span>
+            : <Badge tone={LANE_TONE[item.lane]}>{item.lane}</Badge>}
+          {item.lane === 'In Transit' && item.lastUpdatedMs && (
+            <span className="text-neutral-400" title="Last updated">upd {fmtActual(item.lastUpdatedMs)}</span>
+          )}
           {reports.length > 0 && (
             <span className="inline-flex items-center gap-1 rounded bg-amber-50 px-1.5 py-0.5 font-bold text-amber-700" title={`${reports.length} delay report${reports.length === 1 ? '' : 's'}`}>
               <AlertTriangle size={10} /> {reports.length}
@@ -237,7 +244,12 @@ export function Trips() {
     return true;
   };
 
-  const shown = board.filter((i) => inLane(i, filter)).filter(inDateWindow).filter((i) => matches(i, q));
+  // Sorted by lane, per the client: Upcoming earliest-first by schedule, In
+  // Transit with overdue ("pending") pinned to the top, Completed newest-first.
+  const shown = sortForLane(
+    board.filter((i) => inLane(i, filter)).filter(inDateWindow).filter((i) => matches(i, q)),
+    filter,
+  );
 
   /** Export exactly what's on screen — the tab, dates and search applied. */
   function exportShown() {
