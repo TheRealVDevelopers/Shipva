@@ -1,8 +1,9 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   IndianRupee, TrendingUp, Wallet, Navigation, Fuel, AlertTriangle, ArrowRight,
   Users, Truck as TruckIcon, FileText, Plus, Gauge as GaugeIcon,
+  Clock, Timer, Route as RouteIcon, CheckCircle2, Wrench, Circle,
 } from 'lucide-react';
 import { PartnerLayout } from '../../components/layout/PartnerLayout.js';
 import { Card, CardHeader, CardBody } from '../../components/ui/Card.js';
@@ -16,8 +17,12 @@ import { useAuth } from '../../lib/auth.js';
 import { rupees } from '../../lib/format.js';
 import { type TripStatus } from '../../lib/mocks.js';
 import { useStore } from '../../lib/store.js';
-import { buildBoard, inLane, type Lane } from '../../lib/board.js';
+import { buildBoard, inLane, isOverdue, type Lane } from '../../lib/board.js';
+import { watchAllToday, presence, type Activity } from '../../lib/activity.js';
 import { BRAND } from '../../lib/brand.js';
+
+/** No update seen in this long, on an In-Transit run, is worth a nudge. */
+const STALE_UPDATE_MS = 30 * 60 * 1000;
 
 const TRIP_BADGE: Record<TripStatus, { label: string; tone: BadgeTone }> = {
   assigned: { label: 'Assigned', tone: 'info' },
@@ -54,8 +59,18 @@ export function Overview() {
   const board = buildBoard(tours, trips);
   const laneCount = (lane: Lane) => board.filter((i) => inLane(i, lane)).length;
   const tourLaneCount = (lane: Lane) => board.filter((i) => i.kind === 'tour' && inLane(i, lane)).length;
-  const isLead = member?.role === 'owner' || member?.role === 'manager' || member?.role === 'team_leader';
+  // Three dashboards, by role: an admin (owner/manager) sees everything incl.
+  // money; a team leader sees the ops pulse + their team but not company money;
+  // an ordinary employee (supervisor) gets the lightweight view — their day and
+  // operational counts, no revenue or vendor money. The accountant keeps money.
+  const isAdmin = member?.role === 'owner' || member?.role === 'manager';
+  const isLead = isAdmin || member?.role === 'team_leader';
+  const seesMoney = isAdmin || member?.role === 'accountant';
   const inr = (n: number) => rupees(n);
+
+  // Live presence, for the "active now / on break" pulse (leads only render it).
+  const [activity, setActivity] = useState<Activity[]>([]);
+  useEffect(() => { if (isLead) return watchAllToday(setActivity); }, [isLead]);
 
   const onTrip = trucks.filter((t) => t.status === 'on_trip').length;
   const available = trucks.filter((t) => t.status === 'available').length;
@@ -141,29 +156,89 @@ export function Overview() {
     ...drivers.map((d) => mkAlert(d.name, 'Licence', d.licenseExpiry)),
   ].filter((x): x is Alert => x !== null && x.days <= 60).sort((a, b) => a.days - b.days).slice(0, 5);
 
+  // ── Operations pulse (team leader / admin) ──────────────────────────────────
+  const activeRuns = board.filter((i) => !inLane(i, 'Completed'));
+  const inTransitRuns = board.filter((i) => inLane(i, 'In Transit'));
+  const overdueRuns = inTransitRuns.filter((i) => isOverdue(i, nowMs));
+  const staleRuns = inTransitRuns.filter((i) => !i.lastUpdatedMs || nowMs - i.lastUpdatedMs > STALE_UPDATE_MS);
+  const delayedRuns = board.filter((i) => (i.source.reports?.length ?? 0) > 0 && !inLane(i, 'Completed'));
+  // On-time = active runs not currently overdue on their next update.
+  const onTimePct = activeRuns.length ? Math.round(((activeRuns.length - overdueRuns.length) / activeRuns.length) * 100) : 100;
+  // Delay rate = active runs carrying at least one delay report.
+  const delayPct = activeRuns.length ? Math.round((delayedRuns.length / activeRuns.length) * 100) : 0;
+  const updatedRuns = inTransitRuns.length - staleRuns.length;
+  const activeNow = activity.filter((a) => presence(a) === 'active').length;
+  const onBreakNow = activity.filter((a) => presence(a) === 'break').length;
+  // Runs that need a look: overdue on schedule, or no update in 30+ minutes.
+  const attention = [...new Set([...overdueRuns, ...staleRuns])].slice(0, 6);
+
+  const todayLabel = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
+
   return (
-    <PartnerLayout title="Dashboard" subtitle={`${BRAND.company} · June 2026`}>
+    <PartnerLayout title="Dashboard" subtitle={`${BRAND.company} · ${todayLabel}`}>
       <div className="space-y-6">
         {/* Owner/manager/team-leader see their team; workers see their own day */}
         {isLead ? <TeamMix /> : <MyDayStrip />}
 
-        {/* Quick actions */}
+        {/* Quick actions — everyone gets the operational ones. */}
         <div className="flex flex-wrap items-center gap-2">
           <QuickAction to="/p/trips" icon={<Plus size={13} />} label="New Trip" />
-          <QuickAction to="/p/invoices" icon={<FileText size={13} />} label="Add MIS" />
+          <QuickAction to="/p/tours" icon={<RouteIcon size={13} />} label="Route Assign" />
           <QuickAction to="/p/fleet" icon={<Users size={13} />} label="Add driver" />
-          <QuickAction to="/p/expenses" icon={<Fuel size={13} />} label="Log fuel" />
+          {seesMoney && <QuickAction to="/p/invoices" icon={<FileText size={13} />} label="Add MIS" />}
+          {seesMoney && <QuickAction to="/p/expenses" icon={<Fuel size={13} />} label="Log fuel" />}
         </div>
 
-        {/* Hero KPIs */}
-        <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 stagger">
-          {/* No sparklines: the old ones were hardcoded demo curves that bore no
-              relation to the figure above them. */}
-          <StatCard label="Revenue" value={inr(revenue)} icon={<IndianRupee size={16} />} tone="primary" hint="gross freight" />
-          <StatCard label="Net profit" value={inr(profit)} icon={<TrendingUp size={16} />} tone="success" hint={`${marginPct}% margin`} />
-          <StatCard label="Outstanding" value={inr(outstanding)} icon={<Wallet size={16} />} tone="danger" hint="receivables" />
-          <StatCard label="Active trips" value={String(activeTrips)} icon={<Navigation size={16} />} tone="accent" hint={`${trips.length} total`} />
-        </section>
+        {/* Operations pulse — team leader & admin. Summaries, not money: on-time,
+            delays, updates and who's online, per the client's ops-lead brief. */}
+        {isLead && (
+          <section className="grid grid-cols-2 gap-4 lg:grid-cols-4 stagger">
+            <StatCard label="On-time" value={`${onTimePct}%`} icon={<CheckCircle2 size={16} />} tone={onTimePct >= 90 ? 'success' : onTimePct >= 70 ? 'accent' : 'danger'} hint={`${activeRuns.length} active runs`} />
+            <StatCard label="Delay rate" value={`${delayPct}%`} icon={<Timer size={16} />} tone={delayPct === 0 ? 'success' : delayPct <= 20 ? 'accent' : 'danger'} hint={`${delayedRuns.length} with a report`} />
+            <StatCard label="Updated" value={`${updatedRuns}/${inTransitRuns.length}`} icon={<Navigation size={16} />} tone={staleRuns.length === 0 ? 'success' : 'danger'} hint={`${staleRuns.length} need an update`} />
+            <StatCard label="Online now" value={String(activeNow)} icon={<Circle size={16} />} tone="primary" hint={`${onBreakNow} on break`} />
+          </section>
+        )}
+
+        {/* Needs attention — overdue or no-update-in-30-min runs (leads). */}
+        {isLead && attention.length > 0 && (
+          <Card>
+            <CardHeader title="Needs attention" subtitle="Overdue on schedule, or no update in 30+ minutes"
+              action={<Link to="/p/trips?f=In Transit" className="text-xs font-bold text-primary-600">In transit →</Link>} />
+            <div className="divide-y divide-neutral-100">
+              {attention.map((i) => {
+                const stale = !i.lastUpdatedMs || nowMs - i.lastUpdatedMs > STALE_UPDATE_MS;
+                const over = isOverdue(i, nowMs);
+                return (
+                  <div key={`${i.kind}-${i.id || i.code}`} className="flex items-center gap-3 px-5 py-2.5">
+                    <AlertTriangle size={15} className="shrink-0 text-rose-500" />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-xs font-bold text-neutral-900">{i.code}</span>
+                        <span className={`rounded px-1.5 py-0.5 text-[10px] font-extrabold uppercase ${i.kind === 'tour' ? 'bg-amber-100 text-amber-800' : 'bg-neutral-100 text-neutral-600'}`}>{i.kind === 'tour' ? 'Amazon' : 'Trip'}</span>
+                        <span className="truncate text-xs text-neutral-500">{i.driver || '—'}{i.vehicle ? ` · ${i.vehicle}` : ''}</span>
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      {over && <Badge tone="danger">Overdue</Badge>}
+                      {stale && <Badge tone="warning">No update</Badge>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+        )}
+
+        {/* Money KPIs — admin & accountant only (employees see no revenue). */}
+        {seesMoney && (
+          <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 stagger">
+            <StatCard label="Revenue" value={inr(revenue)} icon={<IndianRupee size={16} />} tone="primary" hint="gross freight" />
+            <StatCard label="Net profit" value={inr(profit)} icon={<TrendingUp size={16} />} tone="success" hint={`${marginPct}% margin`} />
+            <StatCard label="Outstanding" value={inr(outstanding)} icon={<Wallet size={16} />} tone="danger" hint="receivables" />
+            <StatCard label="Active trips" value={String(activeTrips)} icon={<Navigation size={16} />} tone="accent" hint={`${board.length} total runs`} />
+          </section>
+        )}
 
         {/* Trips by status — one-glance view of where every trip stands */}
         <Card>
@@ -208,7 +283,8 @@ export function Overview() {
           </CardBody>
         </Card>
 
-        {/* Charts row */}
+        {/* Charts row — money, admin & accountant only */}
+        {seesMoney && (
         <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <Card className="lg:col-span-2">
             <CardHeader title="Revenue vs expense" subtitle="Trend · current month is live" />
@@ -233,8 +309,10 @@ export function Overview() {
             </CardBody>
           </Card>
         </section>
+        )}
 
-        {/* Money health row */}
+        {/* Money health row — admin & accountant only */}
+        {seesMoney && (
         <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Outstanding — live unpaid invoices */}
           <Card>
@@ -293,6 +371,7 @@ export function Overview() {
             </CardBody>
           </Card>
         </section>
+        )}
 
         {/* Live trips + fleet + alerts */}
         <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -310,7 +389,7 @@ export function Overview() {
                     <div className="mt-0.5 truncate text-xs text-neutral-500">{t.from} → {t.to} · {t.driver}</div>
                   </div>
                   <div className="text-right">
-                    <div className="text-sm font-bold text-neutral-900">{inr(t.freightPaise)}</div>
+                    {seesMoney && <div className="text-sm font-bold text-neutral-900">{inr(t.freightPaise)}</div>}
                     <div className="text-[10px] text-neutral-400">{t.weightKg.toLocaleString('en-IN')} kg</div>
                   </div>
                 </div>
@@ -336,11 +415,13 @@ export function Overview() {
               </CardBody>
             </Card>
 
-            {/* Document expiry alerts */}
+            {/* Maintenance & compliance reminders — insurance, fitness and licence
+                expiry (the client's "maintenance reminders"). */}
             <Card>
-              <CardHeader title="Document alerts" subtitle="Expiring soon" action={<Badge tone={liveAlerts.length ? 'danger' : 'success'}>{liveAlerts.length}</Badge>} />
+              <CardHeader title="Maintenance & compliance" subtitle="Renewals due soon"
+                action={<span className="inline-flex items-center gap-1 text-xs font-bold text-neutral-500"><Wrench size={13} /> <Badge tone={liveAlerts.length ? 'danger' : 'success'}>{liveAlerts.length}</Badge></span>} />
               <CardBody className="space-y-2">
-                {liveAlerts.length === 0 && <p className="text-sm text-neutral-500">All documents valid.</p>}
+                {liveAlerts.length === 0 && <p className="text-sm text-neutral-500">Insurance, fitness &amp; licences all valid.</p>}
                 {liveAlerts.map((d) => (
                   <div key={`${d.reg}-${d.doc}`} className={`flex items-center gap-2.5 rounded-lg p-2.5 ring-1 ring-inset ${d.days <= 7 ? 'bg-rose-50 ring-rose-100' : 'bg-amber-50 ring-amber-100'}`}>
                     <AlertTriangle size={15} className={d.days <= 7 ? 'text-rose-500' : 'text-amber-500'} />
@@ -368,11 +449,19 @@ export function Overview() {
             <div><div className="text-lg font-extrabold text-neutral-900">{drivers.length}</div><div className="text-xs text-neutral-500">Drivers</div></div>
             <ArrowRight size={15} className="ml-auto text-neutral-300" />
           </Link>
-          <Link to="/p/expenses" className="flex items-center gap-3 rounded-xl bg-white p-4 shadow-sm ring-1 ring-inset ring-neutral-200 transition hover:-translate-y-0.5 hover:ring-primary-200">
-            <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-violet-50 text-violet-600"><Fuel size={18} /></span>
-            <div><div className="text-lg font-extrabold text-neutral-900">{inr(fuelActual)}</div><div className="text-xs text-neutral-500">Fuel</div></div>
-            <ArrowRight size={15} className="ml-auto text-neutral-300" />
-          </Link>
+          {seesMoney ? (
+            <Link to="/p/expenses" className="flex items-center gap-3 rounded-xl bg-white p-4 shadow-sm ring-1 ring-inset ring-neutral-200 transition hover:-translate-y-0.5 hover:ring-primary-200">
+              <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-violet-50 text-violet-600"><Fuel size={18} /></span>
+              <div><div className="text-lg font-extrabold text-neutral-900">{inr(fuelActual)}</div><div className="text-xs text-neutral-500">Fuel</div></div>
+              <ArrowRight size={15} className="ml-auto text-neutral-300" />
+            </Link>
+          ) : (
+            <Link to="/p/tours" className="flex items-center gap-3 rounded-xl bg-white p-4 shadow-sm ring-1 ring-inset ring-neutral-200 transition hover:-translate-y-0.5 hover:ring-primary-200">
+              <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-50 text-amber-600"><RouteIcon size={18} /></span>
+              <div><div className="text-lg font-extrabold text-neutral-900">{tours.filter((t) => !t.archived).length}</div><div className="text-xs text-neutral-500">Amazon tours</div></div>
+              <ArrowRight size={15} className="ml-auto text-neutral-300" />
+            </Link>
+          )}
           <Link to="/p/trips" className="flex items-center gap-3 rounded-xl bg-white p-4 shadow-sm ring-1 ring-inset ring-neutral-200 transition hover:-translate-y-0.5 hover:ring-primary-200">
             <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-orange-50 text-orange-600"><Navigation size={18} /></span>
             <div><div className="text-lg font-extrabold text-neutral-900">{trips.length}</div><div className="text-xs text-neutral-500">Trips</div></div>
