@@ -16,7 +16,7 @@ import { canEditRecords, roleLabel } from '../../lib/roles.js';
 import { vendorNamesOf, driversForVendor, trucksForVendor } from '../../lib/vendors.js';
 import { Badge } from '../../components/ui/Badge.js';
 import { vridHolder, updateTourLegs } from '../../lib/tours.js';
-import { exportTourSheet } from '../../lib/exportTourSheet.js';
+import { exportAmazonSheet } from '../../lib/exportAmazonSheet.js';
 import { vendorMessage, driverMessage, dieselRequestMessage, waLink } from '../../lib/tourMessages.js';
 import { requiredError, phoneError, positiveError, normalizePhone, allClear } from '../../lib/validate.js';
 import { useNotify } from '../../lib/notify.js';
@@ -291,7 +291,7 @@ export function Tours() {
               </div>
               {/* Export is Admin/TL only, per the client. */}
               {canEdit && (
-                <button onClick={() => exportTourSheet(shown)} className="hidden items-center gap-1.5 rounded-lg bg-white/10 px-3 py-2 text-xs font-bold text-white ring-1 ring-inset ring-white/15 hover:bg-white/15 sm:inline-flex"><FileSpreadsheet size={13} /> Export</button>
+                <button onClick={() => exportAmazonSheet(shown)} className="hidden items-center gap-1.5 rounded-lg bg-white/10 px-3 py-2 text-xs font-bold text-white ring-1 ring-inset ring-white/15 hover:bg-white/15 sm:inline-flex"><FileSpreadsheet size={13} /> Export</button>
               )}
               <button onClick={() => { resetForm(); setOpen(true); }} className="inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-extrabold shadow-sm" style={{ background: ORANGE, color: INK }}><RouteIcon size={14} /> Route Assign</button>
             </div>
