@@ -20,6 +20,7 @@ import { isVerified, type Trip, type TripPoint } from '../../lib/mocks.js';
 import { useStore, stageOf, type Customer, type DelayReport } from '../../lib/store.js';
 import { buildBoard, inLane, matches, sortForLane, isOverdue, type BoardItem, type Lane } from '../../lib/board.js';
 import { ReportDelay } from '../../components/ReportDelay.js';
+import { TourOperate } from './Tours.js';
 import { useAuth } from '../../lib/auth.js';
 import { watchMembers, teamOf, type Member } from '../../lib/members.js';
 import { canEditRecords } from '../../lib/roles.js';
@@ -58,10 +59,10 @@ const fmtActual = (ms?: number) => (ms ? new Date(ms).toLocaleString('en-IN', { 
  * from its own line board, and pretending otherwise would offer buttons that do
  * nothing.
  */
-function BoardRow({ item, expanded, onToggle, showOwner, canEdit, onReport, onTrack, onPrintLR, onEdit, onDelete, onAdvance }: {
+function BoardRow({ item, expanded, onToggle, showOwner, canEdit, onReport, onTrack, onPrintLR, onEdit, onDelete, onAdvance, onUpdate }: {
   item: BoardItem; expanded: boolean; onToggle: () => void; showOwner: boolean; canEdit: boolean;
   onReport: () => void; onTrack: () => void; onPrintLR: () => void;
-  onEdit: () => void; onDelete: () => void; onAdvance: () => void;
+  onEdit: () => void; onDelete: () => void; onAdvance: () => void; onUpdate: () => void;
 }) {
   const isTour = item.kind === 'tour';
   const trip = isTour ? null : (item.source as Trip);
@@ -169,6 +170,13 @@ function BoardRow({ item, expanded, onToggle, showOwner, canEdit, onReport, onTr
               <button onClick={onReport} className="inline-flex items-center gap-1 rounded-lg bg-white px-2.5 py-1.5 text-xs font-bold text-amber-700 ring-1 ring-inset ring-amber-200 hover:bg-amber-50">
                 <AlertTriangle size={12} /> Report
               </button>
+              {/* Amazon tours are updated here now, not on the Amazon Tours board:
+                  present/absent, load, KM, photos, and submit-to-complete. */}
+              {isTour && (
+                <button onClick={onUpdate} className="inline-flex items-center gap-1 rounded-lg bg-primary-500 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-primary-600">
+                  <Navigation size={12} /> Update
+                </button>
+              )}
               {!isTour && (
                 <>
                   {!finished && next && (
@@ -209,6 +217,10 @@ export function Trips() {
   /** Which row is expanded into its Stop / Equipment / Arrival / Departure detail. */
   const [openRow, setOpenRow] = useState<string | null>(null);
   const [reportFor, setReportFor] = useState<BoardItem | null>(null);
+  // The operational update for an Amazon tour now lives here in Trips. Hold the
+  // id and look the live record up, so a save re-renders instead of freezing.
+  const [operateId, setOperateId] = useState<string | null>(null);
+  const operating = operateId ? tours.find((t) => t.id === operateId) ?? null : null;
   const [q, setQ] = useState('');
   const [open, setOpen] = useState(false);
   const [f, setF] = useState(EMPTY);
@@ -483,6 +495,7 @@ export function Trips() {
                 onEdit={() => i.kind === 'trip' ? startEdit(i.source as Trip) : navigate('/p/tours')}
                 onDelete={() => i.kind === 'trip' && setConfirmDel(i.source as Trip)}
                 onAdvance={() => i.kind === 'trip' && advanceOnCard(i.source as Trip)}
+                onUpdate={() => i.kind === 'tour' && i.id && setOperateId(i.id)}
               />
             ))}
             {shown.length === 0 && (
@@ -501,6 +514,10 @@ export function Trips() {
       </datalist>
 
       {/* Report a delay against a VRID's arrival/departure */}
+      {operating && (
+        <TourOperate tour={operating} onClose={() => setOperateId(null)} onUpdate={updateTour} showOwner={isAdmin || canAssign} />
+      )}
+
       {reportFor && (
         <ReportDelay item={reportFor} onClose={() => setReportFor(null)}
           onSave={(reports) => saveReports(reportFor, reports)} />

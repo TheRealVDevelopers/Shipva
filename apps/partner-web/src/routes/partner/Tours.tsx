@@ -72,7 +72,6 @@ export function Tours() {
   const [q, setQ] = useState('');
   const [tab, setTab] = useState<Filter>('All');
   const [open, setOpen] = useState(false);
-  const [operateId, setOperateId] = useState<string | null>(null);
 
   const [f, setF] = useState(EMPTY);
   const [legs, setLegs] = useState<LegDraft[]>([blankLeg()]);
@@ -261,7 +260,6 @@ export function Tours() {
   const inTransit = live.filter((t) => t.amzStatus === 'IN PROGRESS').length;
   const completed = live.filter((t) => t.amzStatus === 'COMPLETED').length;
   const advTotal = tours.reduce((s, t) => s + (Number(t.advanceAmount) || 0), 0);
-  const operating = operateId ? tours.find((t) => t.id === operateId) ?? null : null;
 
   return (
     <PartnerLayout title="Amazon Tours" subtitle={isAdmin ? 'Relay line board — assign routes to your POCs' : 'Your assigned Relay lines'}>
@@ -316,7 +314,6 @@ export function Tours() {
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
           {shown.map((t) => (
             <TourCard key={t.id} t={t} isAdmin={isAdmin} canEdit={canEdit}
-              onOperate={() => t.id && setOperateId(t.id)}
               onDiesel={() => t.id && setDieselId(t.id)}
               onEdit={() => startEdit(t)} onDelete={() => setConfirmDel(t)} onShare={updateTour} />
           ))}
@@ -443,7 +440,6 @@ export function Tours() {
         </Modal>
       )}
 
-      {operating && <TourOperate tour={operating} onClose={() => setOperateId(null)} onUpdate={updateTour} showOwner={isAdmin} />}
 
       {/* ── Diesel Request ────────────────────────────────────────────────
           The advance ask for a run. G-pay details live here now rather than on
@@ -566,9 +562,9 @@ function DieselRequest({ tour, onClose, onSave }: {
   );
 }
 
-function TourCard({ t, isAdmin, canEdit, onOperate, onDiesel, onEdit, onDelete, onShare }: {
+function TourCard({ t, isAdmin, canEdit, onDiesel, onEdit, onDelete, onShare }: {
   t: Tour; isAdmin: boolean; canEdit: boolean;
-  onOperate: () => void; onDiesel: () => void; onEdit: () => void; onDelete: () => void;
+  onDiesel: () => void; onEdit: () => void; onDelete: () => void;
   onShare: (id: string, patch: Partial<Tour>) => void;
 }) {
   const legs = t.legs && t.legs.length ? t.legs : [];
@@ -654,7 +650,7 @@ function TourCard({ t, isAdmin, canEdit, onOperate, onDiesel, onEdit, onDelete, 
             )}
             {/* Kept until the POC updation moves to Trips › In Transit — otherwise
                 there'd be nowhere to record check-ins, KM and photos meanwhile. */}
-            <button onClick={onOperate} className="inline-flex items-center gap-1 rounded-lg px-2.5 py-2 text-xs font-bold ring-1 ring-inset" style={{ color: INK, borderColor: '#D5D9D9', background: '#fff' }}><Navigation size={12} /> Update</button>
+            {/* Update moved to the Trips module (client's call) — no update here. */}
             {canEdit && (
               <>
                 <button onClick={onEdit} className="rounded-lg p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-primary-600" title="Edit route"><Pencil size={14} /></button>
@@ -691,7 +687,13 @@ function TourCard({ t, isAdmin, canEdit, onOperate, onDiesel, onEdit, onDelete, 
 
 /* ─── POC operate / check-in view ────────────────────────────────────── */
 
-function TourOperate({ tour, onClose, onUpdate, showOwner }: {
+/**
+ * The operational update for a run — Present/Absent, per-VRID load type, KM,
+ * Amazon/GPS KM, expense, invoice, photos, and "submit & complete". The client
+ * moved this OUT of the Amazon Tours board and INTO the Trips module, so it's
+ * exported and mounted from Trips; Amazon Tours no longer shows an update action.
+ */
+export function TourOperate({ tour, onClose, onUpdate, showOwner }: {
   tour: Tour; onClose: () => void; onUpdate: (id: string, patch: Partial<Tour>) => void; showOwner: boolean;
 }) {
   const { push } = useNotify();
