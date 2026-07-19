@@ -224,6 +224,8 @@ export interface TourLegStop {
   name: string; location?: string; mapUrl?: string;
   arrivalAt?: string; departureAt?: string;      // scheduled (datetime-local)
   actualArrival?: number; actualDeparture?: number; // live check-in/out (epoch ms)
+  /** POC's note for this stop — the "Feedback" column in the Amazon export. */
+  feedback?: string;
 }
 /** One VRID and the ordered stops it runs. */
 export interface TourLeg {
@@ -255,6 +257,10 @@ export interface Tour {
   invoiceGiven?: boolean;
   kmPhotoImg?: string; invoicePhotoImg?: string; gpsPhotoImg?: string;
   expenseAmount?: string; expenseNote?: string;
+  /** Proof of delivery + run-level feedback — both mandatory to complete a run
+   *  (the client's "POD, remarks, and feedback"). */
+  podGiven?: boolean; podImg?: string;
+  feedback?: string;
   /** WhatsApp share status. */
   sharedVendor?: boolean; sharedDriver?: boolean;
   /** Reported delays, oldest first — the audit log. */

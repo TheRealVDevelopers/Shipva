@@ -709,6 +709,8 @@ export function TourOperate({ tour, onClose, onUpdate, showOwner }: {
   const [expenseAmount, setExpenseAmount] = useState(tour.expenseAmount || '');
   const [expenseNote, setExpenseNote] = useState(tour.expenseNote || '');
   const [invoiceGiven, setInvoiceGiven] = useState(!!tour.invoiceGiven);
+  const [podGiven, setPodGiven] = useState(!!tour.podGiven);
+  const [feedback, setFeedback] = useState(tour.feedback || '');
   const [saved, setSaved] = useState(false);
 
   // Total KM is derived from the odometer, never typed. Falls back to whatever
@@ -745,7 +747,7 @@ export function TourOperate({ tour, onClose, onUpdate, showOwner }: {
   const ops = () => ({
     present, remarks, startKm, endKm,
     totalManualKm: totalKm, amazonRelyKm: amazonKm, gpsKm,
-    expenseAmount, expenseNote, invoiceGiven,
+    expenseAmount, expenseNote, invoiceGiven, podGiven, feedback,
   });
 
   function saveOps() {
@@ -762,17 +764,28 @@ export function TourOperate({ tour, onClose, onUpdate, showOwner }: {
     onClose();
   }
 
-  // What the client requires before a run can be called done.
+  // What the client requires before a run can be called done — page 2:
+  // "loading/unloading, VR ID, ETA, diesel request, kilometers, delay details if
+  // any, POD, remarks, and feedback". KM, POD, remarks and feedback are the ones
+  // a person must fill; the rest come from the route itself.
   const missingToComplete = [
     !startKm.trim() && 'starting KM',
     !endKm.trim() && 'ending KM',
     kmBackwards && 'valid KM readings',
     !amazonKm.trim() && 'Amazon KM',
     !gpsKm.trim() && 'GPS KM',
+    !podGiven && 'POD (proof of delivery)',
+    !remarks.trim() && 'remarks',
+    !feedback.trim() && 'feedback',
   ].filter(Boolean) as string[];
   const canComplete = missingToComplete.length === 0;
-  function setPhoto(key: 'kmPhotoImg' | 'invoicePhotoImg' | 'gpsPhotoImg', v: string | undefined) {
+  function setPhoto(key: 'kmPhotoImg' | 'invoicePhotoImg' | 'gpsPhotoImg' | 'podImg', v: string | undefined) {
     if (tour.id) onUpdate(tour.id, { [key]: v ?? '' });
+  }
+  /** POC's per-stop feedback note — fills the Amazon export's Feedback column. */
+  function setStopFeedback(li: number, si: number, v: string) {
+    if (!tour.id) return;
+    onUpdate(tour.id, { legs: legs.map((l, i) => (i !== li ? l : { ...l, stops: l.stops.map((s, j) => (j === si ? { ...s, feedback: v } : s)) })) });
   }
   const late = (s: TourLegStop) => s.actualArrival && s.arrivalAt && s.actualArrival > new Date(s.arrivalAt).getTime();
 
@@ -834,6 +847,12 @@ export function TourOperate({ tour, onClose, onUpdate, showOwner }: {
                                 : <div className="text-neutral-300">—</div>}
                           </div>
                         </div>
+                        {/* Per-stop feedback — fills the export's Feedback column. */}
+                        {inDone && (
+                          <input value={s.feedback ?? ''} onChange={(e) => setStopFeedback(li, si, e.target.value)}
+                            placeholder="Feedback for this stop…"
+                            className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-2 py-1 text-[11px] outline-none focus:border-primary-400" />
+                        )}
                       </div>
                     </li>
                   );
@@ -897,11 +916,24 @@ export function TourOperate({ tour, onClose, onUpdate, showOwner }: {
               </Field>
             </div>
             <div className="mt-2"><Field label="Expense note"><TextInput value={expenseNote} onChange={(e) => setExpenseNote(e.target.value)} placeholder="Toll / detention / repair…" /></Field></div>
-            <div className="mt-2"><Field label="Remarks"><TextInput value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="On schedule / checkpost delay…" /></Field></div>
-            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+            {/* Required to complete — the client's "POD, remarks, and feedback". */}
+            <div className="mt-2"><Field label="Remarks" required><TextInput value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="On schedule / checkpost delay…" /></Field></div>
+            <div className="mt-2"><Field label="Feedback" required hint="How did the run go?"><TextInput value={feedback} onChange={(e) => setFeedback(e.target.value)} placeholder="Any feedback on this run…" /></Field></div>
+            <div className="mt-2">
+              <Field label="POD — proof of delivery" required>
+                <div className="grid grid-cols-2 gap-2">
+                  {[['Received', true], ['Pending', false]].map(([lbl, val]) => (
+                    <button key={String(lbl)} type="button" onClick={() => setPodGiven(val as boolean)} className="rounded-lg px-2 py-2 text-xs font-bold ring-1 ring-inset"
+                      style={podGiven === val ? { background: val ? '#067D62' : '#B12704', color: '#fff', borderColor: 'transparent' } : { background: '#fff', color: '#5A6572', borderColor: '#D5D9D9' }}>{lbl as string}</button>
+                  ))}
+                </div>
+              </Field>
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
               <div><div className="mb-1 text-[11px] font-bold text-neutral-500">KM photo</div><ImageUpload value={tour.kmPhotoImg} onChange={(v) => setPhoto('kmPhotoImg', v)} label="Add KM photo" path={`tours/${tour.id}/km`} /></div>
               <div><div className="mb-1 text-[11px] font-bold text-neutral-500">Invoice photo</div><ImageUpload value={tour.invoicePhotoImg} onChange={(v) => setPhoto('invoicePhotoImg', v)} label="Add invoice" path={`tours/${tour.id}/invoice`} /></div>
               <div><div className="mb-1 text-[11px] font-bold text-neutral-500">GPS photo</div><ImageUpload value={tour.gpsPhotoImg} onChange={(v) => setPhoto('gpsPhotoImg', v)} label="Add GPS" path={`tours/${tour.id}/gps`} /></div>
+              <div><div className="mb-1 text-[11px] font-bold text-neutral-500">POD photo</div><ImageUpload value={tour.podImg} onChange={(v) => setPhoto('podImg', v)} label="Add POD" path={`tours/${tour.id}/pod`} /></div>
             </div>
           </div>
         </div>

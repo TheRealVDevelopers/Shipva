@@ -3,9 +3,10 @@
  *
  * 67 columns, ONE ROW PER VR ID (leg), six stops. Each stop is a block of
  * name / yard-arrival / arrival-time-per-POC / Sarva-POC-updated-time / feedback,
- * then the same for departure. Two of those per-stop fields — "Sarva POC Updated
- * Time" and "Feedback" — have no home in the data model yet, so they export
- * blank, exactly as they are blank in the client's own sample.
+ * then the same for departure. "Sarva POC Updated Time" is when the POC recorded
+ * the stop — in this app that IS the actual arrival/departure stamp, since the
+ * POC updates the website at the stop, so the two columns coincide. "Feedback" is
+ * the POC's per-stop note.
  *
  * Deliberate quirk, replicated from their file: **Stop 3 has no departure
  * time / POC / feedback columns** (6 columns where every other stop has 9). It's
@@ -66,15 +67,15 @@ function legRow(t: Tour, leg: TourLeg): string[] {
       s?.name ?? '',                 // Stop N
       schedDT(s?.arrivalAt),         // Yard Arrival (scheduled)
       actualDT(s?.actualArrival),    // Arrival Time, per the POC's check-in
-      '',                            // Sarva POC Updated Time — no field yet
-      '',                            // Feedback — no field yet
+      actualDT(s?.actualArrival),    // Sarva POC Updated Time (= when the POC updated)
+      s?.feedback ?? '',             // Feedback (POC's per-stop note)
       schedDT(s?.departureAt),       // Yard Departure (scheduled)
     );
     if (n === 2) continue;           // Stop 3 (index 2) stops here — their quirk
     row.push(
       actualDT(s?.actualDeparture),  // Departure Time, per the POC's check-out
-      '',                            // Sarva POC Updated Time
-      '',                            // Feedback
+      actualDT(s?.actualDeparture),  // Sarva POC Updated Time
+      '',                            // Feedback — the stop note sits on arrival
     );
   }
   row.push(
