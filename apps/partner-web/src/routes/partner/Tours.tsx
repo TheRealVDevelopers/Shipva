@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  MapPin, Trash2, FileSpreadsheet, Search, X, Check, Route as RouteIcon, UserCog,
-  Navigation, LogIn, LogOut, Flag, AlertTriangle, Truck, Package, Plus, Send, Save, Pencil, Fuel, Copy,
+  Trash2, FileSpreadsheet, Search, X, Check, Route as RouteIcon, UserCog, ChevronRight, CalendarRange,
+  LogIn, LogOut, Flag, AlertTriangle, Truck, Plus, Send, Save, Pencil, Fuel, Copy,
 } from 'lucide-react';
 import { PartnerLayout } from '../../components/layout/PartnerLayout.js';
 import { Modal, Field, TextInput, DateTimeInput, Select, Row } from '../../components/ui/Modal.js';
@@ -71,6 +71,7 @@ export function Tours() {
   const [members, setMembers] = useState<Member[]>([]);
   const [q, setQ] = useState('');
   const [tab, setTab] = useState<Filter>('All');
+  const [dateF, setDateF] = useState(''); // YYYY-MM-DD calendar filter
   const [open, setOpen] = useState(false);
 
   const [f, setF] = useState(EMPTY);
@@ -252,6 +253,8 @@ export function Tours() {
   const live = tours.filter((t) => !t.archived);
   const shown = live.filter((t) => {
     if (tab === 'Shared' && !isShared(t)) return false;
+    // Calendar filter: the run's service date (or, failing that, its date label).
+    if (dateF && (t.serviceAt ? t.serviceAt.slice(0, 10) !== dateF : true)) return false;
     if (!q) return true;
     const hay = `${t.tourId} ${(t.legs ?? []).map((l) => l.vrid).join(' ')} ${(t.vrIds ?? []).join(' ')} ${t.vehicleId} ${t.amzEquipmentType} ${t.vendorName} ${t.driver} ${t.ownerName ?? ''}`.toLowerCase();
     return hay.includes(q.toLowerCase());
@@ -275,9 +278,16 @@ export function Tours() {
               </div>
             </div>
             <div className="flex flex-1 items-center gap-2 sm:flex-none">
-              <div className="flex flex-1 items-center gap-2 rounded-lg bg-white/10 px-3 py-2 ring-1 ring-inset ring-white/15 sm:w-72">
+              <div className="flex flex-1 items-center gap-2 rounded-lg bg-white/10 px-3 py-2 ring-1 ring-inset ring-white/15 sm:w-64">
                 <Search size={14} className="text-white/60" />
                 <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search VRID / trip ID / vehicle / vendor" className="w-full bg-transparent text-xs text-white outline-none placeholder:text-white/45" />
+              </div>
+              {/* Calendar date filter — the client's "add a calendar date filter". */}
+              <div className="flex items-center gap-1 rounded-lg bg-white/10 px-2.5 py-2 ring-1 ring-inset ring-white/15">
+                <CalendarRange size={14} className="text-white/60" />
+                <input type="date" value={dateF} onChange={(e) => setDateF(e.target.value)} aria-label="Filter by date"
+                  className="bg-transparent text-xs text-white outline-none [color-scheme:dark]" />
+                {dateF && <button onClick={() => setDateF('')} className="text-white/50 hover:text-white" title="Clear date"><X size={13} /></button>}
               </div>
               {/* Export is Admin/TL only, per the client. */}
               {canEdit && (
@@ -310,18 +320,21 @@ export function Tours() {
           })}
         </div>
 
-        {/* load cards */}
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-          {shown.map((t) => (
-            <TourCard key={t.id} t={t} isAdmin={isAdmin} canEdit={canEdit}
-              onDiesel={() => t.id && setDieselId(t.id)}
-              onEdit={() => startEdit(t)} onDelete={() => setConfirmDel(t)} onShare={updateTour} />
-          ))}
-          {shown.length === 0 && (
-            <div className="col-span-full rounded-xl bg-white py-12 text-center text-sm text-neutral-400" style={{ border: '1px dashed #D5D9D9' }}>
-              {tours.length === 0 ? 'No lines yet — press "Route Assign" to add your first Amazon tour.' : 'No lines match this view.'}
-            </div>
-          )}
+        {/* Compact list — a dense row per line, built for 100+ tours (client's
+            call: replace the big card layout with a compact list/table). */}
+        <div className="overflow-hidden rounded-xl bg-white shadow-sm" style={{ border: '1px solid #D5D9D9' }}>
+          <div className="divide-y" style={{ borderColor: '#EDEFF1' }}>
+            {shown.map((t) => (
+              <TourRow key={t.id} t={t} isAdmin={isAdmin} canEdit={canEdit}
+                onDiesel={() => t.id && setDieselId(t.id)}
+                onEdit={() => startEdit(t)} onDelete={() => setConfirmDel(t)} onShare={updateTour} />
+            ))}
+            {shown.length === 0 && (
+              <div className="py-12 text-center text-sm text-neutral-400">
+                {tours.length === 0 ? 'No lines yet — press "Route Assign" to add your first Amazon tour.' : 'No lines match this view.'}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -562,7 +575,13 @@ function DieselRequest({ tour, onClose, onSave }: {
   );
 }
 
-function TourCard({ t, isAdmin, canEdit, onDiesel, onEdit, onDelete, onShare }: {
+/**
+ * One line, one dense row — the compact list the client asked for in place of
+ * the big cards (better for 100+ tours). Expands to show the per-VRID stop chain
+ * and the WhatsApp share/copy actions; collapsed it's ID, route summary, driver,
+ * status, and the two primary actions (diesel + share).
+ */
+function TourRow({ t, isAdmin, canEdit, onDiesel, onEdit, onDelete, onShare }: {
   t: Tour; isAdmin: boolean; canEdit: boolean;
   onDiesel: () => void; onEdit: () => void; onDelete: () => void;
   onShare: (id: string, patch: Partial<Tour>) => void;
@@ -573,12 +592,11 @@ function TourCard({ t, isAdmin, canEdit, onDiesel, onEdit, onDelete, onShare }: 
   const pct = allStops.length ? Math.round((done / allStops.length) * 100) : 0;
   const pill = statusPill(t.amzStatus);
   const vlist = legs.length ? legs.map((l) => l.vrid) : (t.vrIds ?? (t.vrId ? [t.vrId] : []));
+  const routeText = allStops.map((s) => s.name).join(' → ') || '—';
 
-  // The diesel decision is made in Expenses & Fuel; show it here so the POC
-  // running the line can see whether the advance actually went out.
   const { requests } = useStore();
   const diesel = dieselRequestFor(requests, t.id);
-
+  const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 
   function share(kind: 'vendor' | 'driver') {
@@ -587,100 +605,78 @@ function TourCard({ t, isAdmin, canEdit, onDiesel, onEdit, onDelete, onShare }: 
     window.open(waLink(phone, text), '_blank', 'noopener');
     if (t.id) onShare(t.id, kind === 'vendor' ? { sharedVendor: true } : { sharedDriver: true });
   }
-
   function copyMsg(text: string) {
-    void navigator.clipboard?.writeText(text).then(() => {
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1600);
-    });
+    void navigator.clipboard?.writeText(text).then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 1600); });
   }
 
   return (
-    <div className="overflow-hidden rounded-xl bg-white shadow-sm transition hover:shadow-md" style={{ border: '1px solid #D5D9D9' }}>
-      <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5" style={{ background: '#F7F8F8', borderBottom: '1px solid #E7E9E9' }}>
-        <div className="flex items-center gap-2 text-[13px]">
-          <Truck size={15} style={{ color: INK }} />
-          <span className="font-bold" style={{ color: INK }}>{t.amzEquipmentType || 'Truck'}</span>
-          <span className="text-neutral-300">·</span>
-          <span className="font-mono font-bold" style={{ color: INK }}>{t.tourId}</span>
+    <div className={open ? 'bg-neutral-50/60' : 'hover:bg-neutral-50/60'}>
+      {/* Collapsed dense row */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-2.5">
+        <button onClick={() => setOpen((o) => !o)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
+          <ChevronRight size={14} className={`shrink-0 text-neutral-400 transition-transform ${open ? 'rotate-90' : ''}`} />
+          <span className="font-mono text-sm font-extrabold" style={{ color: INK }}>{t.tourId}</span>
           <span className="rounded px-1.5 py-0.5 text-[10px] font-extrabold uppercase" style={{ background: t.scheduleAdhoc === 'ADHOC' ? '#FFF3E0' : '#EDEFF1', color: t.scheduleAdhoc === 'ADHOC' ? '#B15C00' : '#5A6572' }}>{t.scheduleAdhoc}</span>
+          <span className="truncate text-xs text-neutral-500">{routeText}</span>
+        </button>
+        <div className="flex shrink-0 items-center gap-2 text-[11px] text-neutral-500">
+          {t.amzEquipmentType && <span>{t.amzEquipmentType}</span>}
+          <span className="font-mono">{t.vehicleId || '—'}</span>
+          <span className="hidden sm:inline">{t.driver || '—'}</span>
+          {isAdmin && t.ownerName && <span className="inline-flex items-center gap-1 rounded bg-neutral-100 px-1.5 py-0.5 font-bold text-neutral-600" title="POC"><UserCog size={10} /> {t.ownerName}</span>}
+          <span className="rounded-full px-2 py-0.5 text-[10px] font-extrabold" style={{ background: pill.bg, color: pill.fg }}>{pill.label}</span>
+          {pct > 0 && pct < 100 && <span className="tabular-nums text-neutral-400">{pct}%</span>}
         </div>
-        <span className="rounded-full px-2.5 py-0.5 text-[11px] font-extrabold" style={{ background: pill.bg, color: pill.fg }}>{pill.label}</span>
-      </div>
-
-      <div className="p-4">
-        {/* per-VRID legs */}
-        <div className="space-y-2">
-          {legs.map((leg, i) => (
-            <div key={i} className="rounded-lg px-2.5 py-2" style={{ background: '#F7F8F8' }}>
-              <div className="mb-1 flex items-center gap-2">
-                <span className="rounded px-1.5 py-0.5 font-mono text-[11px] font-extrabold" style={{ background: '#EAF1F8', color: '#0F5C9E' }}>{leg.vrid}</span>
-                <span className="text-[10px] font-bold uppercase" style={{ color: leg.loadType === 'No Load' ? '#B15C00' : '#5A6572' }}>{leg.loadType || 'Load'}</span>
-              </div>
-              <div className="flex items-center gap-1 overflow-x-auto text-[12px] font-semibold" style={{ color: INK }}>
-                {leg.stops.map((s, j) => (
-                  <span key={j} className="inline-flex items-center gap-1 whitespace-nowrap">
-                    <span className={`h-2 w-2 rounded-full ${s.actualDeparture ? '' : ''}`} style={{ background: s.actualDeparture ? '#067D62' : s.actualArrival ? ORANGE : '#c3c9cf' }} />
-                    <span className="font-mono">{s.name}</span>
-                    {j < leg.stops.length - 1 && <span className="text-neutral-300">→</span>}
-                  </span>
-                ))}
-              </div>
-            </div>
-          ))}
-          {legs.length === 0 && <div className="text-xs text-neutral-400">No VRID legs.</div>}
-        </div>
-
-        <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full" style={{ background: '#EDEFF1' }}>
-          <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: pct === 100 ? '#067D62' : ORANGE }} />
-        </div>
-
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-          <div className="text-xs text-neutral-600">
-            <span className="font-semibold" style={{ color: INK }}>{t.driver}</span> · <span className="font-mono">{t.vehicleId}</span>
-            {isAdmin && t.ownerName && <span className="ml-2 inline-flex items-center gap-1 rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] font-bold text-neutral-600"><UserCog size={10} /> {t.ownerName}</span>}
-            <div className="text-[11px] text-neutral-400">{t.date} · {t.vendorName || '—'} · Adv ₹{Number(t.advanceAmount || 0).toLocaleString('en-IN')} · {t.paidPending}</div>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <button onClick={onDiesel} className="inline-flex items-center gap-1 rounded-lg px-3 py-2 text-xs font-extrabold shadow-sm" style={{ background: ORANGE, color: INK }}><Fuel size={13} /> Diesel Request</button>
-            {diesel && (
-              <Badge tone={diesel.status === 'approved' ? 'success' : diesel.status === 'rejected' ? 'danger' : 'warning'}>
-                <Fuel size={10} /> {requestStatusLabel(diesel)}
-              </Badge>
-            )}
-            {/* Kept until the POC updation moves to Trips › In Transit — otherwise
-                there'd be nowhere to record check-ins, KM and photos meanwhile. */}
-            {/* Update moved to the Trips module (client's call) — no update here. */}
-            {canEdit && (
-              <>
-                <button onClick={onEdit} className="rounded-lg p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-primary-600" title="Edit route"><Pencil size={14} /></button>
-                <button onClick={onDelete} className="rounded-lg p-1.5 text-neutral-400 hover:bg-amber-50 hover:text-amber-600" title="Cancel / archive route"><Trash2 size={14} /></button>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* WhatsApp shares */}
-        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-neutral-100 pt-3">
-          <span className="text-[10px] font-bold uppercase tracking-wide text-neutral-400">Share</span>
-          <button onClick={() => share('vendor')} className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold text-white" style={{ background: '#25D366' }}>
-            <Send size={12} /> Vendor {t.sharedVendor && <Check size={12} />}
-          </button>
-          <button onClick={() => share('driver')} className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold text-white" style={{ background: '#25D366' }}>
-            <Send size={12} /> Driver {t.sharedDriver && <Check size={12} />}
-          </button>
-          {/* Escape hatch: if a WhatsApp client ever flattens the link's line
-              breaks again, this puts the exact laid-out text on the clipboard. */}
-          <button onClick={() => copyMsg(driverMessage(t))} className="inline-flex items-center gap-1.5 rounded-lg bg-white px-2.5 py-1.5 text-xs font-bold ring-1 ring-inset" style={{ color: INK, borderColor: '#D5D9D9' }} title="Copy the driver message exactly as laid out">
-            {copied ? <><Check size={12} /> Copied</> : <><Copy size={12} /> Copy</>}
-          </button>
-          {(t.sharedVendor || t.sharedDriver) && (
-            <span className="text-[11px] font-bold" style={{ color: '#067D62' }}>
-              {t.sharedVendor && t.sharedDriver ? 'Both shared ✓' : t.sharedVendor ? 'Vendor shared ✓' : 'Driver shared ✓'}
-            </span>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <button onClick={onDiesel} className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-extrabold shadow-sm" style={{ background: ORANGE, color: INK }}><Fuel size={12} /> Diesel</button>
+          {diesel && (
+            <Badge tone={diesel.status === 'approved' ? 'success' : diesel.status === 'rejected' ? 'danger' : 'warning'}><Fuel size={10} /> {requestStatusLabel(diesel)}</Badge>
+          )}
+          {canEdit && (
+            <>
+              <button onClick={onEdit} className="rounded-lg p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-primary-600" title="Edit / assign route"><Pencil size={14} /></button>
+              <button onClick={onDelete} className="rounded-lg p-1.5 text-neutral-400 hover:bg-amber-50 hover:text-amber-600" title="Cancel / archive route"><Trash2 size={14} /></button>
+            </>
           )}
         </div>
       </div>
+
+      {/* Expanded: per-VRID legs + WhatsApp share */}
+      {open && (
+        <div className="px-4 pb-3">
+          <div className="space-y-2">
+            {legs.map((leg, i) => (
+              <div key={i} className="rounded-lg px-2.5 py-2" style={{ background: '#F7F8F8' }}>
+                <div className="mb-1 flex items-center gap-2">
+                  <span className="rounded px-1.5 py-0.5 font-mono text-[11px] font-extrabold" style={{ background: '#EAF1F8', color: '#0F5C9E' }}>{leg.vrid}</span>
+                  <span className="text-[10px] font-bold uppercase" style={{ color: leg.loadType === 'No Load' ? '#B15C00' : '#5A6572' }}>{leg.loadType || 'Load'}</span>
+                </div>
+                <div className="flex items-center gap-1 overflow-x-auto text-[12px] font-semibold" style={{ color: INK }}>
+                  {leg.stops.map((s, j) => (
+                    <span key={j} className="inline-flex items-center gap-1 whitespace-nowrap">
+                      <span className="h-2 w-2 rounded-full" style={{ background: s.actualDeparture ? '#067D62' : s.actualArrival ? ORANGE : '#c3c9cf' }} />
+                      <span className="font-mono">{s.name}</span>
+                      {j < leg.stops.length - 1 && <span className="text-neutral-300">→</span>}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+            {legs.length === 0 && <div className="text-xs text-neutral-400">VR IDs: {vlist.join(', ') || '—'}</div>}
+          </div>
+
+          <div className="mt-2 text-[11px] text-neutral-400">{t.date} · {t.vendorName || '—'} · Adv ₹{Number(t.advanceAmount || 0).toLocaleString('en-IN')}</div>
+
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <span className="text-[10px] font-bold uppercase tracking-wide text-neutral-400">Share</span>
+            <button onClick={() => share('vendor')} className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold text-white" style={{ background: '#25D366' }}><Send size={12} /> Vendor {t.sharedVendor && <Check size={12} />}</button>
+            <button onClick={() => share('driver')} className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold text-white" style={{ background: '#25D366' }}><Send size={12} /> Driver {t.sharedDriver && <Check size={12} />}</button>
+            <button onClick={() => copyMsg(driverMessage(t))} className="inline-flex items-center gap-1.5 rounded-lg bg-white px-2.5 py-1.5 text-xs font-bold ring-1 ring-inset" style={{ color: INK, borderColor: '#D5D9D9' }} title="Copy the driver message exactly as laid out">
+              {copied ? <><Check size={12} /> Copied</> : <><Copy size={12} /> Copy</>}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
