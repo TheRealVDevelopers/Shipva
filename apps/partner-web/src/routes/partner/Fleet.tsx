@@ -26,6 +26,7 @@ import {
   watchTruckTypes, addTruckType, removeTruckType, addStandardTruckTypes, optionsFor,
   type TruckType,
 } from '../../lib/truckTypes.js';
+import { vendorNamesOf } from '../../lib/vendors.js';
 const TABS = ['Drivers', 'Trucks'] as const;
 
 /** A document only counts as on file when BOTH the number and the photo are
@@ -34,10 +35,12 @@ const TABS = ['Drivers', 'Trucks'] as const;
  *  "Aadhaar" and nobody thinks a saved number has gone missing. */
 interface DocSpec<T> { key: string; num: (r: T) => boolean; img: (r: T) => boolean }
 
+// PAN is optional for drivers (client's call), so it is NOT in the mandatory set
+// — a driver without a PAN is not "documents pending". Aadhaar and licence stay
+// required. The PAN upload is still offered in the documents dialog.
 const DRIVER_DOCS: DocSpec<FleetDriver>[] = [
   { key: 'Aadhaar', num: (d) => !!d.aadhaar, img: (d) => !!d.aadhaarImg },
   { key: 'Licence', num: (d) => !!d.licenseNo, img: (d) => !!d.licenseImg },
-  { key: 'PAN', num: (d) => !!d.pan, img: (d) => !!d.panImg },
 ];
 const TRUCK_DOCS: DocSpec<Truck>[] = [
   { key: 'RC', num: (t) => !!t.rc, img: (t) => !!t.rcImg },
@@ -55,20 +58,20 @@ const DRV_EMPTY = { name: '', phone: '', vendor: '', aadhaar: '', licenseNo: '',
 // Truck type starts blank — the options are the admin's list, which may be empty
 // until they set it. Defaulting to a value that isn't on their list would save a
 // type nobody chose.
-const TRK_EMPTY = { reg: '', type: '', capacityKg: '' };
+const TRK_EMPTY = { vendor: '', reg: '', type: '', capacityKg: '' };
 
 /** One page, two registers — which one is decided by the route (see App.tsx). */
 export function Fleet({ register }: { register: 'drivers' | 'trucks' }) {
   const {
-    drivers, trucks, attached, addDriver, addTruck, setDriverDocs, setTruckDocs,
+    drivers, trucks, attached, customers, addDriver, addTruck, setDriverDocs, setTruckDocs,
     updateDriver, updateTruck, deleteDriver, deleteTruck,
   } = useStore();
   const { member } = useAuth();
   const { push } = useNotify();
   const isAdmin = member?.role === 'owner' || member?.role === 'manager';
-  // The "pre-registered vendor" list the client wants on the driver form — the
-  // truck owners already in the register, by the name they trade under.
-  const vendorNames = [...new Set(attached.map((a) => a.transporterName?.trim() || a.owner.trim()).filter(Boolean))].sort();
+  // The pre-registered vendors: both transporters and truck owners, per the
+  // client — a driver or a truck belongs to one of either kind.
+  const vendorNames = vendorNamesOf(customers, attached);
   // Editing/deleting a record is leadership-only. Verifying documents stays
   // admin-only (isAdmin) — that's a control gate, not routine editing.
   const canEdit = canEditRecords(member?.role);
@@ -111,7 +114,9 @@ export function Fleet({ register }: { register: 'drivers' | 'trucks' }) {
     phone: phoneError(nd.phone),
     aadhaar: aadhaarError(nd.aadhaar),
     licenseNo: licenceError(nd.licenseNo),
-    pan: panError(nd.pan),
+    // PAN is optional for drivers now (client's call) — only validate the format
+    // if one was entered. Aadhaar and licence stay required.
+    pan: nd.pan.trim() ? panError(nd.pan) : '',
   };
   function submitDriver() {
     setTried(true);
@@ -129,6 +134,9 @@ export function Fleet({ register }: { register: 'drivers' | 'trucks' }) {
 
   // ── New truck ───────────────────────────────────────────────────────────────
   const ntErrs = {
+    // Vendor first, and required: the client wants a truck tied to a transporter
+    // or truck owner before anything else. RC/insurance/fitness come next.
+    vendor: nt.vendor ? '' : 'Select the vendor this truck belongs to',
     reg: vehicleRegError(nt.reg),
     capacityKg: positiveError(nt.capacityKg, 'Capacity'),
   };
@@ -136,7 +144,7 @@ export function Fleet({ register }: { register: 'drivers' | 'trucks' }) {
     setTried(true);
     if (!allClear(ntErrs)) return;
     addTruck({
-      reg: nt.reg.trim().toUpperCase(), type: nt.type,
+      reg: nt.reg.trim().toUpperCase(), type: nt.type, vendor: nt.vendor,
       capacityKg: Number(nt.capacityKg), status: 'available', docsOk: false,
       verified: false, // explicit: absent means a legacy record, not a new one
     });
@@ -256,13 +264,14 @@ export function Fleet({ register }: { register: 'drivers' | 'trucks' }) {
         ) : (
           <Card>
             <Table>
-              <THead><Tr><Th>Truck</Th><Th>Type</Th><Th>Capacity</Th><Th>Status</Th><Th>Documents</Th><Th></Th></Tr></THead>
+              <THead><Tr><Th>Truck</Th><Th>Vendor</Th><Th>Type</Th><Th>Capacity</Th><Th>Status</Th><Th>Documents</Th><Th></Th></Tr></THead>
               <TBody>
                 {trucks.map((t) => {
                   const miss = truckMissing(t);
                   return (
                     <Tr key={t.id}>
                       <Td><div className="flex items-center gap-2"><VehicleArt type={t.type} className="h-7 w-10 shrink-0" /><span className="font-mono text-xs font-bold text-neutral-900">{t.reg}</span></div></Td>
+                      <Td>{t.vendor ? <span className="text-xs font-semibold text-neutral-700">{t.vendor}</span> : <span className="text-xs text-neutral-400">Own fleet</span>}</Td>
                       <Td className="capitalize text-neutral-700">{t.type.replaceAll('_', ' ')}</Td>
                       <Td className="text-neutral-700">{t.capacityKg.toLocaleString('en-IN')} kg</Td>
                       <Td><Badge tone={t.status === 'available' ? 'success' : t.status === 'on_trip' ? 'info' : 'warning'}><TruckIcon size={10} /> {t.status.replaceAll('_', ' ')}</Badge></Td>
@@ -320,7 +329,7 @@ export function Fleet({ register }: { register: 'drivers' | 'trucks' }) {
             <TextInput value={nd.licenseNo} onChange={(e) => setNd({ ...nd, licenseNo: e.target.value.toUpperCase() })} placeholder="KA0120200012345" />
           </Field>
         </Row>
-        <Field label="PAN" required error={tried ? ndErrs.pan : undefined}>
+        <Field label="PAN" hint="Optional" error={tried ? ndErrs.pan : undefined}>
           <TextInput value={nd.pan} onChange={(e) => setNd({ ...nd, pan: e.target.value.toUpperCase() })} placeholder="ABCDE1234F" />
         </Field>
         <p className="rounded-lg bg-amber-50 px-3 py-2 text-[11px] text-amber-800 ring-1 ring-inset ring-amber-100">Upload the document photos next — the driver shows as pending until every document has both a number and a photo.</p>
@@ -333,6 +342,14 @@ export function Fleet({ register }: { register: 'drivers' | 'trucks' }) {
             Fill every field marked <span className="text-rose-500">*</span> to add this truck.
           </div>
         )}
+        {/* Vendor first — the client's order: pick the transporter or truck owner
+            this vehicle belongs to before its details. */}
+        <Field label="Vendor" required hint={vendorNames.length ? 'Transporter or truck owner this truck runs under' : 'Register a transporter or truck owner first'} error={tried ? ntErrs.vendor : undefined}>
+          <Select value={nt.vendor} onChange={(e) => setNt({ ...nt, vendor: e.target.value })}>
+            <option value="">Select a vendor</option>
+            {vendorNames.map((v) => <option key={v} value={v}>{v}</option>)}
+          </Select>
+        </Field>
         <Field label="Registration no" required error={tried ? ntErrs.reg : undefined}>
           <TextInput value={nt.reg} onChange={(e) => setNt({ ...nt, reg: e.target.value.toUpperCase() })} placeholder="KA01AB1234" />
         </Field>
@@ -390,7 +407,7 @@ export function Fleet({ register }: { register: 'drivers' | 'trucks' }) {
       {editTruck && (
         <Modal open onClose={() => setEditTruckId(null)} title={`Edit · ${editTruck.reg}`} subtitle="Details only — documents are managed separately"
           onSubmit={() => { setEditTruckId(null); }} submitLabel="Done">
-          <EditTruckBody truck={editTruck} onSave={(patch) => updateTruck(editTruck.id, patch)} />
+          <EditTruckBody truck={editTruck} vendorNames={vendorNames} onSave={(patch) => updateTruck(editTruck.id, patch)} />
         </Modal>
       )}
 
@@ -487,21 +504,32 @@ function EditDriverBody({ driver, vendorNames, onSave }: {
 // Status is deliberately NOT editable here — the client asked for it to go. It
 // still exists on the record (the list and the fleet KPIs read it); it's just
 // no longer something a person types.
-function EditTruckBody({ truck, onSave }: { truck: Truck; onSave: (p: Partial<Truck>) => void }) {
+function EditTruckBody({ truck, vendorNames, onSave }: {
+  truck: Truck; vendorNames: string[]; onSave: (p: Partial<Truck>) => void;
+}) {
   const [reg, setReg] = useState(truck.reg);
   const [type, setType] = useState(truck.type);
   const [capacityKg, setCapacityKg] = useState(String(truck.capacityKg));
+  const [vendor, setVendor] = useState(truck.vendor ?? '');
   const errs = { reg: vehicleRegError(reg), capacityKg: positiveError(capacityKg, 'Capacity') };
-  const dirty = reg !== truck.reg || type !== truck.type || Number(capacityKg) !== truck.capacityKg;
+  const dirty = reg !== truck.reg || type !== truck.type || Number(capacityKg) !== truck.capacityKg || vendor !== (truck.vendor ?? '');
+  const options = vendor && !vendorNames.includes(vendor) ? [vendor, ...vendorNames] : vendorNames;
   return (
     <div className="space-y-3.5">
+      <Field label="Vendor" hint="Transporter or truck owner this truck runs under">
+        <Select value={vendor} onChange={(e) => setVendor(e.target.value)}>
+          <option value="">Own fleet</option>
+          {options.map((v) => <option key={v} value={v}>{v}</option>)}
+        </Select>
+      </Field>
       <Field label="Registration no" required error={errs.reg}><TextInput value={reg} onChange={(e) => setReg(e.target.value.toUpperCase())} /></Field>
       <Row>
         <TruckTypeField value={type} onChange={setType} />
         <Field label="Capacity (kg)" required error={errs.capacityKg}><TextInput type="number" value={capacityKg} onChange={(e) => setCapacityKg(e.target.value)} /></Field>
       </Row>
       <button type="button" disabled={!dirty || !allClear(errs)}
-        onClick={() => onSave({ reg: reg.trim().toUpperCase(), type, capacityKg: Number(capacityKg) })}
+        // '' not undefined: the shared-collection writer strips undefined keys.
+        onClick={() => onSave({ reg: reg.trim().toUpperCase(), type, capacityKg: Number(capacityKg), vendor: vendor || '' })}
         className="w-full rounded-lg bg-primary-500 py-2 text-xs font-bold text-white hover:bg-primary-600 disabled:opacity-40">
         Save changes
       </button>

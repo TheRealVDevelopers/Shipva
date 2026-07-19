@@ -13,6 +13,7 @@ import {
 import { useAuth } from '../../lib/auth.js';
 import { watchMembers, teamOf, type Member } from '../../lib/members.js';
 import { canEditRecords, roleLabel } from '../../lib/roles.js';
+import { vendorNamesOf, driversForVendor, trucksForVendor } from '../../lib/vendors.js';
 import { Badge } from '../../components/ui/Badge.js';
 import { vridHolder, updateTourLegs } from '../../lib/tours.js';
 import { exportTourSheet } from '../../lib/exportTourSheet.js';
@@ -62,7 +63,7 @@ const fmtDTShort = (v?: string) => {
 };
 
 export function Tours() {
-  const { tours, drivers, trucks, attached, addTour, updateTour, deleteTour } = useStore();
+  const { tours, drivers, trucks, attached, customers, addTour, updateTour, deleteTour } = useStore();
   const { member } = useAuth();
   const isAdmin = member?.role === 'owner' || member?.role === 'manager';
   const canAssign = isAdmin || member?.role === 'team_leader';
@@ -95,15 +96,16 @@ export function Tours() {
   // list when a vendor has none on file. Showing another vendor's driver as
   // pickable is exactly what the client asked us to stop; an empty list is the
   // honest answer, and the field says so.
+  // Only the drivers and vehicles linked to the chosen vendor — the client's
+  // "only display linked vehicles and drivers in route assignments". Own fleet is
+  // the no-vendor set; a named vendor matches by the name drivers/trucks store.
   const vendorDrivers = useMemo(() => {
     if (!f.vendor) return [];
-    if (f.vendor === OWN_FLEET) return drivers.filter((d) => !d.vendor);
-    return drivers.filter((d) => d.vendor === f.vendor);
+    return driversForVendor(drivers, f.vendor === OWN_FLEET ? '' : f.vendor);
   }, [drivers, f.vendor]);
   const vendorTrucks = useMemo(() => {
     if (!f.vendor) return [];
-    if (f.vendor === OWN_FLEET) return trucks.filter((t) => !t.vendor);
-    return trucks.filter((t) => t.vendor === f.vendor);
+    return trucksForVendor(trucks, f.vendor === OWN_FLEET ? '' : f.vendor);
   }, [trucks, f.vendor]);
   const vehicleFeet = trucks.find((t) => t.reg === f.vehicleId)?.feet ?? '';
 
@@ -344,7 +346,9 @@ export function Tours() {
           <Select value={f.vendor} onChange={(e) => setF({ ...f, vendor: e.target.value, driver: '', driverNumber: '', vehicleId: '' })}>
             <option value="">Select vendor</option>
             <option value={OWN_FLEET}>{OWN_FLEET}</option>
-            {attached.map((a) => <option key={a.id} value={a.owner}>{a.owner}</option>)}
+            {/* Transporters and truck owners both, matching what a truck or driver
+                stores in its vendor field, so linkage filtering lines up. */}
+            {vendorNamesOf(customers, attached).map((v) => <option key={v} value={v}>{v}</option>)}
           </Select>
         </Field>
         <Row>
