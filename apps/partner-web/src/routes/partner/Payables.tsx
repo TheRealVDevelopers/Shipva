@@ -2,6 +2,7 @@ import { useState } from 'react';
 import {
   Truck as TruckIcon, Phone, HandCoins, FileText, FileWarning, Download, Plus,
   ShieldCheck, ShieldAlert, Clock, FileSignature, ChevronLeft, Pencil, Trash2, BadgeCheck,
+  AlertTriangle, Ban,
 } from 'lucide-react';
 import { PartnerLayout } from '../../components/layout/PartnerLayout.js';
 import { Card, CardHeader } from '../../components/ui/Card.js';
@@ -13,7 +14,7 @@ import { Modal, Field, TextInput, DateInput, Select, Row } from '../../component
 import { ImageUpload } from '../../components/ui/ImageUpload.js';
 import { VendorDocs } from '../../components/VendorDocs.js';
 // Aliased: this page already has a `kycPending` KPI count for the whole list.
-import { kycPending as docsKycPending, SIGN_BACK_DAYS, type VendorDocKind } from '../../lib/vendorDocs.js';
+import { kycPending as docsKycPending, vendorStatus, SIGN_BACK_DAYS, type VendorDocKind } from '../../lib/vendorDocs.js';
 import { rupees, todayFullLabel, isoToLabel } from '../../lib/format.js';
 import {
   useStore, todayLabel, ownerStageOf, kycOf, STAGE_LABEL,
@@ -309,6 +310,18 @@ export function Payables() {
                         {st === 'active' ? <ShieldCheck size={11} /> : st === 'trial' ? <Clock size={11} /> : <FileSignature size={11} />} {STAGE_LABEL[st]}
                       </Badge>
                       {st === 'trial' && a.trialEnd && <div className="mt-0.5 text-[10px] text-neutral-400">ends {a.trialEnd}</div>}
+                      {(() => {
+                        // Truck owners have no rate card, so hide that from the timeline.
+                        const vs = vendorStatus(a, { approved: st === 'active', hide: ['rateCard'] });
+                        if (vs.level === 'ok') return null;
+                        return (
+                          <div className="mt-1" title={vs.reasons.join(' · ')}>
+                            <Badge tone={vs.level === 'blocked' ? 'danger' : 'warning'}>
+                              {vs.level === 'blocked' ? <><Ban size={10} /> Blocked</> : <><AlertTriangle size={10} /> {vs.reasons[0]}</>}
+                            </Badge>
+                          </div>
+                        );
+                      })()}
                     </Td>
                     <Td className="text-right">
                       {a.balancePaise > 0 ? <span className="font-bold text-rose-600">{rupees(a.balancePaise)}</span> : <Badge tone="success">Settled</Badge>}

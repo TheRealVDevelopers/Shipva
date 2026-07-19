@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   Plus, Phone, Building2, Receipt, FileText, FileWarning, Download, ShieldCheck,
-  Clock, FileSignature, ChevronLeft, Pencil, Trash2, BadgeCheck,
+  Clock, FileSignature, ChevronLeft, Pencil, Trash2, BadgeCheck, AlertTriangle, Ban,
 } from 'lucide-react';
 import { PartnerLayout } from '../../components/layout/PartnerLayout.js';
 import { Card } from '../../components/ui/Card.js';
@@ -13,7 +13,7 @@ import { Modal, Field, TextInput, DateInput, Select, Row } from '../../component
 import { ImageUpload } from '../../components/ui/ImageUpload.js';
 import { VendorDocs } from '../../components/VendorDocs.js';
 import { watchTruckTypes, optionsFor, type TruckType } from '../../lib/truckTypes.js';
-import { kycPending, SIGN_BACK_DAYS, type VendorDocKind } from '../../lib/vendorDocs.js';
+import { kycPending, vendorStatus, SIGN_BACK_DAYS, type VendorDocKind } from '../../lib/vendorDocs.js';
 import { printRateCard } from '../../lib/rateCard.js';
 import { rupees, todayFullLabel, isoToLabel, todayIso } from '../../lib/format.js';
 import {
@@ -356,6 +356,18 @@ export function Customers() {
                       <Badge tone={STAGE_TONE[st]}>{st === 'active' ? <ShieldCheck size={11} /> : st === 'trial' ? <Clock size={11} /> : <FileSignature size={11} />} {STAGE_LABEL[st]}</Badge>
                       {st === 'trial' && c.trialEnd && <div className="mt-0.5 text-[10px] text-neutral-400">ends {c.trialEnd}</div>}
                       {st === 'active' && c.agreementApprovedOn && <div className="mt-0.5 text-[10px] text-neutral-400">{c.agreementApprovedOn}</div>}
+                      {(() => {
+                        // The registration timeline: blocked past day 9, or paperwork overdue.
+                        const vs = vendorStatus(c, { approved: st === 'active' });
+                        if (vs.level === 'ok') return null;
+                        return (
+                          <div className="mt-1" title={vs.reasons.join(' · ')}>
+                            <Badge tone={vs.level === 'blocked' ? 'danger' : 'warning'}>
+                              {vs.level === 'blocked' ? <><Ban size={10} /> Blocked</> : <><AlertTriangle size={10} /> {vs.reasons[0]}</>}
+                            </Badge>
+                          </div>
+                        );
+                      })()}
                     </Td>
                     <Td className="font-mono text-[11px] text-neutral-500">{c.gstin || c.pan || '—'}</Td>
                     <Td className="text-neutral-600">{c.city || '—'}</Td>
