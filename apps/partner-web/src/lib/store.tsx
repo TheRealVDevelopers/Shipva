@@ -215,6 +215,10 @@ export interface DelayReport {
   scheduledAt: string;
   /** The new estimate. */
   estimatedAt: string;
+  /** Free-text remarks on the delay. */
+  remarks?: string;
+  /** Optional voice note — the client's "audio log if needed". */
+  audioUrl?: string;
   byName: string;
   atMs: number;
 }

@@ -210,7 +210,8 @@ export interface Trip {
    *  a cycle with store.tsx, which owns DelayReport. */
   reports?: {
     id: string; vrid: string; event: string; reason: string;
-    scheduledAt: string; estimatedAt: string; byName: string; atMs: number;
+    scheduledAt: string; estimatedAt: string; remarks?: string; audioUrl?: string;
+    byName: string; atMs: number;
   }[];
   /** Firestore doc id (present once the trip is backed by the backend). */
   id?: string;

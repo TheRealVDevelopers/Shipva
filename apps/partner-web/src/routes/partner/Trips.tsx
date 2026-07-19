@@ -277,9 +277,13 @@ export function Trips() {
   }
 
   /** Save a delay report back to whichever kind of record it came from. */
-  function saveReports(i: BoardItem, reports: DelayReport[]) {
-    if (i.kind === 'tour') updateTour(i.id, { reports });
-    else updateTrip(i.id, { reports });
+  function saveReports(i: BoardItem, reports: DelayReport[], startTransit: boolean) {
+    if (i.kind === 'tour') {
+      // Submitting a report on an Upcoming tour moves it to In Transit.
+      updateTour(i.id, startTransit ? { reports, amzStatus: 'IN PROGRESS', sarvaStatus: 'IN PROGRESS' } : { reports });
+    } else {
+      updateTrip(i.id, startTransit ? { reports, status: 'in_transit' } : { reports });
+    }
   }
   const active = trips.filter((t) => t.status !== 'closed').length;
   const freightTotal = trips.reduce((s, t) => s + t.freightPaise, 0);
@@ -520,7 +524,7 @@ export function Trips() {
 
       {reportFor && (
         <ReportDelay item={reportFor} onClose={() => setReportFor(null)}
-          onSave={(reports) => saveReports(reportFor, reports)} />
+          onSave={(reports, startTransit) => saveReports(reportFor, reports, startTransit)} />
       )}
 
       {/* New trip */}

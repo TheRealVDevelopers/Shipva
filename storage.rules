@@ -35,6 +35,26 @@ service firebase.storage {
       allow delete: if signedIn();
     }
 
+    // Delay-report voice notes — the "audio log" on a report. Signed-in staff,
+    // audio only, capped so a stray large upload can't run up storage.
+    match /reports/{allPaths=**} {
+      allow read: if signedIn();
+      allow create, update: if signedIn()
+        && request.resource.size < 12 * 1024 * 1024
+        && request.resource.contentType.matches('audio/.*');
+      allow delete: if signedIn();
+    }
+
+    // Tour operational photos (KM / invoice / GPS / POD). Signed-in staff, images
+    // only. (Previously these fell through to the local-copy fallback.)
+    match /tours/{allPaths=**} {
+      allow read: if signedIn();
+      allow create, update: if signedIn()
+        && request.resource.size < 8 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow delete: if signedIn();
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }

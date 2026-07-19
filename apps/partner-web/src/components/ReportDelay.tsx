@@ -12,6 +12,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Plus, Clock, X, Trash2 } from 'lucide-react';
 import { Modal, Field, TextInput, DateTimeInput, Select, Row } from './ui/Modal.js';
+import { AudioNote } from './ui/AudioNote.js';
 import { useAuth } from '../lib/auth.js';
 import { useNotify } from '../lib/notify.js';
 import {
@@ -29,7 +30,9 @@ const fmt = (dt?: string) => {
 export function ReportDelay({ item, onClose, onSave }: {
   item: BoardItem;
   onClose: () => void;
-  onSave: (reports: DelayReport[]) => void;
+  /** `startTransit` = the run was Upcoming and this report should move it to
+   *  In Transit (the client's auto-switch rule). */
+  onSave: (reports: DelayReport[], startTransit: boolean) => void;
 }) {
   const { member } = useAuth();
   const { push } = useNotify();
@@ -42,6 +45,8 @@ export function ReportDelay({ item, onClose, onSave }: {
   const [event, setEvent] = useState('');
   const [reason, setReason] = useState('');
   const [estimatedAt, setEstimatedAt] = useState('');
+  const [remarks, setRemarks] = useState('');
+  const [audioUrl, setAudioUrl] = useState<string | undefined>(undefined);
   const [newCode, setNewCode] = useState('');
   const [tried, setTried] = useState(false);
 
@@ -72,9 +77,13 @@ export function ReportDelay({ item, onClose, onSave }: {
     const entry: DelayReport = {
       id: `${Date.now().toString(36)}`,
       vrid, event, reason, scheduledAt, estimatedAt,
+      ...(remarks.trim() ? { remarks: remarks.trim() } : {}),
+      ...(audioUrl ? { audioUrl } : {}),
       byName: member?.name ?? '', atMs: Date.now(),
     };
-    onSave([...reports, entry]);
+    // The client's rule: submitting an arrival/departure report moves an
+    // Upcoming run to In Transit. onSave carries the status change through.
+    onSave([...reports, entry], item.lane === 'Upcoming');
     push({ title: 'Delay reported', body: `${event} · ${reason}`, tone: 'info' });
     onClose();
   }
@@ -152,6 +161,15 @@ export function ReportDelay({ item, onClose, onSave }: {
         </Field>
       </div>
 
+      <Field label="Remarks" hint="Anything the accountant / ops lead should know">
+        <TextInput value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="e.g. held at checkpost, driver waiting for gate pass" />
+      </Field>
+
+      {/* Audio log — the client's "audio log if needed". */}
+      <Field label="Voice note" hint="Optional — record a quick spoken update">
+        <AudioNote value={audioUrl} onChange={setAudioUrl} path={`reports/${item.id || item.code}/audio`} />
+      </Field>
+
       {/* Audit log */}
       <details className="rounded-lg ring-1 ring-inset ring-neutral-200">
         <summary className="cursor-pointer px-3 py-2 text-[11px] font-bold text-neutral-600">Audit log ({reports.length})</summary>
@@ -161,6 +179,8 @@ export function ReportDelay({ item, onClose, onSave }: {
             <div key={r.id} className="border-b border-neutral-50 px-3 py-2 text-[11px] last:border-0">
               <div className="font-bold text-neutral-800">{r.event} <span className="font-mono text-neutral-400">· {r.vrid}</span></div>
               <div className="text-neutral-600">{r.reason} — {fmt(r.scheduledAt)} → <b>{fmt(r.estimatedAt)}</b></div>
+              {r.remarks && <div className="mt-0.5 text-neutral-500">“{r.remarks}”</div>}
+              {r.audioUrl && <audio src={r.audioUrl} controls className="mt-1 h-7 max-w-[200px]" />}
               <div className="mt-0.5 flex items-center gap-1 text-[10px] text-neutral-400">
                 <Clock size={9} /> {new Date(r.atMs).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false })}
                 {r.byName ? ` · ${r.byName}` : ''}
