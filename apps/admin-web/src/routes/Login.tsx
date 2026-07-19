@@ -5,7 +5,7 @@ import { Button } from '../components/ui/Button.js';
 
 export function Login() {
   const navigate = useNavigate();
-  const [email, setEmail] = useState('dispatch@shipva.in');
+  const [email, setEmail] = useState('dispatch@sarvaexpress.in');
   const [password, setPassword] = useState('••••••••••');
 
   return (
@@ -15,7 +15,7 @@ export function Login() {
           <div>
             <div className="flex items-center gap-2">
               <div className="flex h-9 w-9 items-center justify-center rounded-md bg-white text-primary-700 font-bold">G</div>
-              <div className="text-lg font-semibold">ShipVa</div>
+              <div className="text-lg font-semibold">Sarva Express</div>
             </div>
             <h2 className="mt-12 text-2xl font-semibold leading-tight">
               Bangalore's driver-first logistics marketplace.

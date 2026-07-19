@@ -13,7 +13,7 @@ export function Welcome() {
       <div className="flex w-full max-w-md flex-col px-6 pt-16 pb-8 text-white">
         <div className="flex items-center gap-2">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white text-primary-700 font-bold text-lg">G</div>
-          <span className="text-lg font-semibold">ShipVa</span>
+          <span className="text-lg font-semibold">Sarva Express</span>
         </div>
 
         <h1 className="mt-12 text-3xl font-bold leading-tight">Move anything,<br />your way.</h1>

@@ -2,11 +2,9 @@
  * White-label brand config. The whole app reads its product name, tagline and
  * operating-company chrome from here, so one codebase ships under multiple
  * brands. Pick the brand at build time with VITE_BRAND. This deployment ships as
- * Sarva Express, so that is the DEFAULT — a plain `npm run build` (no env file,
- * as in this repo) must not fall back to the ShipVa demo brand. Override for
- * another brand with VITE_BRAND, e.g.:
- *
- *   VITE_BRAND=shipva npm run build -w @shipva/partner-web
+ * Sarva Express, so that is the only brand and the default. To white-label for
+ * another operator, add a brand entry to BRANDS below and select it at build
+ * time with VITE_BRAND.
  */
 import sarvaIcon from '../assets/sarva-icon.png';
 import sarvaLogo from '../assets/sarva-logo.png';
@@ -33,7 +31,9 @@ export interface Brand {
 }
 
 const BRANDS: Record<string, Brand> = {
-  shipva: { name: 'ShipVa', tagline: 'Transporter OS', company: 'Karnataka Roadlines' },
+  // The old ShipVa demo brand was removed — this deployment is Sarva Express only,
+  // and its name mustn't linger in the shipped bundle. Re-add a brand entry here
+  // to white-label for another operator.
   'sarva-express': {
     name: 'Sarva Express', tagline: 'Transport OS', company: 'Sarva Express',
     logoSrc: sarvaIcon, lockupSrc: sarvaLogo,
