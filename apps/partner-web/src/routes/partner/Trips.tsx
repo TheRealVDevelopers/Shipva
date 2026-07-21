@@ -59,10 +59,10 @@ const fmtActual = (ms?: number) => (ms ? new Date(ms).toLocaleString('en-IN', { 
  * from its own line board, and pretending otherwise would offer buttons that do
  * nothing.
  */
-function BoardRow({ item, expanded, onToggle, showOwner, canEdit, onReport, onTrack, onPrintLR, onEdit, onDelete, onAdvance, onUpdate }: {
-  item: BoardItem; expanded: boolean; onToggle: () => void; showOwner: boolean; canEdit: boolean;
+function BoardRow({ item, expanded, onToggle, showOwner, canEdit, canAssign, onReport, onTrack, onPrintLR, onEdit, onDelete, onAdvance, onUpdate, onReassign }: {
+  item: BoardItem; expanded: boolean; onToggle: () => void; showOwner: boolean; canEdit: boolean; canAssign: boolean;
   onReport: () => void; onTrack: () => void; onPrintLR: () => void;
-  onEdit: () => void; onDelete: () => void; onAdvance: () => void; onUpdate: () => void;
+  onEdit: () => void; onDelete: () => void; onAdvance: () => void; onUpdate: () => void; onReassign: () => void;
 }) {
   const isTour = item.kind === 'tour';
   const trip = isTour ? null : (item.source as Trip);
@@ -188,6 +188,12 @@ function BoardRow({ item, expanded, onToggle, showOwner, canEdit, onReport, onTr
                   <button onClick={onPrintLR} className="inline-flex items-center gap-1 rounded-lg bg-white px-2.5 py-1.5 text-xs font-bold text-neutral-600 ring-1 ring-inset ring-neutral-200 hover:bg-neutral-50"><FileText size={12} /> LR</button>
                 </>
               )}
+              {/* Reassign — leadership can hand this run to a different employee. */}
+              {canAssign && (
+                <button onClick={onReassign} className="inline-flex items-center gap-1 rounded-lg bg-white px-2.5 py-1.5 text-xs font-bold text-neutral-600 ring-1 ring-inset ring-neutral-200 hover:bg-neutral-50" title="Reassign to another employee">
+                  <UserCog size={12} /> {item.ownerName ? 'Reassign' : 'Assign'}
+                </button>
+              )}
               {canEdit && (
                 <>
                   <button onClick={onEdit} className="rounded-lg p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-primary-600" title={isTour ? 'Edit on the Amazon Tours board' : 'Edit trip'}><Pencil size={14} /></button>
@@ -221,6 +227,9 @@ export function Trips() {
   // id and look the live record up, so a save re-renders instead of freezing.
   const [operateId, setOperateId] = useState<string | null>(null);
   const operating = operateId ? tours.find((t) => t.id === operateId) ?? null : null;
+  const [reassignFor, setReassignFor] = useState<BoardItem | null>(null);
+  const [reassignTo, setReassignTo] = useState('');
+  const [mineOnly, setMineOnly] = useState(false);
   const [q, setQ] = useState('');
   const [open, setOpen] = useState(false);
   const [f, setF] = useState(EMPTY);
@@ -259,9 +268,21 @@ export function Trips() {
   // Sorted by lane, per the client: Upcoming earliest-first by schedule, In
   // Transit with overdue ("pending") pinned to the top, Completed newest-first.
   const shown = sortForLane(
-    board.filter((i) => inLane(i, filter)).filter(inDateWindow).filter((i) => matches(i, q)),
+    board
+      .filter((i) => inLane(i, filter)).filter(inDateWindow).filter((i) => matches(i, q))
+      // "Assigned to me" — narrow to the runs this member owns.
+      .filter((i) => !mineOnly || i.ownerUid === member?.uid),
     filter,
   );
+
+  /** Hand a run to a different employee (leadership only). */
+  function reassign(i: BoardItem, uid: string) {
+    const m = members.find((x) => x.uid === uid);
+    if (!m) return;
+    const patch = { ownerUid: m.uid, ownerName: m.name, leaderUid: teamOf(m) };
+    if (i.kind === 'tour') updateTour(i.id, patch); else updateTrip(i.id, patch);
+    push({ title: 'Reassigned', body: `${i.code} handed to ${m.name}.`, tone: 'success' });
+  }
 
   /** Export exactly what's on screen — the tab, dates and search applied. The
    *  full column set the client listed on page 2: trip ID, client, vehicle,
@@ -326,7 +347,8 @@ export function Trips() {
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF({ ...f, [k]: e.target.value });
 
   function resetForm() {
-    setF({ ...EMPTY, date: todayFullLabel(), handledBy: member?.uid ?? '' });
+    // handledBy starts blank so leadership must choose an assignee (see errs).
+    setF({ ...EMPTY, date: todayFullLabel() });
     setPts([blankPoint(), blankPoint()]);
     setTried(false); setEditId(null);
     setDrvAdd(false); setNewDriver(NEW_DRIVER); setDrvTried(false);
@@ -393,6 +415,9 @@ export function Trips() {
     material: requiredError(f.material, 'Material'),
     weight: positiveError(f.weight, 'Weight'),
     freight: positiveError(f.freight, 'Freight'),
+    // Leadership must consciously assign the trip to an employee (the client's
+    // "you can't save without choosing who it's assigned to").
+    handledBy: canAssign ? requiredError(f.handledBy, 'Assignee') : '',
   };
   const pointsOk = activePts.every((p) => p.label.trim());
   const valid = allClear(errs) && pointsOk;
@@ -502,6 +527,12 @@ export function Trips() {
                   )}
                 </div>
               )}
+              {/* "Assigned to me" — narrow the board to this member's own runs. */}
+              <button onClick={() => setMineOnly((v) => !v)}
+                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold ring-1 ring-inset transition ${mineOnly ? 'bg-primary-500 text-white ring-primary-500' : 'bg-neutral-50 text-neutral-600 ring-neutral-200 hover:bg-neutral-100'}`}
+                title="Show only trips and tours assigned to me">
+                <UserCog size={13} /> Assigned to me
+              </button>
               <div className="flex items-center gap-2 rounded-lg bg-neutral-50 px-3 py-1.5 ring-1 ring-inset ring-neutral-200">
                 <Search size={13} className="text-neutral-400" />
                 <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search VR / LR / route / driver" className="w-44 bg-transparent text-xs text-neutral-700 outline-none placeholder:text-neutral-400" />
@@ -524,6 +555,7 @@ export function Trips() {
                 onToggle={() => setOpenRow(openRow === `${i.kind}-${i.id}` ? null : `${i.kind}-${i.id}`)}
                 showOwner={isAdmin || canAssign}
                 canEdit={canEdit}
+                canAssign={canAssign}
                 onReport={() => setReportFor(i)}
                 onTrack={() => i.kind === 'trip' && i.id && setTrackId(i.id)}
                 onPrintLR={() => i.kind === 'trip' && printLR(i.source as Trip)}
@@ -531,6 +563,7 @@ export function Trips() {
                 onDelete={() => i.kind === 'trip' && setConfirmDel(i.source as Trip)}
                 onAdvance={() => i.kind === 'trip' && advanceOnCard(i.source as Trip)}
                 onUpdate={() => i.kind === 'tour' && i.id && setOperateId(i.id)}
+                onReassign={() => { setReassignTo(i.ownerUid || ''); setReassignFor(i); }}
               />
             ))}
             {shown.length === 0 && (
@@ -556,6 +589,21 @@ export function Trips() {
       {reportFor && (
         <ReportDelay item={reportFor} onClose={() => setReportFor(null)}
           onSave={(reports, startTransit) => saveReports(reportFor, reports, startTransit)} />
+      )}
+
+      {/* Reassign a trip or tour to a different employee */}
+      {reassignFor && (
+        <Modal open onClose={() => setReassignFor(null)}
+          title={`Assign ${reassignFor.code}`} subtitle={reassignFor.ownerName ? `Currently ${reassignFor.ownerName}` : 'Not assigned yet'}
+          onSubmit={() => { reassign(reassignFor, reassignTo); setReassignFor(null); }}
+          submitLabel="Assign" submitDisabled={!reassignTo}>
+          <Field label="Assign to" required hint="Only this employee sees and updates the run">
+            <Select value={reassignTo} onChange={(e) => setReassignTo(e.target.value)}>
+              <option value="">— Assign to an employee —</option>
+              {assignable.map((m) => <option key={m.uid} value={m.uid}>{m.name}{m.uid === member?.uid ? ' (me)' : ''}</option>)}
+            </Select>
+          </Field>
+        </Modal>
       )}
 
       {/* New trip */}
@@ -690,9 +738,9 @@ export function Trips() {
         </Field>
 
         {canAssign && (
-          <Field label="Handled by" hint={isAdmin ? 'Which team member owns this route' : 'Which of your POCs runs this route'}>
+          <Field label="Assign to" required hint={isAdmin ? 'The employee who owns and updates this trip' : 'Which of your POCs runs this trip'} error={tried ? errs.handledBy : undefined}>
             <Select value={f.handledBy} onChange={set('handledBy')}>
-              {assignable.length === 0 && <option value={member?.uid ?? ''}>{member?.name ?? 'Me'}</option>}
+              <option value="">— Assign to an employee —</option>
               {assignable.map((m) => <option key={m.uid} value={m.uid}>{m.name}{m.uid === member?.uid ? ' (me)' : ''}</option>)}
             </Select>
           </Field>

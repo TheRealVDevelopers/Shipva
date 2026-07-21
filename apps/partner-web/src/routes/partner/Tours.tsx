@@ -473,13 +473,13 @@ export function Tours() {
             }
             setAssignFor(null);
           }}
-          submitLabel="Assign route">
+          submitLabel="Assign route" submitDisabled={!assignPoc}>
           <p className="rounded-lg px-3 py-2.5 text-sm" style={{ background: '#EAF3EC', color: '#067D62' }}>
-            <b>{assignFor.tourId}</b> created with {assignFor.vrids} VRID{assignFor.vrids === 1 ? '' : 's'}.
+            <b>{assignFor.tourId}</b> created with {assignFor.vrids} VRID{assignFor.vrids === 1 ? '' : 's'}. Assign it to an employee to finish.
           </p>
-          <Field label="Assign to POC" hint={isAdmin ? "They'll see this line on their Tours page — nobody else will" : 'Which of your POCs runs this line'}>
+          <Field label="Assign to" required hint={isAdmin ? "The employee who runs and updates this line — nobody else sees it" : 'Which of your POCs runs this line'}>
             <Select value={assignPoc} onChange={(e) => setAssignPoc(e.target.value)}>
-              {assignable.length === 0 && <option value={member?.uid ?? ''}>{member?.name ?? 'Me'}</option>}
+              <option value="">— Assign to an employee —</option>
               {assignable.map((m) => <option key={m.uid} value={m.uid}>{m.name}{m.uid === member?.uid ? ' (me)' : ''}</option>)}
             </Select>
           </Field>
