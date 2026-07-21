@@ -158,7 +158,9 @@ export function Tours() {
 
   // G-pay & advance are no longer part of creating a route — they're asked for
   // in the Diesel Request. Requiring them here would make the form unsavable.
-  const baseComplete = !!(f.serviceAt && f.vendor && f.driver && f.vehicleId && f.tourId.trim());
+  // Leadership must pick who the line is assigned to, in the form.
+  const assignOk = !canAssign || !!f.handledBy;
+  const baseComplete = !!(f.serviceAt && f.vendor && f.driver && f.vehicleId && f.tourId.trim()) && assignOk;
   const valid = baseComplete && legs.length > 0 && legs.every(legComplete)
     && !vendorBlocked && !driverUnverified && !truckUnverified;
 
@@ -168,6 +170,7 @@ export function Tours() {
   if (!f.driver) missing.push('driver');
   if (!f.vehicleId) missing.push('vehicle');
   if (!f.tourId.trim()) missing.push('trip ID');
+  if (!assignOk) missing.push('assign it to an employee');
   if (!legs.every(legComplete)) missing.push('complete every VRID & its stops');
 
   // Hard blocks are shown apart from missing fields — a blocked vendor or an
@@ -265,13 +268,10 @@ export function Tours() {
           amzStatus: 'PLANNED', sarvaStatus: 'PLANNED', present: 'PRESENT',
           stops: [], totalManualKm: '', amazonRelyKm: '', gpsKm: '', remarks: '',
         }, handledBy);
-        push({ title: 'Route created', body: `${f.tourId} · ${legs.length} VRID${legs.length > 1 ? 's' : ''}.`, tone: 'success' });
-        // Hand it to a POC as the next step rather than burying the choice in
-        // the form. Defaults to whoever created it if they skip.
-        if (id && canAssign) {
-          setAssignPoc(member?.uid ?? '');
-          setAssignFor({ id, tourId: f.tourId.trim(), vrids: legs.length });
-        }
+        const who = handledBy?.name ? ` · assigned to ${handledBy.name}` : '';
+        push({ title: 'Route created', body: `${f.tourId} · ${legs.length} VRID${legs.length > 1 ? 's' : ''}${who}.`, tone: 'success' });
+        // Assignment happened in the form — no after-create step. Existing lines
+        // are reassigned from the row's Assign/Reassign button.
       }
       resetForm(); setOpen(false);
     } finally { setBusy(false); }
@@ -353,8 +353,9 @@ export function Tours() {
         <div className="overflow-hidden rounded-xl bg-white shadow-sm" style={{ border: '1px solid #D5D9D9' }}>
           <div className="divide-y" style={{ borderColor: '#EDEFF1' }}>
             {shown.map((t) => (
-              <TourRow key={t.id} t={t} isAdmin={isAdmin} canEdit={canEdit}
+              <TourRow key={t.id} t={t} isAdmin={isAdmin} canEdit={canEdit} canAssign={canAssign}
                 onDiesel={() => t.id && setDieselId(t.id)}
+                onAssign={() => { setAssignPoc(t.ownerUid ?? ''); setAssignFor({ id: t.id!, tourId: t.tourId, vrids: t.legs?.length ?? 0 }); }}
                 onEdit={() => startEdit(t)} onDelete={() => setConfirmDel(t)} onShare={updateTour} />
             ))}
             {shown.length === 0 && (
@@ -410,6 +411,16 @@ export function Tours() {
           <Field label="Vehicle type" hint="Auto from the vehicle's feet"><TextInput value={vehicleFeet || (f.vehicleId ? '—' : '')} disabled placeholder="pick a vehicle" /></Field>
         </Row>
         <Field label="Trip ID (manual entry)"><TextInput value={f.tourId} onChange={(e) => setF({ ...f, tourId: e.target.value })} placeholder="T-30FPN0493" /></Field>
+        {/* Assign this line to an employee here in the form — required. Only they
+            see and update it. Existing lines are reassigned from the row button. */}
+        {canAssign && (
+          <Field label="Assign to" required hint={isAdmin ? 'The employee who runs and updates this line' : 'Which of your POCs runs this line'}>
+            <Select value={f.handledBy} onChange={(e) => setF({ ...f, handledBy: e.target.value })}>
+              <option value="">— Assign to an employee —</option>
+              {assignable.map((m) => <option key={m.uid} value={m.uid}>{m.name}{m.uid === member?.uid ? ' (me)' : ''}</option>)}
+            </Select>
+          </Field>
+        )}
         {/* G-pay name/number, advance and paid/pending have moved to the Diesel
             Request on the card — assigning a route and asking for the money are
             two different jobs, done at different times by different people. */}
@@ -461,30 +472,32 @@ export function Tours() {
         {missing.length > 0 && <p className="text-[11px] font-semibold" style={{ color: '#B15C00' }}>To create, still needed: {missing.join(' · ')}.</p>}
       </Modal>
 
-      {/* ── Step 2: assign the freshly created route to a POC ─────────────── */}
-      {assignFor && canAssign && (
-        <Modal open onClose={() => setAssignFor(null)} title="Assign to POC"
-          subtitle={`${assignFor.tourId} created — who runs this line?`}
-          onSubmit={() => {
-            const m = assignable.find((x) => x.uid === assignPoc);
-            if (m) {
-              updateTour(assignFor.id, { ownerUid: m.uid, ownerName: m.name, leaderUid: teamOf(m) });
-              push({ title: 'Route assigned', body: `${assignFor.tourId} handed to ${m.name}.`, tone: 'success' });
-            }
-            setAssignFor(null);
-          }}
-          submitLabel="Assign route" submitDisabled={!assignPoc}>
-          <p className="rounded-lg px-3 py-2.5 text-sm" style={{ background: '#EAF3EC', color: '#067D62' }}>
-            <b>{assignFor.tourId}</b> created with {assignFor.vrids} VRID{assignFor.vrids === 1 ? '' : 's'}. Assign it to an employee to finish.
-          </p>
-          <Field label="Assign to" required hint={isAdmin ? "The employee who runs and updates this line — nobody else sees it" : 'Which of your POCs runs this line'}>
-            <Select value={assignPoc} onChange={(e) => setAssignPoc(e.target.value)}>
-              <option value="">— Assign to an employee —</option>
-              {assignable.map((m) => <option key={m.uid} value={m.uid}>{m.name}{m.uid === member?.uid ? ' (me)' : ''}</option>)}
-            </Select>
-          </Field>
-        </Modal>
-      )}
+      {/* Reassign an existing line — opened from the row's Assign/Reassign button.
+          (New lines are assigned in the Route Assign form itself.) */}
+      {assignFor && canAssign && (() => {
+        const cur = tours.find((t) => t.id === assignFor.id);
+        const reassigning = !!cur?.ownerName;
+        return (
+          <Modal open onClose={() => setAssignFor(null)} title={reassigning ? 'Reassign line' : 'Assign line'}
+            subtitle={reassigning ? `${assignFor.tourId} · currently ${cur?.ownerName}` : `${assignFor.tourId} · not assigned`}
+            onSubmit={() => {
+              const m = assignable.find((x) => x.uid === assignPoc);
+              if (m) {
+                updateTour(assignFor.id, { ownerUid: m.uid, ownerName: m.name, leaderUid: teamOf(m) });
+                push({ title: reassigning ? 'Reassigned' : 'Assigned', body: `${assignFor.tourId} handed to ${m.name}.`, tone: 'success' });
+              }
+              setAssignFor(null);
+            }}
+            submitLabel={reassigning ? 'Reassign' : 'Assign'} submitDisabled={!assignPoc}>
+            <Field label="Assign to" required hint={isAdmin ? 'The employee who runs and updates this line — nobody else sees it' : 'Which of your POCs runs this line'}>
+              <Select value={assignPoc} onChange={(e) => setAssignPoc(e.target.value)}>
+                <option value="">— Assign to an employee —</option>
+                {assignable.map((m) => <option key={m.uid} value={m.uid}>{m.name}{m.uid === member?.uid ? ' (me)' : ''}</option>)}
+              </Select>
+            </Field>
+          </Modal>
+        );
+      })()}
 
 
       {/* ── Diesel Request ────────────────────────────────────────────────
@@ -614,9 +627,9 @@ function DieselRequest({ tour, onClose, onSave }: {
  * and the WhatsApp share/copy actions; collapsed it's ID, route summary, driver,
  * status, and the two primary actions (diesel + share).
  */
-function TourRow({ t, isAdmin, canEdit, onDiesel, onEdit, onDelete, onShare }: {
-  t: Tour; isAdmin: boolean; canEdit: boolean;
-  onDiesel: () => void; onEdit: () => void; onDelete: () => void;
+function TourRow({ t, isAdmin, canEdit, canAssign, onDiesel, onEdit, onDelete, onShare, onAssign }: {
+  t: Tour; isAdmin: boolean; canEdit: boolean; canAssign: boolean;
+  onDiesel: () => void; onEdit: () => void; onDelete: () => void; onAssign: () => void;
   onShare: (id: string, patch: Partial<Tour>) => void;
 }) {
   const legs = t.legs && t.legs.length ? t.legs : [];
@@ -665,9 +678,16 @@ function TourRow({ t, isAdmin, canEdit, onDiesel, onEdit, onDelete, onShare }: {
           {diesel && (
             <Badge tone={diesel.status === 'approved' ? 'success' : diesel.status === 'rejected' ? 'danger' : 'warning'}><Fuel size={10} /> {requestStatusLabel(diesel)}</Badge>
           )}
+          {canAssign && (
+            <button onClick={onAssign} className="inline-flex items-center gap-1 rounded-lg border px-2 py-1.5 text-xs font-extrabold"
+              style={{ borderColor: t.ownerName ? '#D5D9D9' : ORANGE, color: t.ownerName ? '#475467' : '#B45309', background: t.ownerName ? '#fff' : '#FFF7ED' }}
+              title={t.ownerName ? `Assigned to ${t.ownerName} — tap to reassign` : 'Not assigned — tap to assign'}>
+              <UserCog size={12} /> {t.ownerName ? 'Reassign' : 'Assign'}
+            </button>
+          )}
           {canEdit && (
             <>
-              <button onClick={onEdit} className="rounded-lg p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-primary-600" title="Edit / assign route"><Pencil size={14} /></button>
+              <button onClick={onEdit} className="rounded-lg p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-primary-600" title="Edit route"><Pencil size={14} /></button>
               <button onClick={onDelete} className="rounded-lg p-1.5 text-neutral-400 hover:bg-amber-50 hover:text-amber-600" title="Cancel / archive route"><Trash2 size={14} /></button>
             </>
           )}
