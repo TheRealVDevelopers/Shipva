@@ -178,10 +178,17 @@ export function Overview() {
     <PartnerLayout title="Dashboard" subtitle={`${BRAND.company} · ${todayLabel}`}>
       <div className="space-y-6">
         {/* Owner/manager/team-leader see their team; workers see their own day */}
-        {isLead ? <TeamMix /> : <MyDayStrip />}
+        {/* Everyone gets their own "your day" strip — a trip or task can be
+            assigned to the owner or a manager too, and they update it the same
+            way. Leads additionally see the team mix below it. */}
+        <MyDayStrip />
+        {isLead && <TeamMix />}
 
-        {/* Quick actions — everyone gets the operational ones. */}
+        {/* Quick actions — everyone gets the operational ones. "My runs" jumps to
+            the trips & tours assigned to whoever is signed in (owner included). */}
         <div className="flex flex-wrap items-center gap-2">
+          {(() => { const n = board.filter((i) => i.ownerUid === member?.uid && !inLane(i, 'Completed')).length;
+            return <QuickAction to="/p/trips?mine=1" icon={<Navigation size={13} />} label={`My runs${n ? ` (${n})` : ''}`} />; })()}
           <QuickAction to="/p/trips" icon={<Plus size={13} />} label="New Trip" />
           <QuickAction to="/p/tours" icon={<RouteIcon size={13} />} label="Route Assign" />
           <QuickAction to="/p/fleet" icon={<Users size={13} />} label="Add driver" />

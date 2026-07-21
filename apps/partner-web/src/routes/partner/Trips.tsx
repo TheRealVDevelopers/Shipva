@@ -229,7 +229,8 @@ export function Trips() {
   const operating = operateId ? tours.find((t) => t.id === operateId) ?? null : null;
   const [reassignFor, setReassignFor] = useState<BoardItem | null>(null);
   const [reassignTo, setReassignTo] = useState('');
-  const [mineOnly, setMineOnly] = useState(false);
+  // `?mine=1` (e.g. the dashboard's "My runs" link) opens the board pre-filtered.
+  const [mineOnly, setMineOnly] = useState(params.get('mine') === '1');
   const [q, setQ] = useState('');
   const [open, setOpen] = useState(false);
   const [f, setF] = useState(EMPTY);
