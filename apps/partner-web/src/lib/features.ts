@@ -8,7 +8,7 @@
  */
 export type FeatureId =
   | 'overview' | 'trips' | 'tours' | 'fleet' | 'team' | 'activity'
-  | 'customers' | 'payables'
+  | 'locations' | 'customers' | 'payables'
   | 'invoices' | 'expenses' | 'payroll' | 'reports'
   | 'messages' | 'chat' | 'export'
   | 'documents' | 'earnings' | 'loads' | 'jobs' | 'subscription' | 'profile' | 'settings';
@@ -20,6 +20,7 @@ export const FEATURES: Record<FeatureId, boolean> = {
   activity: true,      // Admin — employee activity log
   trips: true,         // Trip & route assignment
   tours: true,         // Amazon relay tours (55-col sheet)
+  locations: true,     // Location Master — shared maps-link shortcuts
   fleet: true,         // Truck & driver management
   customers: true,     // Vendors — clients
   payables: true,      // Vendors — truck owners

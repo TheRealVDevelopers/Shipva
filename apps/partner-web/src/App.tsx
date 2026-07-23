@@ -3,6 +3,7 @@ import { Login } from './routes/partner/Login.js';
 import { Overview } from './routes/partner/Overview.js';
 import { Trips } from './routes/partner/Trips.js';
 import { Tours } from './routes/partner/Tours.js';
+import { Locations } from './routes/partner/Locations.js';
 import { Team } from './routes/partner/Team.js';
 import { Activity } from './routes/partner/Activity.js';
 import { Customers } from './routes/partner/Customers.js';
@@ -59,6 +60,7 @@ export function App() {
 
       {Gated({ id: 'trips', path: '/p/trips', element: <Trips /> })}
       {Gated({ id: 'tours', path: '/p/tours', element: <Tours /> })}
+      {Gated({ id: 'locations', path: '/p/locations', element: <Locations /> })}
       {/* The Trucks & Drivers page is now the two registers under Vendors
           Register. Same 'fleet' permission for both — splitting the feature id
           would silently drop access for every member already granted 'fleet'.

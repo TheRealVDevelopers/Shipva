@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { PartnerLayout } from '../../components/layout/PartnerLayout.js';
 import { Modal, Field, TextInput, DateTimeInput, Select, Row } from '../../components/ui/Modal.js';
+import { LocationSuggest } from '../../components/LocationSuggest.js';
 import { ImageUpload } from '../../components/ui/ImageUpload.js';
 import {
   useStore, todayLabel, requestStatusLabel, dieselRequestFor, stageOf, ownerStageOf,
@@ -445,7 +446,11 @@ export function Tours() {
                       {leg.stops.length > 1 && <button type="button" onClick={() => removeLegStop(li, si)} className="text-neutral-400 hover:text-rose-500"><Trash2 size={12} /></button>}
                     </div>
                     <Row>
-                      <Field label="Stop name"><TextInput value={s.name} onChange={(e) => setLegStop(li, si, { name: e.target.value.toUpperCase() })} placeholder="HKR3" className="font-mono" /></Field>
+                      {/* Location Master typeahead — type a saved code and the
+                          pick fills the stop name + maps link together. */}
+                      <Field label="Stop name"><LocationSuggest upper value={s.name} onChange={(name) => setLegStop(li, si, { name })}
+                        onPick={(loc) => setLegStop(li, si, { name: loc.name.toUpperCase(), mapUrl: loc.mapUrl })}
+                        placeholder="HKR3" className="font-mono" /></Field>
                       <Field label="Location — Google Maps link"><TextInput value={s.mapUrl} onChange={(e) => setLegStop(li, si, { mapUrl: e.target.value })} placeholder="https://maps.app.goo.gl/…" className="text-xs" /></Field>
                     </Row>
                     <Row>

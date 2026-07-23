@@ -5,7 +5,7 @@ import {
   HandCoins, BarChart3, TrendingUp, PackageSearch, Navigation, BadgeCheck, Building2,
   Settings as SettingsIcon, MessageCircle, MessagesSquare, FileSpreadsheet,
   Bell, Menu, X, Volume2, VolumeX, CheckCheck, LogOut, User as UserIcon, BookOpen, ExternalLink,
-  Clock, type LucideIcon,
+  Clock, MapPin, type LucideIcon,
 } from 'lucide-react';
 import { LogoMark } from '../art.js';
 import { subscription } from '../../lib/mocks.js';
@@ -96,6 +96,7 @@ const NAV: NavItem[] = [
   { key: 'overview', to: '/p', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { key: 'trips', to: '/p/trips', label: 'Trips', icon: ClipboardList, group: 'Operations' },
   { key: 'tours', to: '/p/tours', label: 'Amazon Tours', icon: Route, group: 'Operations' },
+  { key: 'locations', to: '/p/locations', label: 'Locations', icon: MapPin, group: 'Operations' },
   { key: 'documents', to: '/p/documents', label: 'Documents', icon: FileCheck2, group: 'Operations' },
   // Vendors Register — the client's structure: transporters and truck owners,
   // plus the Trucks & Drivers page split into its two registers. All four are

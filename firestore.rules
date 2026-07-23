@@ -155,6 +155,9 @@ service cloud.firestore {
     match /orgDrivers/{id}   { allow read, create, update: if isOrgMember(); allow delete: if canWipe(); }
     match /orgTrucks/{id}    { allow read, create, update: if isOrgMember(); allow delete: if canWipe(); }
     match /orgOwners/{id}    { allow read, create, update: if isOrgMember(); allow delete: if canWipe(); }
+    // Location Master — shared maps-link shortcuts (code + name + link),
+    // usable everywhere a location is typed. Same access as the registers.
+    match /orgLocations/{id} { allow read, create, update: if isOrgMember(); allow delete: if canWipe(); }
 
     // Delay reason codes — the client's rule: the admin sets the list, everyone
     // else may only pick from it. So reads are open to members, writes aren't.

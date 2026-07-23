@@ -20,6 +20,7 @@ import { isVerified, type Trip, type TripPoint } from '../../lib/mocks.js';
 import { useStore, stageOf, dieselRequestFor, requestStatusLabel, type Customer, type DelayReport, type Tour } from '../../lib/store.js';
 import { buildBoard, inLane, matches, sortForLane, isOverdue, type BoardItem, type Lane } from '../../lib/board.js';
 import { ReportDelay } from '../../components/ReportDelay.js';
+import { LocationSuggest } from '../../components/LocationSuggest.js';
 import { TourOperate } from './Tours.js';
 import { useAuth } from '../../lib/auth.js';
 import { watchMembers, teamOf, type Member } from '../../lib/members.js';
@@ -578,10 +579,6 @@ export function Trips() {
         </Card>
       </div>
 
-      <datalist id="saved-points">
-        {savedPoints.map((sp) => <option key={sp.label} value={sp.label} />)}
-      </datalist>
-
       {/* Report a delay against a VRID's arrival/departure */}
       {operating && (
         <TourOperate tour={operating} onClose={() => setOperateId(null)} onUpdate={updateTour} showOwner={isAdmin || canAssign} />
@@ -650,8 +647,11 @@ export function Trips() {
                   <button type="button" onClick={() => removeStop(i)} className="text-neutral-400 hover:text-rose-500" title="Remove this point"><Trash2 size={14} /></button>
                 )}
               </div>
-              <TextInput list="saved-points" value={p.label} onChange={(e) => setPoint(i, { label: e.target.value })}
-                placeholder={i === 0 ? 'e.g. JP Nagar (type to see saved points)' : 'Location name'}
+              {/* Location Master typeahead — type a saved code (HK2, BHK3…) and
+                  picking the suggestion fills the name + maps link in one go. */}
+              <LocationSuggest value={p.label} onChange={(label) => setPoint(i, { label })}
+                onPick={(loc) => setPoint(i, { label: loc.name, mapUrl: loc.mapUrl })}
+                placeholder={i === 0 ? 'e.g. HK2 or JP Nagar (type a location code)' : 'Location name or code'}
                 className={tried && !p.label.trim() ? 'ring-2 ring-rose-300' : ''} />
               <div className="mt-2 flex items-center gap-2">
                 <MapPin size={13} className="shrink-0 text-neutral-400" />
