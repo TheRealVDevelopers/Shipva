@@ -99,6 +99,14 @@ export interface Customer extends VendorDocState {
   workingHrs?: string;
   workingDaysPerMonth?: string;
   tollParking?: string;
+  /**
+   * Additional rate cards — the client's point 8: a transporter can hold
+   * several, each with its own signature, and one is picked during operations.
+   * The fields above stay as the transporter's *primary* card so every
+   * existing record, agreement annexure and print path keeps working; this
+   * array is what's added on top. See rateCardsOf().
+   */
+  rateCards?: ExtraRateCard[];
   /** Onboarding progress. Absent on records that predate onboarding — those are
    *  grandfathered as `active` (see stageOf), since they're already trading. */
   stage?: OnboardStage;
@@ -110,6 +118,78 @@ export interface Customer extends VendorDocState {
   outstandingPaise: number;
   agreement?: Agreement;
 }
+
+/**
+ * One of a transporter's rate cards beyond the primary one. Each is signed
+ * separately — a vendor commonly has different terms per vehicle type, and the
+ * client asked for each card to carry its own signed copy and to be selectable
+ * when a run is priced.
+ */
+export interface ExtraRateCard {
+  id: string;
+  /** What this card is for, e.g. "32ft SXL" or "Bengaluru–Hosur monthly". */
+  label: string;
+  vehicleType?: string;
+  monthlyCostPaise?: number;
+  extraKmPaise?: number;
+  avgMonthlyKm?: number;
+  workingHrs?: string;
+  workingDaysPerMonth?: string;
+  tollParking?: string;
+  /** The vendor's signed copy of THIS card. */
+  signedImg?: string;
+  signedOn?: string;
+  /** Retired cards stay on the record but can't be picked for new work. */
+  inactive?: boolean;
+  createdOn?: string;
+}
+
+/**
+ * Every rate card a transporter holds, primary first. The primary is the
+ * contract's Annexure B (the fields directly on Customer); the rest come from
+ * `rateCards`. Returned in a single shape so callers don't special-case which
+ * one they got.
+ */
+export interface RateCardOption {
+  id: string;
+  label: string;
+  primary: boolean;
+  vehicleType?: string | undefined;
+  monthlyCostPaise?: number | undefined;
+  extraKmPaise?: number | undefined;
+  avgMonthlyKm?: number | undefined;
+  workingHrs?: string | undefined;
+  workingDaysPerMonth?: string | undefined;
+  tollParking?: string | undefined;
+  signedImg?: string | undefined;
+  signedOn?: string | undefined;
+  inactive?: boolean | undefined;
+}
+
+export function rateCardsOf(c: Customer): RateCardOption[] {
+  const primary: RateCardOption = {
+    id: 'primary',
+    label: c.vehicleType ? `Primary · ${c.vehicleType.replaceAll('_', ' ')}` : 'Primary rate card',
+    primary: true,
+    vehicleType: c.vehicleType, monthlyCostPaise: c.monthlyCostPaise, extraKmPaise: c.extraKmPaise,
+    avgMonthlyKm: c.avgMonthlyKm, workingHrs: c.workingHrs,
+    workingDaysPerMonth: c.workingDaysPerMonth, tollParking: c.tollParking,
+    // The primary card's signed copy is the agreement's own rate-card upload.
+    signedImg: c.rateCardSignedImg,
+  };
+  const extras: RateCardOption[] = (c.rateCards ?? []).map((r) => ({
+    id: r.id, label: r.label || 'Rate card', primary: false,
+    vehicleType: r.vehicleType, monthlyCostPaise: r.monthlyCostPaise, extraKmPaise: r.extraKmPaise,
+    avgMonthlyKm: r.avgMonthlyKm, workingHrs: r.workingHrs,
+    workingDaysPerMonth: r.workingDaysPerMonth, tollParking: r.tollParking,
+    signedImg: r.signedImg, signedOn: r.signedOn, inactive: r.inactive,
+  }));
+  return [primary, ...extras];
+}
+
+/** Just the cards that may be picked for new work. */
+export const activeRateCards = (c: Customer): RateCardOption[] =>
+  rateCardsOf(c).filter((r) => !r.inactive);
 
 /** Records created before onboarding existed have no stage — they're live
  *  customers with outstanding invoices, so treat them as already onboarded
@@ -422,7 +502,7 @@ interface StoreApi extends StoreShape {
   advanceTrip: (id: string, remark?: string) => void;
   addSavedPoint: (p: SavedPoint) => void;
   addInvoice: (i: Omit<Invoice, 'no' | 'gstPaise' | 'totalPaise' | 'id'> & { gstRate?: number }) => void;
-  markInvoicePaid: (no: string) => void;
+  markInvoicePaid: (no: string, mis?: Partial<Invoice>) => void;
   addExpense: (e: Omit<Expense, 'id'>) => void;
   addFuelLog: (f: Omit<FuelLog, 'id'>) => void;
   addExpenseCategory: (name: string) => void;
@@ -631,9 +711,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const markInvoicePaid = useCallback((no: string) => {
+  /** Settle an invoice. `mis` carries what the accountant recorded alongside —
+   *  paid-on, amount, UTR and the MIS change log (client point 9). */
+  const markInvoicePaid = useCallback((no: string, mis?: Partial<Invoice>) => {
     const inv = invoicesRef.current.find((i) => i.no === no);
-    if (inv?.id) void invoicesCol.update(inv.id, { status: 'paid' });
+    if (inv?.id) void invoicesCol.update(inv.id, { status: 'paid', ...(mis ?? {}) });
   }, []);
 
   const addExpense = useCallback((e: Omit<Expense, 'id'>) => { void expensesCol.add(e); }, []);

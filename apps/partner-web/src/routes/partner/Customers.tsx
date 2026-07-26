@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   Plus, Phone, Building2, Receipt, FileText, FileWarning, Download, ShieldCheck,
-  Clock, FileSignature, ChevronLeft, Pencil, Trash2, BadgeCheck, AlertTriangle, Ban,
+  Clock, FileSignature, ChevronLeft, Pencil, Trash2, BadgeCheck, AlertTriangle, Ban, Check,
 } from 'lucide-react';
 import { PartnerLayout } from '../../components/layout/PartnerLayout.js';
 import { Card } from '../../components/ui/Card.js';
@@ -18,7 +18,7 @@ import { printRateCard } from '../../lib/rateCard.js';
 import { rupees, todayFullLabel, isoToLabel, todayIso } from '../../lib/format.js';
 import {
   useStore, todayLabel, stageOf, STAGE_LABEL,
-  type Customer, type OnboardStage, type EntityType,
+  type Customer, type OnboardStage, type EntityType, type ExtraRateCard,
 } from '../../lib/store.js';
 import { useAuth } from '../../lib/auth.js';
 import { canEditRecords } from '../../lib/roles.js';
@@ -612,6 +612,9 @@ export function Customers() {
             onSend={(kind) => sendDoc(docsFor, kind)}
             onSigned={(kind, img) => setSigned(docsFor, kind, img)}
           />
+          {/* Point 8: a transporter may hold several rate cards, each signed
+              separately, and one is picked when work is priced. */}
+          <ExtraRateCards vendor={docsFor} onSave={(cards) => updateCustomer(docsFor.id, { rateCards: cards })} />
         </Modal>
       )}
 
@@ -626,5 +629,179 @@ export function Customers() {
         </Modal>
       )}
     </PartnerLayout>
+  );
+}
+
+/**
+ * Additional rate cards for one transporter — the client's point 8: "Allow
+ * multiple rate cards per transporter. Each rate card should support separate
+ * signatures and be selectable during operations."
+ *
+ * The transporter's primary card stays where it is (the Annexure B fields on
+ * the record itself, printed with the Service Agreement); this manages the
+ * extras. Each carries its own figures and its own signed copy, and can be
+ * retired without being deleted — an invoice raised against it must still be
+ * able to name the card it was priced on.
+ */
+function ExtraRateCards({ vendor, onSave }: {
+  vendor: Customer;
+  onSave: (cards: ExtraRateCard[]) => void;
+}) {
+  const { push } = useNotify();
+  const { member } = useAuth();
+  const cards = vendor.rateCards ?? [];
+  const [editing, setEditing] = useState<ExtraRateCard | null>(null);
+
+  const blank = (): ExtraRateCard => ({
+    id: `rc-${Date.now()}`, label: '', vehicleType: '',
+    createdOn: new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
+  });
+
+  function commit(card: ExtraRateCard) {
+    const next = cards.some((c) => c.id === card.id)
+      ? cards.map((c) => (c.id === card.id ? card : c))
+      : [...cards, card];
+    onSave(next);
+    setEditing(null);
+    push({ title: 'Rate card saved', body: `${card.label || 'Rate card'} · ${vendor.name}`, tone: 'success' });
+  }
+
+  const money = (p?: number) => (p ? rupees(p) : '—');
+
+  return (
+    <div className="mt-4 border-t border-neutral-100 pt-4">
+      <div className="mb-2 flex items-center justify-between">
+        <div>
+          <div className="text-sm font-extrabold text-neutral-900">Additional rate cards</div>
+          <div className="text-[11px] text-neutral-500">Beyond the primary card above — each is signed separately and can be picked when pricing a run.</div>
+        </div>
+        <Button size="sm" variant="secondary" onClick={() => setEditing(blank())}><Plus size={13} /> Add rate card</Button>
+      </div>
+
+      {cards.length === 0 && (
+        <p className="rounded-lg bg-neutral-50 px-3 py-2.5 text-[11px] text-neutral-500 ring-1 ring-inset ring-neutral-200">
+          None yet. {vendor.name} is billed on its primary rate card.
+        </p>
+      )}
+
+      <div className="space-y-2">
+        {cards.map((c) => (
+          <div key={c.id} className={`rounded-lg px-3 py-2.5 ring-1 ring-inset ${c.inactive ? 'bg-neutral-50 ring-neutral-200 opacity-70' : 'bg-white ring-neutral-200'}`}>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm font-bold text-neutral-900">{c.label || 'Rate card'}</span>
+              {c.vehicleType && <Badge tone="neutral">{c.vehicleType.replaceAll('_', ' ')}</Badge>}
+              {c.inactive && <Badge tone="warning">Retired</Badge>}
+              {c.signedImg
+                ? <Badge tone="success"><Check size={10} /> Signed</Badge>
+                : <Badge tone="warning">Unsigned</Badge>}
+              <span className="ml-auto flex items-center gap-1.5">
+                <button onClick={() => setEditing(c)} className="rounded-lg p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-primary-600" title="Edit"><Pencil size={13} /></button>
+                <button
+                  onClick={() => onSave(cards.map((x) => (x.id === c.id ? { ...x, inactive: !x.inactive } : x)))}
+                  className="text-[11px] font-bold text-neutral-500 hover:text-primary-600">
+                  {c.inactive ? 'Reinstate' : 'Retire'}
+                </button>
+              </span>
+            </div>
+            <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-[11px] text-neutral-500">
+              <span>Monthly <b className="text-neutral-700">{money(c.monthlyCostPaise)}</b></span>
+              <span>Extra km <b className="text-neutral-700">{money(c.extraKmPaise)}</b></span>
+              {c.avgMonthlyKm ? <span>Avg <b className="text-neutral-700">{c.avgMonthlyKm} km</b></span> : null}
+              {c.tollParking ? <span>Toll/parking <b className="text-neutral-700">{c.tollParking}</b></span> : null}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {editing && (
+        <RateCardForm
+          card={editing}
+          vendor={vendor}
+          employeeName={member?.name}
+          onCancel={() => setEditing(null)}
+          onSave={commit}
+        />
+      )}
+    </div>
+  );
+}
+
+/** Add / edit one extra rate card, print it, and hold its signed copy. */
+function RateCardForm({ card, vendor, employeeName, onCancel, onSave }: {
+  card: ExtraRateCard; vendor: Customer; employeeName?: string | undefined;
+  onCancel: () => void; onSave: (c: ExtraRateCard) => void;
+}) {
+  const [f, setF] = useState({
+    label: card.label ?? '',
+    vehicleType: card.vehicleType ?? '',
+    monthly: card.monthlyCostPaise ? String(card.monthlyCostPaise / 100) : '',
+    extraKm: card.extraKmPaise ? String(card.extraKmPaise / 100) : '',
+    avgKm: card.avgMonthlyKm ? String(card.avgMonthlyKm) : '',
+    workingHrs: card.workingHrs ?? '',
+    workingDays: card.workingDaysPerMonth ?? '',
+    tollParking: card.tollParking ?? '',
+  });
+  const [signedImg, setSignedImg] = useState(card.signedImg);
+
+  const num = (v: string) => (Number(v) > 0 ? Number(v) : undefined);
+  const paise = (v: string) => (Number(v) > 0 ? Math.round(Number(v) * 100) : undefined);
+  const valid = f.label.trim().length > 0;
+
+  const build = (): ExtraRateCard => ({
+    ...card,
+    label: f.label.trim(),
+    vehicleType: f.vehicleType.trim(),
+    ...(paise(f.monthly) !== undefined ? { monthlyCostPaise: paise(f.monthly)! } : {}),
+    ...(paise(f.extraKm) !== undefined ? { extraKmPaise: paise(f.extraKm)! } : {}),
+    ...(num(f.avgKm) !== undefined ? { avgMonthlyKm: num(f.avgKm)! } : {}),
+    workingHrs: f.workingHrs.trim(),
+    workingDaysPerMonth: f.workingDays.trim(),
+    tollParking: f.tollParking.trim(),
+    ...(signedImg ? { signedImg, signedOn: card.signedOn ?? new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) } : {}),
+  });
+
+  return (
+    <Modal open onClose={onCancel} title={card.label ? `Edit · ${card.label}` : 'Add rate card'}
+      subtitle={`${vendor.name} — a second set of agreed rates, signed on its own`}
+      onSubmit={() => valid && onSave(build())} submitLabel="Save rate card" submitDisabled={!valid} wide>
+      <Field label="What is this card for?" required hint="Shown wherever the card is picked — e.g. “32ft SXL” or “Hosur monthly”">
+        <TextInput value={f.label} onChange={(e) => setF({ ...f, label: e.target.value })} placeholder="32ft SXL" />
+      </Field>
+      <Row>
+        <Field label="Vehicle type"><TextInput value={f.vehicleType} onChange={(e) => setF({ ...f, vehicleType: e.target.value })} placeholder="32ft SXL" /></Field>
+        <Field label="Average monthly KM"><TextInput type="number" value={f.avgKm} onChange={(e) => setF({ ...f, avgKm: e.target.value })} placeholder="6000" /></Field>
+      </Row>
+      <Row>
+        <Field label="Monthly cost per vehicle (₹)"><TextInput type="number" value={f.monthly} onChange={(e) => setF({ ...f, monthly: e.target.value })} placeholder="95000" /></Field>
+        <Field label="Extra KM charge (₹)"><TextInput type="number" value={f.extraKm} onChange={(e) => setF({ ...f, extraKm: e.target.value })} placeholder="18" /></Field>
+      </Row>
+      <Row>
+        <Field label="Working hours" hint="Free text — “24 hrs /day”"><TextInput value={f.workingHrs} onChange={(e) => setF({ ...f, workingHrs: e.target.value })} placeholder="24 hrs /day" /></Field>
+        <Field label="Working days/month"><TextInput value={f.workingDays} onChange={(e) => setF({ ...f, workingDays: e.target.value })} placeholder="Monthly Calendar Days (28-31 days)" /></Field>
+      </Row>
+      <Field label="Toll / parking"><TextInput value={f.tollParking} onChange={(e) => setF({ ...f, tollParking: e.target.value })} placeholder="At Actuals" /></Field>
+
+      <div className="rounded-lg bg-neutral-50 px-3 py-2.5 ring-1 ring-inset ring-neutral-200">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="text-[11px] font-bold text-neutral-600">Print this card for the vendor, then upload their signed copy.</div>
+          <Button size="sm" variant="secondary" type="button"
+            onClick={() => printRateCard(
+              { name: vendor.name, contact: vendor.contactName, place: vendor.city, phone: vendor.phone, email: vendor.email, gstin: vendor.gstin },
+              {
+                avgMonthlyKm: num(f.avgKm), workingHrs: f.workingHrs, workingDaysPerMonth: f.workingDays,
+                vehicleType: f.vehicleType, monthlyCostPaise: paise(f.monthly), extraKmPaise: paise(f.extraKm),
+                tollParking: f.tollParking,
+              },
+              employeeName,
+            )}>
+            <FileText size={13} /> Print
+          </Button>
+        </div>
+        <div className="mt-2">
+          <div className="mb-1 text-[11px] font-bold text-neutral-500">Signed copy for this card</div>
+          <ImageUpload value={signedImg} onChange={setSignedImg} label="Upload signed rate card" path={`documents/transporters/${vendor.id}/ratecard-${card.id}`} />
+        </div>
+      </div>
+    </Modal>
   );
 }

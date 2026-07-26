@@ -234,6 +234,43 @@ export interface Invoice {
   id?: string;
   no: string; client: string; date: string; dueDate: string;
   basePaise: number; gstPaise: number; totalPaise: number; status: InvoiceStatus;
+  /**
+   * Vendor Payments MIS — the client's point 9: picking a vendor pulls its
+   * registered rate-card details, and the record carries the MIS fields
+   * through to the UTR. Invoice date stays manual (their words), which is why
+   * `date` is untouched above. All optional: rows raised before this exist
+   * without them.
+   */
+  rateCardId?: string;
+  rateCardLabel?: string;
+  vehicleType?: string;
+  monthlyCostPaise?: number;
+  extraKmPaise?: number;
+  /** Worked figures for the billing month. */
+  runKm?: number;
+  extraKm?: number;
+  /** Settlement, up to and including the bank reference. */
+  paidOn?: string;
+  paidAmountPaise?: number;
+  utr?: string;
+  paymentMode?: string;
+  tdsPaise?: number;
+  /** Free-text MIS remark. */
+  misNote?: string;
+  /**
+   * Change log — "MIS Update fields should track changes." Append-only, so an
+   * edit is another entry rather than a silent overwrite.
+   */
+  misUpdates?: MisUpdate[];
+}
+
+/** One recorded change to an MIS row. */
+export interface MisUpdate {
+  atMs: number;
+  by: string;
+  field: string;
+  from: string;
+  to: string;
 }
 // Demo invoices removed — real billing only.
 
