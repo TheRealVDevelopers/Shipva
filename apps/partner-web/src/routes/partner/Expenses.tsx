@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Plus, Fuel, AlertTriangle, CheckCircle2, Receipt, Inbox, Check, X, Clock, HandCoins } from 'lucide-react';
 import { PartnerLayout } from '../../components/layout/PartnerLayout.js';
 import { Card, CardHeader, CardBody } from '../../components/ui/Card.js';
@@ -19,15 +20,21 @@ const MILEAGE_KMPL = 4; // typical loaded truck; used for the expected-fuel calc
 const KNOWN_SEGMENTS = ['Toll', 'RTO/Police', 'Loading', 'Repairs', 'Misc'];
 
 const OTHER = '__other__';
-type Scope = 'Trip' | 'Office' | 'General';
+// "Route" is the client's point 10 — Date -> Vendor -> VRID. "Trip" stays for
+// an ordinary (non-Amazon) trip's LR, and Office/General for everything else.
+type Scope = 'Route' | 'Trip' | 'Office' | 'General';
 // Dates default to today but are pickable — an expense or a fuel bill is often
 // entered a day or two after it was actually incurred.
-const EXP_EMPTY = { date: '', scope: 'Trip' as Scope, tripLr: '', category: 'Toll', newCat: '', amount: '', note: '' };
+const EXP_EMPTY = {
+  date: '', scope: 'Route' as Scope, tripLr: '', category: 'Toll', newCat: '', amount: '', note: '',
+  // Route scope: the cascade.
+  isoDate: '', vendor: '', vrid: '',
+};
 const FUEL_EMPTY = { date: '', reg: '', km: '', litres: '', rate: '92' };
 const REQ_EMPTY = { kind: 'expense' as 'expense' | 'advance' | 'trip' | 'other', title: '', amount: '', tripLr: '', note: '' };
 
 export function Expenses() {
-  const { expenses, fuelLogs, trucks, trips, expenseCategories, requests, addExpense, addFuelLog, addExpenseCategory, addRequest, resolveRequest } = useStore();
+  const { expenses, fuelLogs, trucks, trips, tours, expenseCategories, requests, addExpense, addFuelLog, addExpenseCategory, addRequest, resolveRequest } = useStore();
   const { member } = useAuth();
   const { push } = useNotify();
   const [tab, setTab] = useState<(typeof TABS)[number]>('Expenses');
@@ -50,8 +57,30 @@ export function Expenses() {
     { label: 'Misc & other', value: catTotal(['Misc']) + otherTotal, color: 'var(--sx-neutral-400)' },
   ].filter((s) => s.value > 0);
   const pendingReqs = requests.filter((x) => x.status === 'pending');
+  // Diesel advances live on their own page; this list is everything else.
+  const otherRequests = requests.filter((x) => x.kind !== 'diesel');
+  const dieselPending = requests.filter((x) => x.kind === 'diesel' && x.status === 'pending').length;
 
-  const expValid = Number(e.amount) > 0 && (e.category !== OTHER || e.newCat.trim().length > 0);
+  // ── Point 10: Date -> Vendor -> available VRIDs ───────────────────────────
+  // Only live routes on the chosen day, and only the VRIDs actually on them —
+  // an expense can't be booked against a VRID that never ran that day.
+  const routesOnDate = useMemo(() => tours.filter((t) => {
+    if (t.archived || t.draft) return false;
+    if (!e.isoDate) return true;
+    return (t.serviceAt ? t.serviceAt.slice(0, 10) : '') === e.isoDate;
+  }), [tours, e.isoDate]);
+  const vendorsOnDate = useMemo(
+    () => [...new Set(routesOnDate.map((t) => t.vendorName).filter(Boolean))].sort(),
+    [routesOnDate]);
+  const vridChoices = useMemo(() => routesOnDate
+    .filter((t) => !e.vendor || t.vendorName === e.vendor)
+    .flatMap((t) => (t.legs?.length ? t.legs.map((l) => l.vrid) : (t.vrIds ?? []))
+      .filter(Boolean)
+      .map((vrid) => ({ vrid, tour: t }))), [routesOnDate, e.vendor]);
+  const pickedVrid = vridChoices.find((c) => c.vrid === e.vrid);
+
+  const routeOk = e.scope !== 'Route' || (!!e.isoDate && !!e.vendor && !!e.vrid);
+  const expValid = Number(e.amount) > 0 && (e.category !== OTHER || e.newCat.trim().length > 0) && routeOk;
   const fuelValid = g.reg && Number(g.km) > 0 && Number(g.litres) > 0;
   const reqValid = r.title.trim().length > 0;
 
@@ -59,9 +88,20 @@ export function Expenses() {
     if (!expValid) return;
     let category = e.category;
     if (e.category === OTHER) { category = e.newCat.trim(); addExpenseCategory(category); }
-    const tripLr = e.scope === 'Trip' ? (e.tripLr || '—') : e.scope; // "Office" / "General" for non-trip
-    addExpense({ date: e.date || todayFullLabel(), tripLr, category, amountPaise: Math.round(Number(e.amount) * 100), note: e.note });
-    push({ title: 'Expense added', body: `${category} · ${rupees(Math.round(Number(e.amount) * 100))} (${e.scope.toLowerCase()})`, tone: 'success' });
+    const amountPaise = Math.round(Number(e.amount) * 100);
+    if (e.scope === 'Route' && pickedVrid) {
+      // Booked against one VRID — the reference the accountant reconciles on.
+      const t = pickedVrid.tour;
+      addExpense({
+        date: e.date || todayFullLabel(), tripLr: pickedVrid.vrid, category, amountPaise, note: e.note,
+        vendorName: t.vendorName, vrid: pickedVrid.vrid, tourId: t.id, tourCode: t.tourId,
+      });
+      push({ title: 'Expense added', body: `${category} · ${rupees(amountPaise)} against ${pickedVrid.vrid} (${t.tourId}).`, tone: 'success' });
+    } else {
+      const tripLr = e.scope === 'Trip' ? (e.tripLr || '—') : e.scope; // "Office" / "General"
+      addExpense({ date: e.date || todayFullLabel(), tripLr, category, amountPaise, note: e.note });
+      push({ title: 'Expense added', body: `${category} · ${rupees(amountPaise)} (${e.scope.toLowerCase()})`, tone: 'success' });
+    }
     setE(EXP_EMPTY); setOpen(null);
   }
 
@@ -117,15 +157,22 @@ export function Expenses() {
 
             {tab === 'Expenses' ? (
               <Table>
-                <THead><Tr><Th>Date</Th><Th>Trip / Scope</Th><Th>Category</Th><Th>Note</Th><Th className="text-right">Amount</Th></Tr></THead>
+                <THead><Tr><Th>Date</Th><Th>VRID / Trip / Scope</Th><Th>Category</Th><Th>Note</Th><Th className="text-right">Amount</Th></Tr></THead>
                 <TBody>
                   {expenses.map((x, idx) => (
                     <Tr key={idx}>
                       <Td className="text-neutral-500">{x.date}</Td>
                       <Td className="font-mono text-xs text-neutral-700">
-                        {x.tripLr === 'Office' || x.tripLr === 'General'
-                          ? <Badge tone="neutral">{x.tripLr}</Badge>
-                          : x.tripLr}
+                        {x.vrid
+                          ? (
+                            <span className="inline-flex flex-col">
+                              <span className="font-extrabold" style={{ color: '#0F5C9E' }}>{x.vrid}</span>
+                              <span className="font-sans text-[10px] text-neutral-400">{[x.tourCode, x.vendorName].filter(Boolean).join(' · ')}</span>
+                            </span>
+                          )
+                          : x.tripLr === 'Office' || x.tripLr === 'General'
+                            ? <Badge tone="neutral">{x.tripLr}</Badge>
+                            : x.tripLr}
                       </Td>
                       <Td><Badge tone={KNOWN_SEGMENTS.includes(x.category) ? 'neutral' : 'primary'}>{x.category}</Badge></Td>
                       <Td className="text-neutral-600">{x.note}</Td>
@@ -175,13 +222,22 @@ export function Expenses() {
           </div>
         </section>
 
-        {/* Requests to accountant */}
+        {/* Requests to accountant. Diesel advances have their own page now —
+            they carry route detail, tabs, search and an export the generic
+            list can't give them (client points 11-13). */}
         <Card>
           <CardHeader title="Requests to accountant" subtitle="Advances & expense approvals raised by the team"
-            action={<Button size="sm" onClick={() => setOpen('request')}><HandCoins size={13} /> Raise request</Button>} />
+            action={
+              <div className="flex items-center gap-2">
+                <Link to="/p/diesel" className="inline-flex items-center gap-1 text-xs font-bold text-primary-600 hover:text-primary-700">
+                  <Fuel size={13} /> Diesel requests{dieselPending ? ` (${dieselPending})` : ''} →
+                </Link>
+                <Button size="sm" onClick={() => setOpen('request')}><HandCoins size={13} /> Raise request</Button>
+              </div>
+            } />
           <CardBody className="space-y-2.5">
-            {requests.length === 0 && <p className="py-6 text-center text-sm text-neutral-400">No requests yet.</p>}
-            {requests.map((x) => (
+            {otherRequests.length === 0 && <p className="py-6 text-center text-sm text-neutral-400">No requests yet.</p>}
+            {otherRequests.map((x) => (
               <div key={x.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-neutral-50 px-4 py-3 ring-1 ring-inset ring-neutral-100">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
@@ -216,19 +272,55 @@ export function Expenses() {
 
       {/* Add expense */}
       <Modal open={open === 'expense'} onClose={() => setOpen(null)} title="Add expense" subtitle="Trip cost, office or general spend" onSubmit={submitExpense} submitLabel="Add expense" submitDisabled={!expValid}>
-        <Field label="Expense date" required hint="When it was actually spent">
-          <DateInput value={e.date} onChange={(v) => setE({ ...e, date: v })} />
-        </Field>
         <Field label="This expense is for">
-          <div className="grid grid-cols-3 gap-2">
-            {(['Trip', 'Office', 'General'] as Scope[]).map((sc) => (
+          <div className="grid grid-cols-4 gap-2">
+            {(['Route', 'Trip', 'Office', 'General'] as Scope[]).map((sc) => (
               <button key={sc} type="button" onClick={() => setE({ ...e, scope: sc })}
-                className={`rounded-lg px-3 py-2 text-xs font-bold ring-1 ring-inset transition ${e.scope === sc ? 'bg-primary-500 text-white ring-primary-500' : 'bg-white text-neutral-600 ring-neutral-200 hover:bg-neutral-50'}`}>
-                {sc === 'Trip' ? 'A trip' : sc === 'Office' ? 'Office' : 'General'}
+                className={`rounded-lg px-2 py-2 text-xs font-bold ring-1 ring-inset transition ${e.scope === sc ? 'bg-primary-500 text-white ring-primary-500' : 'bg-white text-neutral-600 ring-neutral-200 hover:bg-neutral-50'}`}>
+                {sc === 'Route' ? 'A VRID' : sc === 'Trip' ? 'A trip' : sc}
               </button>
             ))}
           </div>
         </Field>
+
+        {/* Point 10: Date -> Vendor -> available VRIDs. Each step narrows the
+            next, so a cost can only be booked against a VRID that actually ran. */}
+        {e.scope === 'Route' ? (
+          <>
+            <Row>
+              <Field label="Service date" required hint="Which day's routes to choose from">
+                <input type="date" value={e.isoDate}
+                  onChange={(ev) => setE({ ...e, isoDate: ev.target.value, vendor: '', vrid: '', date: ev.target.value ? new Date(ev.target.value).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '' })}
+                  className="w-full rounded-lg bg-white px-3 py-2 text-sm text-neutral-900 outline-none ring-1 ring-inset ring-neutral-200 focus:ring-2 focus:ring-primary-400" />
+              </Field>
+              <Field label="Vendor" required error={e.isoDate && vendorsOnDate.length === 0 ? 'No routes ran on this date' : undefined}>
+                <Select value={e.vendor} onChange={(ev) => setE({ ...e, vendor: ev.target.value, vrid: '' })} disabled={!e.isoDate}>
+                  <option value="">{e.isoDate ? '— select vendor —' : 'Pick a date first'}</option>
+                  {vendorsOnDate.map((v) => <option key={v} value={v}>{v}</option>)}
+                </Select>
+              </Field>
+            </Row>
+            <Field label="VRID" required hint="The expense is booked against this VRID"
+              error={e.vendor && vridChoices.length === 0 ? 'This vendor has no VRIDs on that date' : undefined}>
+              <Select value={e.vrid} onChange={(ev) => setE({ ...e, vrid: ev.target.value })} disabled={!e.vendor}>
+                <option value="">{e.vendor ? '— select VRID —' : 'Pick a vendor first'}</option>
+                {vridChoices.map(({ vrid, tour }) => (
+                  <option key={`${tour.id}-${vrid}`} value={vrid}>{vrid} · {tour.tourId} · {tour.vehicleId}</option>
+                ))}
+              </Select>
+            </Field>
+            {pickedVrid && (
+              <div className="rounded-lg bg-primary-50 px-3 py-2 text-[11px] text-primary-900 ring-1 ring-inset ring-primary-100">
+                <b>{pickedVrid.vrid}</b> · {pickedVrid.tour.tourId} · {pickedVrid.tour.driver || '—'} · {pickedVrid.tour.vehicleId || '—'}
+              </div>
+            )}
+          </>
+        ) : (
+          <Field label="Expense date" required hint="When it was actually spent">
+            <DateInput value={e.date} onChange={(v) => setE({ ...e, date: v })} />
+          </Field>
+        )}
+
         <Row>
           {e.scope === 'Trip' ? (
             <Field label="Trip (LR)">
@@ -237,6 +329,8 @@ export function Expenses() {
                 {trips.map((t) => <option key={t.lr} value={t.lr}>{t.lr} · {t.from}→{t.to}</option>)}
               </Select>
             </Field>
+          ) : e.scope === 'Route' ? (
+            <Field label="Booked against"><TextInput value={e.vrid || '—'} disabled /></Field>
           ) : (
             <Field label="Scope"><TextInput value={e.scope} disabled /></Field>
           )}

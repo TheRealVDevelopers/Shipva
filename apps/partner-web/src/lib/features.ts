@@ -9,7 +9,7 @@
 export type FeatureId =
   | 'overview' | 'trips' | 'tours' | 'fleet' | 'team' | 'activity'
   | 'locations' | 'customers' | 'payables'
-  | 'invoices' | 'expenses' | 'payroll' | 'reports'
+  | 'invoices' | 'expenses' | 'diesel' | 'payroll' | 'reports'
   | 'messages' | 'chat' | 'export'
   | 'documents' | 'earnings' | 'loads' | 'jobs' | 'subscription' | 'profile' | 'settings';
 
@@ -26,6 +26,7 @@ export const FEATURES: Record<FeatureId, boolean> = {
   payables: true,      // Vendors — truck owners
   invoices: true,      // Accountant
   expenses: true,      // Accountant
+  diesel: true,        // Accountant — diesel advance requests
   reports: true,       // Accountant
   messages: true,      // WhatsApp message generation
   chat: true,          // Internal chat

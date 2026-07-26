@@ -25,6 +25,8 @@ export const ASSIGNABLE_PAGES: { id: FeatureId; label: string }[] = [
   { id: 'payables', label: 'Truck Owners' },
   { id: 'invoices', label: 'Invoices' },
   { id: 'expenses', label: 'Expenses & Fuel' },
+  { id: 'diesel', label: 'Diesel Requests' },
+  { id: 'locations', label: 'Locations' },
   { id: 'payroll', label: 'Payroll' },
   { id: 'reports', label: 'Reports' },
   { id: 'messages', label: 'WhatsApp' },

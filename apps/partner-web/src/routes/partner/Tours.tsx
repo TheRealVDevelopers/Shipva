@@ -680,6 +680,12 @@ function DieselRequest({ tour, onClose, onSave }: {
         tourId: tour.id,
         tourCode: tour.tourId || tour.vrId || '',
         note: `G-pay ${normalizePhone(gpayNumber)} · ${tour.vehicleId}`,
+        // Snapshot the run's detail so the accountant can settle the advance
+        // without opening the route (client point 11).
+        vendorName: tour.vendorName, driver: tour.driver, driverNumber: tour.driverNumber,
+        vehicleId: tour.vehicleId, vrids: tourVridList(tour),
+        gpayName: gpayName.trim(), gpayNumber: normalizePhone(gpayNumber),
+        ...(tour.serviceAt ? { serviceAt: tour.serviceAt } : {}),
       });
     }
 

@@ -10,6 +10,7 @@ import { Customers } from './routes/partner/Customers.js';
 import { Documents } from './routes/partner/Documents.js';
 import { Invoices } from './routes/partner/Invoices.js';
 import { Expenses } from './routes/partner/Expenses.js';
+import { Diesel } from './routes/partner/Diesel.js';
 import { Payables } from './routes/partner/Payables.js';
 import { Payroll } from './routes/partner/Payroll.js';
 import { Reports } from './routes/partner/Reports.js';
@@ -73,6 +74,7 @@ export function App() {
       {Gated({ id: 'payables', path: '/p/payables', element: <Payables /> })}
       {Gated({ id: 'invoices', path: '/p/invoices', element: <Invoices /> })}
       {Gated({ id: 'expenses', path: '/p/expenses', element: <Expenses /> })}
+      {Gated({ id: 'diesel', path: '/p/diesel', element: <Diesel /> })}
       {Gated({ id: 'payroll', path: '/p/payroll', element: <Payroll /> })}
       {Gated({ id: 'reports', path: '/p/reports', element: <Reports /> })}
       {Gated({ id: 'earnings', path: '/p/earnings', element: <Earnings /> })}

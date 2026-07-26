@@ -345,6 +345,29 @@ export interface MoneyRequest {
    *  paid/rejected decision made in Expenses & Fuel can be shown on the run. */
   tourId?: string; tourCode?: string;
   status: 'pending' | 'approved' | 'rejected';
+  /**
+   * Diesel-request detail, copied onto the request when it's raised so the
+   * accountant can settle it without opening the route — the client's point 11:
+   * "Accounts should be able to view complete diesel request details (Vendor,
+   * Driver, Vehicle, VRID, Tour ID, Amount, etc.)". Snapshotted deliberately:
+   * what the advance was paid against shouldn't change if the route is later
+   * edited. Absent on requests raised before this existed.
+   */
+  vendorName?: string;
+  driver?: string;
+  driverNumber?: string;
+  vehicleId?: string;
+  vrids?: string[];
+  gpayName?: string;
+  gpayNumber?: string;
+  serviceAt?: string;
+  /** Sortable creation stamp — `createdOn` is a display label, not a date. */
+  createdAtMs?: number;
+  /** Set when the accountant marks it paid or rejects it. */
+  resolvedAtMs?: number;
+  resolvedBy?: string;
+  /** Bank/UPI reference the accountant records when paying out. */
+  utr?: string;
 }
 
 /**
@@ -404,7 +427,7 @@ interface StoreApi extends StoreShape {
   addFuelLog: (f: Omit<FuelLog, 'id'>) => void;
   addExpenseCategory: (name: string) => void;
   addRequest: (r: Omit<MoneyRequest, 'id' | 'createdOn' | 'status'>) => void;
-  resolveRequest: (id: string, status: 'approved' | 'rejected') => void;
+  resolveRequest: (id: string, status: 'approved' | 'rejected', extra?: { utr?: string; by?: string }) => void;
   addCustomer: (c: Omit<Customer, 'id' | 'outstandingPaise'>) => void;
   addDriver: (d: Omit<FleetDriver, 'id'>) => void;
   addTruck: (t: Omit<Truck, 'id'>) => void;
@@ -621,11 +644,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const addRequest = useCallback((r: Omit<MoneyRequest, 'id' | 'createdOn' | 'status'>) => {
-    void requestsCol.add({ ...r, createdOn: today(), status: 'pending' });
+    // createdAtMs is the sortable stamp; createdOn stays the display label.
+    void requestsCol.add({ ...r, createdOn: today(), createdAtMs: Date.now(), status: 'pending' });
   }, []);
 
-  const resolveRequest = useCallback((id: string, status: 'approved' | 'rejected') => {
-    void requestsCol.update(id, { status });
+  /** Settle a request. `extra` carries what the accountant recorded at the
+   *  time — a UTR on a diesel payout, for instance. */
+  const resolveRequest = useCallback((id: string, status: 'approved' | 'rejected', extra?: { utr?: string; by?: string }) => {
+    void requestsCol.update(id, {
+      status, resolvedAtMs: Date.now(),
+      ...(extra?.by ? { resolvedBy: extra.by } : {}),
+      ...(extra?.utr?.trim() ? { utr: extra.utr.trim() } : {}),
+    });
   }, []);
 
   // Reference-data writes go straight to the shared Firestore collections; the

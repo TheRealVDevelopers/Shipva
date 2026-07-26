@@ -237,7 +237,19 @@ export interface Invoice {
 }
 // Demo invoices removed — real billing only.
 
-export interface Expense { id?: string; date: string; tripLr: string; category: string; amountPaise: number; note: string }
+export interface Expense {
+  id?: string; date: string; tripLr: string; category: string; amountPaise: number; note: string;
+  /**
+   * What the cost was actually run against. The client's point 10: an expense
+   * is entered Date -> Vendor -> available VRID, so toll/fuel/RTO land on a
+   * specific VRID rather than a whole route. Optional — office and general
+   * spend has no VRID, and rows entered before this existed have none either.
+   */
+  vendorName?: string;
+  vrid?: string;
+  tourId?: string;
+  tourCode?: string;
+}
 // Demo expenses removed.
 
 export interface FuelLog {
