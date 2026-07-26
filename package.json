@@ -17,6 +17,8 @@
     "dev:admin": "npm run dev -w @shipva/admin-web",
     "dev:driver": "npm run start -w @shipva/driver-app",
     "build:functions": "npm run build -w functions",
+    "dev:site": "npm run dev -w @shipva/site",
+    "build:web": "node scripts/build-web.mjs",
     "deploy:hosting": "firebase deploy --only hosting",
     "deploy:rules": "firebase deploy --only firestore:rules,storage,database",
     "deploy:functions": "firebase deploy --only functions"

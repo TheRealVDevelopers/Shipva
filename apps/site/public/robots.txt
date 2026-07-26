@@ -1,0 +1,4 @@
+
+User-agent: *
+Disallow:
+Sitemap: https://sarvaexpress.com/sitemap.xml

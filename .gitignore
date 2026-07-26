@@ -60,3 +60,6 @@ coverage/
 .turbo/
 tmp/
 temp/
+
+# Combined web build output (apps/site/dist carries the CRM under /app)
+apps/site/dist/
