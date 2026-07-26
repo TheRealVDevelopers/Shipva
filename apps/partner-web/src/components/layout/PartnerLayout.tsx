@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, ClipboardList, Route, Truck, FileCheck2, UserCog, Users, FileText, Fuel, Wallet,
   HandCoins, BarChart3, TrendingUp, PackageSearch, Navigation, BadgeCheck, Building2,
@@ -17,6 +17,8 @@ import { memberCanAccess } from '../../lib/members.js';
 import { touchActivity } from '../../lib/activity.js';
 import { watchAllTasks, isOverdue, type Task } from '../../lib/tasks.js';
 import { BRAND } from '../../lib/brand.js';
+import { useStore } from '../../lib/store.js';
+import { dueAlerts, takeUnsent, alertTitle, alertBody, showDesktopAlert, requestAlertPermission, alertsEnabled } from '../../lib/tripAlerts.js';
 
 /** Heartbeat that records screen-time while the tab is visible. The owner is a
  *  supervisor of the team, not a tracked worker, so we skip tracking for them. */
@@ -32,6 +34,43 @@ function useActivityHeartbeat() {
     window.addEventListener('focus', beat);
     return () => { window.clearInterval(id); document.removeEventListener('visibilitychange', beat); window.removeEventListener('focus', beat); };
   }, [status, uid, name, role]);
+}
+
+/**
+ * Point 3: a ticket one hour before every scheduled arrival and departure on
+ * a run you're responsible for. Clicking it opens that run's update screen.
+ *
+ * Runs app-wide from the layout so it fires on any page. `tours` is already
+ * scoped to the signed-in member (see watchToursFs), so a POC only ever gets
+ * reminders for their own lines and leadership gets their team's.
+ */
+function useTripReminders() {
+  const { status } = useAuth();
+  const { tours } = useStore();
+  const { push } = useNotify();
+  const navigate = useNavigate();
+  // Keep the newest tours in a ref so the interval doesn't need re-creating
+  // every time a snapshot lands.
+  const toursRef = useRef(tours);
+  toursRef.current = tours;
+
+  useEffect(() => {
+    if (status !== 'ready') return;
+    const tick = () => {
+      const fresh = takeUnsent(dueAlerts(toursRef.current));
+      fresh.forEach((a) => {
+        // The Trips board is where a run is opened and updated; searching by
+        // the tour code lands the POC straight on it.
+        const open = () => navigate(`/p/trips?q=${encodeURIComponent(a.tourCode)}&open=${encodeURIComponent(a.tourId)}`);
+        push({ title: alertTitle(a), body: alertBody(a), tone: 'warning' });
+        showDesktopAlert(a, open);
+      });
+    };
+    tick();
+    // A minute is fine: the reminder window is ten minutes wide.
+    const id = window.setInterval(tick, 60_000);
+    return () => window.clearInterval(id);
+  }, [status, push, navigate]);
 }
 
 /** Owner/manager alerts: chime + notification when a teammate finishes a task
@@ -211,6 +250,7 @@ function timeAgo(ts: number): string {
 
 function NotificationBell() {
   const { notes, unread, soundOn, toggleSound, markAllRead, clear } = useNotify();
+  const [desktopOn, setDesktopOn] = useState(alertsEnabled());
   const [open, setOpen] = useState(false);
   const toneDot = { info: 'bg-sky-500', success: 'bg-emerald-500', warning: 'bg-amber-500' };
 
@@ -239,6 +279,17 @@ function NotificationBell() {
                 <button onClick={markAllRead} title="Mark all read" className="rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100"><CheckCheck size={15} /></button>
               </div>
             </div>
+            {/* Desktop alerts must be asked for from a real click — browsers
+                reject the prompt on page load. Trip reminders (1 hour before an
+                arrival or departure) always reach this tray; turning this on
+                also pops them over other windows. */}
+            {!desktopOn && (
+              <button
+                onClick={async () => { const ok = await requestAlertPermission(); setDesktopOn(ok); }}
+                className="flex w-full items-center gap-2 border-b border-neutral-100 bg-amber-50/60 px-4 py-2 text-left text-[11px] font-bold text-amber-800 hover:bg-amber-50">
+                <Bell size={12} /> Turn on desktop alerts for trip reminders
+              </button>
+            )}
             <div className="max-h-80 overflow-y-auto">
               {notes.length === 0 && <p className="px-4 py-8 text-center text-sm text-neutral-400">No notifications.</p>}
               {notes.map((n) => (
@@ -302,6 +353,7 @@ export function PartnerLayout({ title, subtitle, children }: { title: string; su
   const [drawer, setDrawer] = useState(false);
   useActivityHeartbeat();
   useTeamTaskAlerts();
+  useTripReminders();
   return (
     <div className="flex h-screen bg-neutral-50">
       <aside className="hidden md:flex md:w-64 md:flex-col bg-primary-900 text-white">

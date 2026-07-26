@@ -51,7 +51,7 @@ function QuickAction({ to, icon, label }: { to: string; icon: React.ReactNode; l
 }
 
 export function Overview() {
-  const { trips, tours, trucks, invoices, expenses, fuelLogs, payroll, drivers } = useStore();
+  const { trips, tours, trucks, invoices, expenses, fuelLogs, payroll, drivers, requests } = useStore();
   const { member } = useAuth();
   // "Trips by status" was counting ordinary trips only, so an operation that
   // runs on Amazon tours saw 0 / 0 / 0. Count both, through the shared board
@@ -59,13 +59,19 @@ export function Overview() {
   const board = buildBoard(tours, trips);
   const laneCount = (lane: Lane) => board.filter((i) => inLane(i, lane)).length;
   const tourLaneCount = (lane: Lane) => board.filter((i) => i.kind === 'tour' && inLane(i, lane)).length;
-  // Three dashboards, by role: an admin (owner/manager) sees everything incl.
-  // money; a team leader sees the ops pulse + their team but not company money;
-  // an ordinary employee (supervisor) gets the lightweight view — their day and
-  // operational counts, no revenue or vendor money. The accountant keeps money.
+  // Four dashboards, by role (client requirement 1) — each sees only the KPIs,
+  // reports and actions its job needs:
+  //   Admin / Manager  everything: ops pulse, team, money, fleet.
+  //   Team Leader      ops pulse + their team; no company money.
+  //   Accounts         money, collections, payouts and the settlement queues;
+  //                    no ops pulse or fleet utilisation, which aren't theirs.
+  //   Supervisor / POC their own day and their own runs. Nothing else.
   const isAdmin = member?.role === 'owner' || member?.role === 'manager';
+  const isAccountant = member?.role === 'accountant';
   const isLead = isAdmin || member?.role === 'team_leader';
-  const seesMoney = isAdmin || member?.role === 'accountant';
+  const seesMoney = isAdmin || isAccountant;
+  // The ops pulse is a dispatcher's view — an accountant has no use for it.
+  const seesOps = isLead;
   const inr = (n: number) => rupees(n);
 
   // Live presence, for the "active now / on break" pulse (leads only render it).
@@ -172,6 +178,14 @@ export function Overview() {
   // Runs that need a look: overdue on schedule, or no update in 30+ minutes.
   const attention = [...new Set([...overdueRuns, ...staleRuns])].slice(0, 6);
 
+  // ── Accounts figures — the settlement queues that make up their day ────────
+  const dieselReqs = requests.filter((r) => r.kind === 'diesel' && r.status === 'pending');
+  const dieselPending = dieselReqs.length;
+  const dieselPendingValue = dieselReqs.reduce((s, r) => s + (r.amountPaise ?? 0), 0);
+  const otherPending = requests.filter((r) => r.kind !== 'diesel' && r.status === 'pending').length;
+  const payrollDue = payroll.filter((p) => p.status === 'due').reduce((s, p) => s + p.netPaise, 0);
+  const overdueValue = invoices.filter((i) => i.status === 'overdue').reduce((s, i) => s + i.totalPaise, 0);
+
   const todayLabel = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
 
   return (
@@ -189,16 +203,37 @@ export function Overview() {
         <div className="flex flex-wrap items-center gap-2">
           {(() => { const n = board.filter((i) => i.ownerUid === member?.uid && !inLane(i, 'Completed')).length;
             return <QuickAction to="/p/trips?mine=1" icon={<Navigation size={13} />} label={`My runs${n ? ` (${n})` : ''}`} />; })()}
-          <QuickAction to="/p/trips" icon={<Plus size={13} />} label="New Trip" />
-          <QuickAction to="/p/tours" icon={<RouteIcon size={13} />} label="Route Assign" />
-          <QuickAction to="/p/fleet" icon={<Users size={13} />} label="Add driver" />
+          {/* Operational actions belong to the people who run trips. An
+              accountant's shortcuts are the money ones below. */}
+          {!isAccountant && <QuickAction to="/p/trips" icon={<Plus size={13} />} label="New Trip" />}
+          {!isAccountant && <QuickAction to="/p/tours" icon={<RouteIcon size={13} />} label="Route Assign" />}
+          {!isAccountant && <QuickAction to="/p/fleet" icon={<Users size={13} />} label="Add driver" />}
           {seesMoney && <QuickAction to="/p/invoices" icon={<FileText size={13} />} label="Add MIS" />}
           {seesMoney && <QuickAction to="/p/expenses" icon={<Fuel size={13} />} label="Log fuel" />}
+          {seesMoney && (() => { const n = requests.filter((r) => r.kind === 'diesel' && r.status === 'pending').length;
+            return <QuickAction to="/p/diesel" icon={<Fuel size={13} />} label={`Diesel requests${n ? ` (${n})` : ''}`} />; })()}
+          {seesMoney && <QuickAction to="/p/payroll" icon={<Wallet size={13} />} label="Payroll" />}
         </div>
+
+        {/* Accounts dashboard — the settlement queues, which is what their day
+            actually is: diesel advances waiting, requests to approve, invoices
+            to collect. Admins see it too; ops roles never do. */}
+        {seesMoney && (
+          <section className="grid grid-cols-2 gap-4 lg:grid-cols-4 stagger">
+            <StatCard label="Diesel to pay" value={inr(dieselPendingValue)} icon={<Fuel size={16} />}
+              tone={dieselPending ? 'danger' : 'success'} hint={`${dieselPending} request${dieselPending === 1 ? '' : 's'} pending`} />
+            <StatCard label="Requests to approve" value={String(otherPending)} icon={<FileText size={16} />}
+              tone={otherPending ? 'accent' : 'success'} hint="expenses & advances" />
+            <StatCard label="Payroll due" value={inr(payrollDue)} icon={<Wallet size={16} />}
+              tone={payrollDue ? 'accent' : 'success'} hint="this cycle" />
+            <StatCard label="Overdue invoices" value={inr(overdueValue)} icon={<AlertTriangle size={16} />}
+              tone={overdueValue ? 'danger' : 'success'} hint="past due date" />
+          </section>
+        )}
 
         {/* Operations pulse — team leader & admin. Summaries, not money: on-time,
             delays, updates and who's online, per the client's ops-lead brief. */}
-        {isLead && (
+        {seesOps && (
           <section className="grid grid-cols-2 gap-4 lg:grid-cols-4 stagger">
             <StatCard label="On-time" value={`${onTimePct}%`} icon={<CheckCircle2 size={16} />} tone={onTimePct >= 90 ? 'success' : onTimePct >= 70 ? 'accent' : 'danger'} hint={`${activeRuns.length} active runs`} />
             <StatCard label="Delay rate" value={`${delayPct}%`} icon={<Timer size={16} />} tone={delayPct === 0 ? 'success' : delayPct <= 20 ? 'accent' : 'danger'} hint={`${delayedRuns.length} with a report`} />
@@ -208,7 +243,7 @@ export function Overview() {
         )}
 
         {/* Needs attention — overdue or no-update-in-30-min runs (leads). */}
-        {isLead && attention.length > 0 && (
+        {seesOps && attention.length > 0 && (
           <Card>
             <CardHeader title="Needs attention" subtitle="Overdue on schedule, or no update in 30+ minutes"
               action={<Link to="/p/trips?f=In Transit" className="text-xs font-bold text-primary-600">In transit →</Link>} />
