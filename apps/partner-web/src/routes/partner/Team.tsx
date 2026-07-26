@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   Plus, Phone, UserCog, Mail, Check, Copy, KeyRound, Shield, Pencil, ShieldCheck,
-  Clock, ListTodo, CalendarClock, Coffee, Trash2,
+  Clock, ListTodo, CalendarClock, Coffee, Trash2, IdCard, FileText,
 } from 'lucide-react';
 import { PartnerLayout } from '../../components/layout/PartnerLayout.js';
 import { Card } from '../../components/ui/Card.js';
@@ -11,7 +11,8 @@ import { Modal, Field, TextInput, Select, Row } from '../../components/ui/Modal.
 import { useAuth } from '../../lib/auth.js';
 import { roleLabel, defaultPages, type Role } from '../../lib/roles.js';
 import {
-  watchMembers, inviteMember, updateMember, deleteMember, pagesForRole,
+  watchMembers, inviteMember, updateMember, deleteMember, releaseOrphanLogin, pagesForRole,
+  missingProfile, profileComplete, isActivated,
   canManageMember, canDeleteMember, ASSIGNABLE_PAGES, type Member,
 } from '../../lib/members.js';
 import type { FeatureId } from '../../lib/features.js';
@@ -24,6 +25,7 @@ import {
 import { watchWorklogFor, fmtTime, type WorklogEntry } from '../../lib/worklog.js';
 import { AssignTaskModal } from '../../components/AssignTaskModal.js';
 import { useNotify } from '../../lib/notify.js';
+import { printEmployeeJoiningLetter } from '../../lib/hrDocs.js';
 
 const ROLE_TONE: Record<Role, BadgeTone> = { owner: 'success', manager: 'primary', team_leader: 'warning', supervisor: 'info', accountant: 'accent' };
 const EMPTY = { name: '', email: '', phone: '', role: 'supervisor' as Role, pages: defaultPages('supervisor'), leaderUid: '' };
@@ -40,6 +42,7 @@ export function Team() {
   const [edit, setEdit] = useState<Member | null>(null);
   const [assignTo, setAssignTo] = useState<Member | null>(null);
   const [todayFor, setTodayFor] = useState<Member | null>(null);
+  const [detailFor, setDetailFor] = useState<Member | null>(null);
   const [confirmDel, setConfirmDel] = useState<Member | null>(null);
   const [delBusy, setDelBusy] = useState(false);
 
@@ -66,15 +69,42 @@ export function Team() {
   async function submitInvite() {
     if (!f.name.trim() || !f.email.trim() || busy) return;
     setBusy(true);
+    // A TL's new members are POCs under them; an owner/manager may pick the leader.
+    const leaderUid = isTL ? me?.uid : (showLeaderPicker ? (f.leaderUid || undefined) : undefined);
+    const input = { name: f.name, email: f.email, phone: f.phone, role: f.role, pages: f.pages, ...(leaderUid ? { leaderUid } : {}) };
     try {
-      // A TL's new members are POCs under them; an owner/manager may pick the leader.
-      const leaderUid = isTL ? me?.uid : (showLeaderPicker ? (f.leaderUid || undefined) : undefined);
-      const { tempPassword } = await inviteMember({ name: f.name, email: f.email, phone: f.phone, role: f.role, pages: f.pages, ...(leaderUid ? { leaderUid } : {}) });
+      const { tempPassword } = await inviteMember(input);
       setCreated({ email: f.email.trim(), tempPassword });
       setF(EMPTY); setInvite(false);
       push({ title: 'Employee added', body: `${f.name} can now sign in.`, tone: 'success' });
     } catch (ex) {
       const code = (ex as { code?: string })?.code ?? '';
+      // An employee removed under the old delete path still has a login
+      // squatting on their email, with no member record behind it. Free it and
+      // retry once, so re-adding them just works (client point 14).
+      if (code.includes('email-already-in-use') && isAdmin) {
+        try {
+          const freed = await releaseOrphanLogin(f.email.trim());
+          if (freed) {
+            const { tempPassword } = await inviteMember(input);
+            setCreated({ email: f.email.trim(), tempPassword });
+            setF(EMPTY); setInvite(false);
+            push({ title: 'Employee re-added', body: `${f.name}'s old login was released and recreated.`, tone: 'success' });
+            return;
+          }
+          push({ title: "Couldn't add employee", body: 'That email already has an account we could not release.', tone: 'warning' });
+        } catch (inner) {
+          const msg = (inner as { message?: string })?.message ?? '';
+          push({
+            title: "Couldn't add employee",
+            body: msg.includes('active employee')
+              ? 'That email already belongs to someone on the team.'
+              : 'That email already has an account. Please try again.',
+            tone: 'warning',
+          });
+        }
+        return;
+      }
       push({ title: "Couldn't add employee", body: code.includes('email-already-in-use') ? 'That email already has an account.' : 'Please try again.', tone: 'warning' });
     } finally { setBusy(false); }
   }
@@ -124,6 +154,15 @@ export function Team() {
                   <Shield size={12} /> Access: <span className="font-semibold text-neutral-700">{pages}</span>
                   {m.mustSetPassword && <Badge tone="warning"><KeyRound size={10} /> Pending first login</Badge>}
                 </div>
+                {/* Activation state — an employee can't use the app until their
+                    profile and documents are approved (point 15). */}
+                {!isActivated(m) && (
+                  <div className="mt-1.5">
+                    {profileComplete(m)
+                      ? <Badge tone="primary"><ShieldCheck size={10} /> Profile complete — awaiting activation</Badge>
+                      : <Badge tone="warning">Profile incomplete — {missingProfile(m).length} item{missingProfile(m).length === 1 ? '' : 's'} missing</Badge>}
+                  </div>
+                )}
 
                 {/* Today's presence */}
                 <ActivityRow activity={activity[m.uid] ?? null} />
@@ -138,6 +177,9 @@ export function Team() {
                   </div>
                   <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5">
                     <button onClick={() => setTodayFor(m)} className="inline-flex items-center gap-1 text-xs font-bold text-neutral-600 hover:text-primary-700"><CalendarClock size={12} /> Today</button>
+                    {/* Point 15: managers see the employee's full detail and
+                        activate them once the documents are in. */}
+                    {canEdit && <button onClick={() => setDetailFor(m)} className="inline-flex items-center gap-1 text-xs font-bold text-neutral-600 hover:text-primary-700"><IdCard size={12} /> Details</button>}
                     {canEdit && m.uid !== me?.uid && <button onClick={() => setAssignTo(m)} className="inline-flex items-center gap-1 text-xs font-bold text-primary-600 hover:text-primary-700"><ListTodo size={12} /> Assign task</button>}
                     {canEdit && <button onClick={() => setEdit(m)} className="inline-flex items-center gap-1 text-xs font-bold text-neutral-600 hover:text-primary-700"><Pencil size={12} /> Edit access</button>}
                     {canDeleteMember(me, m) && <button onClick={() => setConfirmDel(m)} className="inline-flex items-center gap-1 text-xs font-bold text-neutral-500 hover:text-rose-600"><Trash2 size={12} /> Remove</button>}
@@ -195,6 +237,9 @@ export function Team() {
       {/* Member's day */}
       {todayFor && <TodayModal member={todayFor} activity={activity[todayFor.uid] ?? null} onClose={() => setTodayFor(null)} />}
 
+      {/* Employee detail, documents, employment terms & activation */}
+      {detailFor && me && <EmployeeDetail member={detailFor} actor={me} onClose={() => setDetailFor(null)} />}
+
       {/* Remove employee */}
       {confirmDel && (
         <Modal open onClose={() => setConfirmDel(null)} title={`Remove ${confirmDel.name}?`} subtitle="They lose access immediately"
@@ -202,8 +247,14 @@ export function Team() {
             if (delBusy) return;
             setDelBusy(true);
             try {
-              await deleteMember(confirmDel.uid);
-              push({ title: 'Employee removed', body: `${confirmDel.name} can no longer sign in.`, tone: 'info' });
+              const { authDeleted } = await deleteMember(confirmDel.uid);
+              push({
+                title: 'Employee removed',
+                body: authDeleted
+                  ? `${confirmDel.name} can no longer sign in, and ${confirmDel.email} is free to re-use.`
+                  : `${confirmDel.name} can no longer sign in.`,
+                tone: 'info',
+              });
               setConfirmDel(null);
             } catch {
               push({ title: "Couldn't remove", body: 'Please try again.', tone: 'warning' });
@@ -214,9 +265,9 @@ export function Team() {
             <b>{confirmDel.name}</b> ({confirmDel.email}) will lose access straight away. Trips, tours and tasks they handled stay —
             they'll still show <b>{confirmDel.name}</b> as the handler. This can't be undone.
           </p>
-          <p className="rounded-lg bg-amber-50 px-3 py-2 text-[11px] text-amber-800 ring-1 ring-inset ring-amber-100">
-            Their sign-in email stays registered, so re-inviting <b>{confirmDel.email}</b> later would report "email already in use".
-            If they might come back, set them to <b>Suspended</b> in Edit access instead.
+          <p className="rounded-lg bg-neutral-50 px-3 py-2 text-[11px] text-neutral-600 ring-1 ring-inset ring-neutral-200">
+            Their login is deleted too, so <b>{confirmDel.email}</b> can be invited again later.
+            If they're only away for a while, set them to <b>Suspended</b> in Edit access instead — that keeps their history intact.
           </p>
         </Modal>
       )}
@@ -356,6 +407,120 @@ function EditMember({ member, onClose, isSelf, adminEditor }: { member: Member; 
         <Field label="Phone"><TextInput value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+91 …" /></Field>
       </Row>
       <PageToggles adminRole={adminRole} pages={pages} onToggle={toggle} />
+    </Modal>
+  );
+}
+
+/**
+ * The manager's full view of an employee — the client's point 15 ("Managers
+ * should have visibility of employee details") and the activation gate.
+ *
+ * Employment terms (designation, joining date, salary) are set here rather
+ * than by the employee, because they drive payroll and the joining letter.
+ * Activation is deliberately blocked until every required field and document
+ * is in, and issuing the letter is what marks the registration finished.
+ */
+function EmployeeDetail({ member: m, actor, onClose }: { member: Member; actor: Member; onClose: () => void }) {
+  const { push } = useNotify();
+  const [designation, setDesignation] = useState(m.designation ?? '');
+  const [joinedOn, setJoinedOn] = useState(m.joinedOn ?? '');
+  const [salary, setSalary] = useState(m.monthlySalaryPaise ? String(m.monthlySalaryPaise / 100) : '');
+  const [busy, setBusy] = useState(false);
+
+  const gaps = missingProfile(m);
+  const ready = gaps.length === 0;
+  const activated = isActivated(m);
+  const seesMoney = actor.role === 'owner' || actor.role === 'manager' || actor.role === 'accountant';
+
+  async function saveTerms() {
+    setBusy(true);
+    try {
+      await updateMember(m.uid, {
+        designation: designation.trim(), joinedOn: joinedOn.trim(),
+        ...(Number(salary) > 0 ? { monthlySalaryPaise: Math.round(Number(salary) * 100) } : {}),
+      });
+      push({ title: 'Saved', body: `${m.name}'s employment details updated.`, tone: 'success' });
+    } catch { push({ title: "Couldn't save", body: 'Please try again.', tone: 'warning' }); }
+    finally { setBusy(false); }
+  }
+
+  async function activate() {
+    if (!ready) return;
+    setBusy(true);
+    try {
+      const today = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+      await updateMember(m.uid, {
+        designation: designation.trim(), joinedOn: joinedOn.trim() || today,
+        ...(Number(salary) > 0 ? { monthlySalaryPaise: Math.round(Number(salary) * 100) } : {}),
+        profileApprovedOn: today, profileApprovedBy: actor.name,
+        joiningLetterIssuedOn: today,
+      });
+      push({ title: 'Employee activated', body: `${m.name} can now use the app. Their joining letter is ready.`, tone: 'success' });
+      // Open the letter straight away — "automatically generate joining letters
+      // after employee registration".
+      printEmployeeJoiningLetter({ ...m, designation: designation.trim(), joinedOn: joinedOn.trim() || today, ...(Number(salary) > 0 ? { monthlySalaryPaise: Math.round(Number(salary) * 100) } : {}) }, actor.name);
+      onClose();
+    } catch { push({ title: "Couldn't activate", body: 'Please try again.', tone: 'warning' }); }
+    finally { setBusy(false); }
+  }
+
+  const row = (k: string, v?: string) => (
+    <div key={k} className="flex items-start gap-3 px-3 py-1.5 odd:bg-neutral-50">
+      <span className="w-36 shrink-0 text-[11px] font-bold uppercase tracking-wide text-neutral-400">{k}</span>
+      <span className="min-w-0 flex-1 break-words text-sm font-semibold text-neutral-800">{v?.trim() || '—'}</span>
+    </div>
+  );
+
+  return (
+    <Modal open onClose={onClose} title={m.name} subtitle={`${m.email} · ${roleLabel(m.role)}`} submitLabel="Close" onSubmit={onClose} wide>
+      {!activated && (
+        <div className={`rounded-lg px-3 py-2.5 text-sm ring-1 ring-inset ${ready ? 'bg-sky-50 text-sky-900 ring-sky-100' : 'bg-amber-50 text-amber-900 ring-amber-100'}`}>
+          {ready
+            ? <><b>Ready to activate.</b> Their profile and documents are complete — set the employment terms below and activate.</>
+            : <><b>Not ready yet.</b> Waiting on: {gaps.join(', ')}.</>}
+        </div>
+      )}
+
+      <div className="overflow-hidden rounded-xl ring-1 ring-inset ring-neutral-200">
+        {row('Phone', m.phone)}
+        {row('Date of birth', m.dob)}
+        {row('Address', m.address)}
+        {row('Emergency contact', [m.emergencyName, m.emergencyPhone].filter(Boolean).join(' · '))}
+        {row('Aadhaar', m.aadhaar)}
+        {row('PAN', m.pan)}
+        {seesMoney && row('Bank', [m.bankName, m.bankAccountNo, m.bankIfsc].filter(Boolean).join(' · '))}
+        {row('Reports to', m.leaderUid ? 'Team leader' : '—')}
+        {m.profileApprovedOn ? row('Activated', `${m.profileApprovedOn} by ${m.profileApprovedBy ?? '—'}`) : null}
+      </div>
+
+      <Field label="Documents">
+        <div className="flex flex-wrap items-center gap-4">
+          {([['Aadhaar', m.aadhaarImg], ['PAN', m.panImg], ['Cheque', m.cancelledChequeImg]] as const).map(([label, url]) => (
+            <div key={label} className="text-center">
+              {url
+                ? <a href={url} target="_blank" rel="noreferrer"><img src={url} alt={label} className="h-16 w-16 rounded-lg object-cover ring-1 ring-neutral-200 hover:ring-primary-300" /></a>
+                : <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-neutral-50 text-[10px] font-bold text-neutral-300 ring-1 ring-inset ring-neutral-200">Missing</div>}
+              <div className="mt-1 text-[10px] font-bold text-neutral-500">{label}</div>
+            </div>
+          ))}
+        </div>
+      </Field>
+
+      <Row>
+        <Field label="Designation"><TextInput value={designation} onChange={(e) => setDesignation(e.target.value)} placeholder={roleLabel(m.role)} /></Field>
+        <Field label="Date of joining"><TextInput value={joinedOn} onChange={(e) => setJoinedOn(e.target.value)} placeholder="1 Aug 2026" /></Field>
+      </Row>
+      {seesMoney && (
+        <Field label="Monthly salary (₹)" hint="Used for payroll and printed on the joining letter">
+          <TextInput type="number" value={salary} onChange={(e) => setSalary(e.target.value)} placeholder="25000" />
+        </Field>
+      )}
+
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" variant="secondary" onClick={() => void saveTerms()} disabled={busy}>Save details</Button>
+        {!activated && <Button size="sm" onClick={() => void activate()} disabled={!ready || busy}><ShieldCheck size={13} /> Activate &amp; issue letter</Button>}
+        {activated && <Button size="sm" variant="secondary" onClick={() => printEmployeeJoiningLetter(m, actor.name)}><FileText size={13} /> Joining letter</Button>}
+      </div>
     </Modal>
   );
 }

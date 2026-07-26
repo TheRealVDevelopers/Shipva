@@ -27,7 +27,7 @@ import { Profile } from './routes/partner/Profile.js';
 import { LogoMark } from './components/art.js';
 import { FEATURES, type FeatureId } from './lib/features.js';
 import { useAuth } from './lib/auth.js';
-import { memberCanAccess } from './lib/members.js';
+import { memberCanAccess, isActivated } from './lib/members.js';
 import { canExportData } from './lib/roles.js';
 
 function Splash() {
@@ -46,6 +46,19 @@ export function App() {
 
   if (status === 'loading') return <Splash />;
   if (status !== 'ready' || !member) return <Login />;
+
+  // Point 15: an employee must complete their profile and have their documents
+  // approved before they can use the app. Until then the only page they get is
+  // their own profile, where they fill it in. Owner and manager are exempt —
+  // somebody has to be able to approve the first profile.
+  if (!isActivated(member)) {
+    return (
+      <Routes>
+        <Route path="/p/profile" element={<Profile />} />
+        <Route path="*" element={<Navigate to="/p/profile" replace />} />
+      </Routes>
+    );
+  }
 
   /** Register a /p/* route only when its feature is enabled AND this member may access it. */
   // `when` carries an extra rule the page permission can't express — see the

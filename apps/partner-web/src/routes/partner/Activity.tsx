@@ -20,6 +20,8 @@ import {
   watchActivityByDate, todayKey, breakMs, presence, fmtClock, fmtActive, type Activity,
 } from '../../lib/activity.js';
 import { exportRows, type Cell } from '../../lib/exportExcel.js';
+import { useAuth } from '../../lib/auth.js';
+import { watchMembers, type Member } from '../../lib/members.js';
 import { brandSlug } from '../../lib/brand.js';
 
 const STATUS: Record<'active' | 'break' | 'offline', { label: string; tone: BadgeTone }> = {
@@ -30,15 +32,31 @@ const STATUS: Record<'active' | 'break' | 'offline', { label: string; tone: Badg
 type StatusKey = keyof typeof STATUS;
 
 export function Activity() {
+  const { member } = useAuth();
   const [date, setDate] = useState(todayKey());
   const [rows, setRows] = useState<Activity[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
   const [q, setQ] = useState('');
   const [statusF, setStatusF] = useState<'' | StatusKey>('');
 
   useEffect(() => watchActivityByDate(date, setRows), [date]);
+  useEffect(() => watchMembers(setMembers), []);
   const isToday = date === todayKey();
 
-  const shown = useMemo(() => rows
+  // A team leader sees their own POCs' hours and nobody else's — the client's
+  // point 14: "Team leaders should not see manager login/logout details."
+  // Owner and manager keep the whole-org view.
+  const isAdmin = member?.role === 'owner' || member?.role === 'manager';
+  const visibleUids = useMemo(() => {
+    if (isAdmin || !member) return null; // null = everyone
+    return new Set(members.filter((m) => m.leaderUid === member.uid || m.uid === member.uid).map((m) => m.uid));
+  }, [isAdmin, member, members]);
+
+  const scoped = useMemo(
+    () => (visibleUids ? rows.filter((a) => visibleUids.has(a.uid)) : rows),
+    [rows, visibleUids]);
+
+  const shown = useMemo(() => scoped
     // presence is a live "now" state, only meaningful for today; on a past day a
     // record just means they were seen, so status filtering applies to today.
     .map((a) => ({ a, status: (isToday ? presence(a) : 'offline') as StatusKey }))
@@ -47,11 +65,11 @@ export function Activity() {
       if (q && !a.name.toLowerCase().includes(q.toLowerCase())) return false;
       return true;
     })
-    .sort((x, y) => y.a.activeMs - x.a.activeMs), [rows, q, statusF, isToday]);
+    .sort((x, y) => y.a.activeMs - x.a.activeMs), [scoped, q, statusF, isToday]);
 
-  const totalActive = rows.reduce((s, a) => s + a.activeMs, 0);
-  const onBreak = rows.filter((a) => a.onBreak).length;
-  const activeNow = isToday ? rows.filter((a) => presence(a) === 'active').length : 0;
+  const totalActive = scoped.reduce((s, a) => s + a.activeMs, 0);
+  const onBreak = scoped.filter((a) => a.onBreak).length;
+  const activeNow = isToday ? scoped.filter((a) => presence(a) === 'active').length : 0;
 
   function exportDay() {
     exportRows(`${brandSlug}-activity-${date}`,
@@ -66,7 +84,7 @@ export function Activity() {
     <PartnerLayout title="Activity Log" subtitle="Employee login, working hours, breaks & status">
       <div className="space-y-5">
         <section className="grid grid-cols-2 gap-4 md:grid-cols-4">
-          <KpiCard label="Team members seen" value={String(rows.length)} hint={isToday ? 'today' : date} tone="primary" icon={<LogIn size={14} />} />
+          <KpiCard label="Team members seen" value={String(scoped.length)} hint={isToday ? 'today' : date} tone="primary" icon={<LogIn size={14} />} />
           <KpiCard label="Active now" value={isToday ? String(activeNow) : '—'} hint={isToday ? 'online' : 'past date'} tone="success" icon={<Circle size={14} />} />
           <KpiCard label="On break" value={String(onBreak)} hint="right now" tone="accent" icon={<Coffee size={14} />} />
           <KpiCard label="Total working hours" value={fmtActive(totalActive)} hint="across the team" tone="neutral" icon={<Clock size={14} />} />
@@ -120,7 +138,7 @@ export function Activity() {
           </Table>
           {shown.length === 0 && (
             <div className="py-10 text-center text-sm text-neutral-400">
-              {rows.length === 0 ? `No activity recorded for ${isToday ? 'today' : date} yet.` : 'No employees match this filter.'}
+              {scoped.length === 0 ? `No activity recorded for ${isToday ? 'today' : date} yet.` : 'No employees match this filter.'}
             </div>
           )}
           <p className="px-5 py-3 text-[11px] text-neutral-400">

@@ -108,7 +108,7 @@ const NAV: NavItem[] = [
   { key: 'invoices', to: '/p/invoices', label: 'Vendor Payments', icon: FileText, group: 'Accounts' },
   { key: 'expenses', to: '/p/expenses', label: 'Expenses & Fuel', icon: Fuel, group: 'Accounts' },
   { key: 'diesel', to: '/p/diesel', label: 'Diesel Requests', icon: Fuel, group: 'Accounts' },
-  { key: 'payroll', to: '/p/payroll', label: 'Payroll', icon: Wallet, group: 'Accounts' },
+  { key: 'payroll', to: '/p/payroll', label: 'Payroll & HR', icon: Wallet, group: 'Accounts' },
   { key: 'reports', to: '/p/reports', label: 'Reports', icon: BarChart3, group: 'Accounts' },
   { key: 'earnings', to: '/p/earnings', label: 'Earnings', icon: TrendingUp, group: 'Accounts' },
   { key: 'team', to: '/p/team', label: 'Team & Roles', icon: UserCog, group: 'Admin' },

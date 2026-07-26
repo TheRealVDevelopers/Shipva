@@ -279,5 +279,15 @@ export interface Staff { id: string; name: string; role: StaffRole; phone: strin
 export type PayStatus = 'paid' | 'due';
 export interface PayrollLine {
   id: string; name: string; role: string; basePaise: number; bhattaPaise: number; deductionsPaise: number; netPaise: number; status: PayStatus;
+  /**
+   * Which employee and which cycle this line belongs to. Added for the client's
+   * point 16 — Accounts runs payroll per month and each employee downloads a
+   * payslip, both of which need the line tied to a person and a period rather
+   * than floating free. Optional so lines written before this still load.
+   */
+  uid?: string;
+  period?: string;
+  paidOn?: string;
+  note?: string;
 }
 // Demo payroll removed.

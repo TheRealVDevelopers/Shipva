@@ -452,7 +452,10 @@ interface StoreApi extends StoreShape {
   /** Returns the new route's id so the caller can assign it to a POC next. */
   addTour: (t: Omit<Tour, 'id'>, handledBy?: { uid: string; name: string; leaderUid?: string }) => Promise<string>;
   updateTour: (id: string, patch: Partial<Tour>) => void;
-  runPayroll: () => void;
+  runPayroll: (period?: string) => void;
+  addPayrollLine: (l: Omit<PayrollLine, 'id'>) => void;
+  updatePayrollLine: (id: string, patch: Partial<PayrollLine>) => void;
+  deletePayrollLine: (id: string) => void;
   reset: () => void;
 }
 
@@ -712,10 +715,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     void ownersCol.add(a);
   }, []);
 
-  const runPayroll = useCallback(() => {
-    // Idempotent — settle every 'due' line. No-op until a payroll run is added.
-    payrollRef.current.forEach((l) => { if (l.id && l.status === 'due') void payrollCol.update(l.id, { status: 'paid' }); });
+  const runPayroll = useCallback((period?: string) => {
+    // Idempotent — settle every 'due' line, optionally just one cycle's.
+    const paidOn = today();
+    payrollRef.current.forEach((l) => {
+      if (!l.id || l.status !== 'due') return;
+      if (period && l.period !== period) return;
+      void payrollCol.update(l.id, { status: 'paid', paidOn });
+    });
   }, []);
+
+  /** Add one employee's pay line for a cycle (Accounts, point 16). */
+  const addPayrollLine = useCallback((l: Omit<PayrollLine, 'id'>) => {
+    void payrollCol.add(l as PayrollLine);
+  }, []);
+  const updatePayrollLine = useCallback((id: string, patch: Partial<PayrollLine>) => {
+    void payrollCol.update(id, patch);
+  }, []);
+  const deletePayrollLine = useCallback((id: string) => { void payrollCol.remove(id); }, []);
 
   const reset = useCallback(() => setS(seed()), []);
 
@@ -727,7 +744,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     addExpenseCategory, addRequest, resolveRequest, addCustomer, addDriver, addTruck,
     setDriverDocs, setTruckDocs, updateDriver, updateTruck, deleteDriver, deleteTruck,
     setCustomerAgreement, setAttachedAgreement, updateCustomer, deleteCustomer, updateAttached, deleteAttached,
-    addStaff, addAttached, recordOwnerPayment, addTour, updateTour, runPayroll, reset,
+    addStaff, addAttached, recordOwnerPayment, addTour, updateTour, runPayroll,
+    addPayrollLine, updatePayrollLine, deletePayrollLine, reset,
   }), [s, trips, tours, customers, drivers, trucks, attached,
     invoices, expenses, fuelLogs, payroll, requests,
     addTrip, updateTripStatus, updateTrip, archiveTrip, archiveTour, restoreTour,
@@ -735,7 +753,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     addExpenseCategory, addRequest, resolveRequest, addCustomer, addDriver, addTruck,
     setDriverDocs, setTruckDocs, updateDriver, updateTruck, deleteDriver, deleteTruck,
     setCustomerAgreement, setAttachedAgreement, updateCustomer, deleteCustomer, updateAttached, deleteAttached,
-    addStaff, addAttached, recordOwnerPayment, addTour, updateTour, runPayroll, reset]);
+    addStaff, addAttached, recordOwnerPayment, addTour, updateTour, runPayroll,
+    addPayrollLine, updatePayrollLine, deletePayrollLine, reset]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

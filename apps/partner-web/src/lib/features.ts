@@ -32,10 +32,13 @@ export const FEATURES: Record<FeatureId, boolean> = {
   chat: true,          // Internal chat
   export: true,        // Data export (Excel)
 
+  // Payroll & HR: switched off in July 2026 because nothing in the app ever
+  // created a pay line, so the page was permanently empty. Back on — the
+  // client's requirement 16 asks for salary, incentives, joining letters and
+  // payslips, and the page now builds its lines from the real team.
+  payroll: true,
+
   // ── Hidden (kept in code, not shown to the user) ─────────
-  // Payroll: removed at the client's request. Nothing in the app created a
-  // payroll line, so the page was always empty; the code stays for later.
-  payroll: false,
   documents: false,
   earnings: false,
   loads: false,

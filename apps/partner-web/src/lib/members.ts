@@ -12,7 +12,8 @@ import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth'
 import {
   collection, deleteDoc, doc, getDoc, setDoc, updateDoc, onSnapshot, serverTimestamp,
 } from 'firebase/firestore';
-import { db, firebaseConfig } from '../firebase.js';
+import { httpsCallable } from 'firebase/functions';
+import { db, functions, firebaseConfig } from '../firebase.js';
 import type { Role } from './roles.js';
 import type { FeatureId } from './features.js';
 
@@ -50,6 +51,73 @@ export interface Member {
   leaderUid?: string;
   /** Forces the "set your own password" screen on first sign-in. */
   mustSetPassword?: boolean;
+
+  /**
+   * HR profile — the client's point 15: an employee must complete their
+   * details and upload Aadhaar, PAN and bank proof before activation. All
+   * optional on the type because a brand-new invite has none of it yet;
+   * `profileComplete()` is what decides whether they're done.
+   */
+  dob?: string;
+  address?: string;
+  emergencyName?: string;
+  emergencyPhone?: string;
+  aadhaar?: string;
+  pan?: string;
+  bankAccountName?: string;
+  bankAccountNo?: string;
+  bankIfsc?: string;
+  bankName?: string;
+  aadhaarImg?: string;
+  panImg?: string;
+  cancelledChequeImg?: string;
+  /** Signed-off by an admin once the papers check out. */
+  profileApprovedOn?: string;
+  profileApprovedBy?: string;
+  /** Employment terms — set by Accounts, used by payroll and the joining letter. */
+  designation?: string;
+  joinedOn?: string;
+  monthlySalaryPaise?: number;
+  /** Generated once the employee is activated. */
+  joiningLetterIssuedOn?: string;
+}
+
+/** The profile fields the client requires before an employee is activated. */
+export const REQUIRED_PROFILE: { key: keyof Member; label: string }[] = [
+  { key: 'phone', label: 'Phone number' },
+  { key: 'dob', label: 'Date of birth' },
+  { key: 'address', label: 'Address' },
+  { key: 'emergencyPhone', label: 'Emergency contact' },
+  { key: 'aadhaar', label: 'Aadhaar number' },
+  { key: 'pan', label: 'PAN number' },
+  { key: 'bankAccountNo', label: 'Bank account number' },
+  { key: 'bankIfsc', label: 'IFSC code' },
+  { key: 'aadhaarImg', label: 'Aadhaar document' },
+  { key: 'panImg', label: 'PAN document' },
+  { key: 'cancelledChequeImg', label: 'Cancelled cheque / passbook' },
+];
+
+/** What's still missing from an employee's profile. Empty = ready to activate. */
+export function missingProfile(m: Member): string[] {
+  return REQUIRED_PROFILE.filter(({ key }) => {
+    const v = m[key];
+    return !(typeof v === 'string' ? v.trim() : v);
+  }).map(({ label }) => label);
+}
+
+export const profileComplete = (m: Member): boolean => missingProfile(m).length === 0;
+
+/**
+ * Whether this person may actually use the app.
+ *
+ * The owner and the admins are exempt — the owner bootstraps the org before
+ * any HR process exists, and locking the only account that can approve
+ * profiles out of the app behind a profile approval would be a deadlock.
+ */
+export function isActivated(m: Member): boolean {
+  if (m.status === 'disabled') return false;
+  if (m.role === 'owner' || m.role === 'manager') return true;
+  return !!m.profileApprovedOn;
 }
 
 /** The "team" a member belongs to for trip/tour scoping: their Team Leader's
@@ -97,18 +165,21 @@ export function pagesForRole(role: Role, explicit: FeatureId[]): FeatureId[] | '
   return role === 'owner' || role === 'manager' ? 'all' : explicit;
 }
 
+/**
+ * Read a member out of Firestore. Spreads the document and then pins the
+ * fields the app treats as always-present — a whitelist here would silently
+ * drop every new profile field, which is exactly how tour POD photos went
+ * missing before (see fromSnap in lib/tours).
+ */
 function memberFromSnap(uid: string, data: Record<string, unknown>): Member {
   return {
+    ...(data as Partial<Member>),
     uid,
     email: (data.email as string) ?? '',
     name: (data.name as string) ?? '',
     role: (data.role as Role) ?? 'supervisor',
     pages: (data.pages as FeatureId[] | 'all') ?? [],
     status: (data.status as Member['status']) ?? 'active',
-    ...(data.phone ? { phone: data.phone as string } : {}),
-    ...(data.photoUrl ? { photoUrl: data.photoUrl as string } : {}),
-    ...(data.leaderUid ? { leaderUid: data.leaderUid as string } : {}),
-    ...(data.mustSetPassword ? { mustSetPassword: true } : {}),
   };
 }
 
@@ -169,30 +240,46 @@ export async function inviteMember(input: InviteInput): Promise<{ uid: string; t
   }
 }
 
+/** Patch a member. `uid` is the doc id, never a stored field; anything else on
+ *  the patch is written through, so new profile fields need no change here. */
 export async function updateMember(uid: string, patch: Partial<Member>): Promise<void> {
-  const data: Record<string, unknown> = {};
-  if (patch.name !== undefined) data.name = patch.name;
-  if (patch.phone !== undefined) data.phone = patch.phone;
-  if (patch.role !== undefined) data.role = patch.role;
-  if (patch.pages !== undefined) data.pages = patch.pages;
-  if (patch.photoUrl !== undefined) data.photoUrl = patch.photoUrl;
-  if (patch.status !== undefined) data.status = patch.status;
-  if (patch.leaderUid !== undefined) data.leaderUid = patch.leaderUid;
-  if (patch.mustSetPassword !== undefined) data.mustSetPassword = patch.mustSetPassword;
+  const data: Record<string, unknown> = { ...patch };
+  delete data.uid;
+  Object.keys(data).forEach((k) => data[k] === undefined && delete data[k]);
   await updateDoc(doc(db, 'orgMembers', uid), data);
 }
 
 /**
- * Remove an employee. This deletes their `orgMembers` record, which is what
- * grants access — the app checks for it on every sign-in, so they immediately
- * drop to "no access" and can't reach anything.
+ * Remove an employee — member record AND login.
  *
- * Their Firebase Auth login itself is NOT deleted: the client SDK can only
- * delete the *currently signed-in* user, so removing someone else's login needs
- * the Admin SDK in a Cloud Function. The practical effect is the same (no
- * access), but the email stays registered, so re-inviting that same address
- * would hit "email already in use". Suspending instead of deleting avoids that.
+ * This used to delete only the `orgMembers` document, because the client SDK
+ * can delete just the *currently signed-in* user. Access was revoked, but the
+ * Firebase Auth account survived, so re-inviting that same email later failed
+ * with "email already in use" and the person could never be added back — the
+ * client's point 14. The `removeOrgMember` callable does both with the Admin
+ * SDK; if it's unreachable we still delete the member doc so the person loses
+ * access immediately, and report that the login is stranded.
  */
-export async function deleteMember(uid: string): Promise<void> {
-  await deleteDoc(doc(db, 'orgMembers', uid));
+export async function deleteMember(uid: string): Promise<{ authDeleted: boolean }> {
+  try {
+    const call = httpsCallable<{ targetUid: string }, { ok: boolean; authDeleted: boolean }>(functions, 'removeOrgMember');
+    const res = await call({ targetUid: uid });
+    return { authDeleted: !!res.data?.authDeleted };
+  } catch {
+    // Fall back to the old behaviour rather than leaving them with access.
+    await deleteDoc(doc(db, 'orgMembers', uid));
+    return { authDeleted: false };
+  }
+}
+
+/**
+ * Delete a Firebase Auth account that has no member record behind it. Used to
+ * recover from an employee removed under the old flow: their login still
+ * squats on the email, so inviting them again fails. Returns false when there
+ * was nothing to release; throws if the email belongs to a live employee.
+ */
+export async function releaseOrphanLogin(email: string): Promise<boolean> {
+  const call = httpsCallable<{ email: string }, { ok: boolean; released: boolean }>(functions, 'releaseOrphanLogin');
+  const res = await call({ email });
+  return !!res.data?.released;
 }
