@@ -22,8 +22,15 @@ const stripUndef = (o: Record<string, unknown>) => { Object.keys(o).forEach((k) 
 function cleanStops(stops: TourStop[]): Record<string, unknown>[] {
   return stops.map((s) => stripUndef({ ...s }));
 }
+/** Legs carry a nested `ops` object (the per-VRID update) whose fields are all
+ *  optional — Firestore rejects `undefined`, so it needs stripping too, not
+ *  just the leg and its stops. */
 function cleanLegs(legs: TourLeg[]): Record<string, unknown>[] {
-  return legs.map((l) => stripUndef({ ...l, stops: l.stops.map((s) => stripUndef({ ...s })) }));
+  return legs.map((l) => stripUndef({
+    ...l,
+    stops: l.stops.map((s) => stripUndef({ ...s })),
+    ...(l.ops ? { ops: stripUndef({ ...l.ops }) } : {}),
+  }));
 }
 function clean<T extends Record<string, unknown>>(obj: T): T {
   Object.keys(obj).forEach((k) => obj[k] === undefined && delete obj[k]);
@@ -36,8 +43,21 @@ function tourVrids(t: { legs?: TourLeg[] | undefined; vrIds?: string[] | undefin
   return t.vrId ? [t.vrId] : [];
 }
 
+/**
+ * Read a tour back out of Firestore.
+ *
+ * This spreads the stored document and then pins the fields the app treats as
+ * always-present. It used to be a hand-written whitelist, which silently
+ * drifted from the `Tour` interface: `podImg`, `podGiven`, `feedback`,
+ * `startKm`, `endKm`, `reports` and `archived` were all written but never read
+ * back — so a POD photo vanished on the next snapshot and a cancelled route
+ * reappeared on the board with its VRIDs already released. Spreading first
+ * means a new field on `Tour` works the moment it's written; only fields that
+ * must never be undefined need a line below.
+ */
 function fromSnap(id: string, d: Record<string, unknown>): Tour {
   return {
+    ...(d as Partial<Tour>),
     id,
     date: (d.date as string) ?? '',
     tourId: (d.tourId as string) ?? '',
@@ -68,17 +88,6 @@ function fromSnap(id: string, d: Record<string, unknown>): Tour {
     leaderUid: (d.leaderUid as string) ?? '',
     createdAtMs: (d.createdAtMs as number) ?? 0,
     legs: (d.legs as TourLeg[]) ?? [],
-    ...(d.serviceAt ? { serviceAt: d.serviceAt as string } : {}),
-    ...(d.gpayName ? { gpayName: d.gpayName as string } : {}),
-    ...(d.gpayNumber ? { gpayNumber: d.gpayNumber as string } : {}),
-    ...(d.invoiceGiven != null ? { invoiceGiven: d.invoiceGiven as boolean } : {}),
-    ...(d.kmPhotoImg ? { kmPhotoImg: d.kmPhotoImg as string } : {}),
-    ...(d.invoicePhotoImg ? { invoicePhotoImg: d.invoicePhotoImg as string } : {}),
-    ...(d.gpsPhotoImg ? { gpsPhotoImg: d.gpsPhotoImg as string } : {}),
-    ...(d.expenseAmount ? { expenseAmount: d.expenseAmount as string } : {}),
-    ...(d.expenseNote ? { expenseNote: d.expenseNote as string } : {}),
-    ...(d.sharedVendor != null ? { sharedVendor: d.sharedVendor as boolean } : {}),
-    ...(d.sharedDriver != null ? { sharedDriver: d.sharedDriver as boolean } : {}),
   };
 }
 
@@ -147,7 +156,9 @@ export async function addTourDoc(t: Omit<Tour, 'id'>, scope: Scope, handledBy?: 
   };
   if (t.legs) payload.legs = cleanLegs(t.legs);
   const ref = await addDoc(collection(db, 'orgTours'), clean(payload));
-  await registerVrids(tourVrids(t), ref.id, owner.uid);
+  // A draft holds no VRIDs — it's a part-filled form, and claiming its VRIDs
+  // would block a real route from using them until the draft is finished.
+  if (!t.draft) await registerVrids(tourVrids(t), ref.id, owner.uid);
   return ref.id;
 }
 
@@ -175,11 +186,35 @@ export async function deleteTourDoc(t: Tour): Promise<void> {
   await Promise.allSettled(vrids.map((v) => releaseVrid(v)));
 }
 
-/** Cancel/archive a tour — the client's "do not permanently delete". The record
- *  stays (archived, hidden from the board) but its VRIDs are released, since a
- *  cancelled run's VR IDs should be free to re-assign. */
+/**
+ * Cancel/archive a tour — the client's "do not permanently delete". The record
+ * stays and is marked CANCELLED (it shows under the Cancelled tab rather than
+ * vanishing), while its VRIDs are released so they can be re-assigned. The Tour
+ * ID frees up the same way: the duplicate check only looks at live routes.
+ */
 export async function archiveTourDoc(t: Tour): Promise<void> {
-  await updateDoc(doc(db, 'orgTours', t.id), { archived: true, archivedAtMs: Date.now() });
+  await updateDoc(doc(db, 'orgTours', t.id), {
+    archived: true, archivedAtMs: Date.now(),
+    amzStatus: 'CANCELLED', sarvaStatus: 'CANCELLED',
+  });
   const vrids = tourVrids(t);
   await Promise.allSettled(vrids.map((v) => releaseVrid(v)));
+}
+
+/**
+ * Put a cancelled route back on the board. Its VRIDs were released when it was
+ * cancelled, so they're re-claimed here — if another route has taken one in the
+ * meantime the caller is told which, rather than two routes silently sharing it.
+ */
+export async function restoreTourDoc(t: Tour): Promise<string | null> {
+  const vrids = tourVrids(t);
+  for (const v of vrids) {
+    const holder = await vridHolder(v);
+    if (holder && holder !== t.id) return v;
+  }
+  await updateDoc(doc(db, 'orgTours', t.id), {
+    archived: false, amzStatus: 'PLANNED', sarvaStatus: 'PLANNED',
+  });
+  await registerVrids(vrids, t.id, t.ownerUid ?? '');
+  return null;
 }

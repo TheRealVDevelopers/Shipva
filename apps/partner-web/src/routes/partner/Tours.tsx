@@ -6,10 +6,10 @@ import {
 import { PartnerLayout } from '../../components/layout/PartnerLayout.js';
 import { Modal, Field, TextInput, DateTimeInput, Select, Row } from '../../components/ui/Modal.js';
 import { LocationSuggest } from '../../components/LocationSuggest.js';
-import { ImageUpload } from '../../components/ui/ImageUpload.js';
+import { MultiImageUpload } from '../../components/ui/MultiImageUpload.js';
 import {
-  useStore, todayLabel, requestStatusLabel, dieselRequestFor, stageOf, ownerStageOf,
-  type Tour, type TourLeg, type TourLegStop,
+  useStore, todayLabel, requestStatusLabel, dieselRequestFor, stageOf, ownerStageOf, legOps,
+  type Tour, type TourLeg, type TourLegStop, type TourLegOps,
 } from '../../lib/store.js';
 import { isVerified } from '../../lib/mocks.js';
 import { vendorStatus } from '../../lib/vendorDocs.js';
@@ -20,6 +20,7 @@ import { vendorNamesOf, driversForVendor, trucksForVendor } from '../../lib/vend
 import { Badge } from '../../components/ui/Badge.js';
 import { vridHolder, updateTourLegs } from '../../lib/tours.js';
 import { exportAmazonSheet } from '../../lib/exportAmazonSheet.js';
+import { exportTourDetail } from '../../lib/exportTourDetail.js';
 import { vendorMessage, driverMessage, dieselRequestMessage, waLink } from '../../lib/tourMessages.js';
 import { requiredError, phoneError, positiveError, normalizePhone, allClear } from '../../lib/validate.js';
 import { useNotify } from '../../lib/notify.js';
@@ -27,9 +28,10 @@ import { useNotify } from '../../lib/notify.js';
 const INK = '#232F3E';
 const ORANGE = '#FF9900';
 const OWN_FLEET = 'Sarva Express (own)';
-// The client wants just these two on the line board — a route is either on the
-// board, or it's one that's already been sent out to the vendor/driver.
-const FILTERS = ['All', 'Shared'] as const;
+// The live board is All / Shared. Drafts (part-filled Route Assigns) and
+// Cancelled routes are kept out of it but reachable on their own tabs — the
+// client's "when a route is deleted the Tour ID should be marked Cancelled".
+const FILTERS = ['All', 'Shared', 'Drafts', 'Cancelled'] as const;
 type Filter = (typeof FILTERS)[number];
 
 /** "Shared" = the route has been sent to the vendor and/or the driver. */
@@ -58,6 +60,20 @@ const tourVridList = (t: Tour): string[] =>
   (t.legs?.length ? t.legs.map((l) => l.vrid) : t.vrIds?.length ? t.vrIds : t.vrId ? [t.vrId] : []).filter(Boolean);
 const tourVridCount = (t: Tour): number => tourVridList(t).length;
 
+/** Clipboard fallback for browsers/origins without navigator.clipboard. */
+function legacyCopy(text: string): boolean {
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    ta.remove();
+    return ok;
+  } catch { return false; }
+}
+
 const fmtClock = (ms: number) => new Date(ms).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' });
 const fmtDTShort = (v?: string) => {
   if (!v) return '';
@@ -66,7 +82,7 @@ const fmtDTShort = (v?: string) => {
 };
 
 export function Tours() {
-  const { tours, drivers, trucks, attached, customers, addTour, updateTour, archiveTour } = useStore();
+  const { tours, drivers, trucks, attached, customers, addTour, updateTour, archiveTour, restoreTour } = useStore();
   const { member } = useAuth();
   const isAdmin = member?.role === 'owner' || member?.role === 'manager';
   const canAssign = isAdmin || member?.role === 'team_leader';
@@ -85,6 +101,8 @@ export function Tours() {
   const [editId, setEditId] = useState<string | null>(null);
   const [confirmDel, setConfirmDel] = useState<Tour | null>(null);
   const canEdit = canEditRecords(member?.role);
+  /** True while resuming a saved draft — the primary button then reads "Create". */
+  const editingDraft = !!editId && !!tours.find((t) => t.id === editId)?.draft;
   // Step 2 of route creation: hand the new line to a POC.
   const [assignFor, setAssignFor] = useState<{ id: string; tourId: string; vrids: number } | null>(null);
   const [assignPoc, setAssignPoc] = useState('');
@@ -161,9 +179,14 @@ export function Tours() {
   // in the Diesel Request. Requiring them here would make the form unsavable.
   // Leadership must pick who the line is assigned to, in the form.
   const assignOk = !canAssign || !!f.handledBy;
+  // A Tour ID may only be live on one route at a time. Cancelled routes and
+  // drafts are skipped, which is what frees the ID for reassignment after a
+  // route is cancelled — the client's point 6.
+  const tourIdClash = tours.find((t) => !t.archived && !t.draft && t.id !== editId
+    && t.tourId.trim().toUpperCase() === f.tourId.trim().toUpperCase() && !!f.tourId.trim());
   const baseComplete = !!(f.serviceAt && f.vendor && f.driver && f.vehicleId && f.tourId.trim()) && assignOk;
   const valid = baseComplete && legs.length > 0 && legs.every(legComplete)
-    && !vendorBlocked && !driverUnverified && !truckUnverified;
+    && !vendorBlocked && !driverUnverified && !truckUnverified && !tourIdClash;
 
   const missing: string[] = [];
   if (!f.serviceAt) missing.push('service date & time');
@@ -177,6 +200,7 @@ export function Tours() {
   // Hard blocks are shown apart from missing fields — a blocked vendor or an
   // unverified truck can't be assigned no matter what else is filled in.
   const blocks: string[] = [];
+  if (tourIdClash) blocks.push(`Trip ID ${f.tourId.trim()} is already live on another route${tourIdClash.driver ? ` (${tourIdClash.driver})` : ''}. Cancel that one to free the ID, or use a different one.`);
   if (vendorBlocked) blocks.push(`${f.vendor} is blocked — agreement overdue (past day ${8 + 1}). Approve it in Vendors Register first.`);
   if (driverUnverified) blocks.push(`Driver ${f.driver} isn't document-verified yet.`);
   if (truckUnverified) blocks.push(`Vehicle ${f.vehicleId} isn't document-verified yet.`);
@@ -213,10 +237,80 @@ export function Tours() {
     archiveTour(confirmDel);
     push({
       title: 'Route cancelled',
-      body: `${confirmDel.tourId || 'Route'} archived — its VRID${tourVridCount(confirmDel) === 1 ? '' : 's'} freed for reuse. The record is kept.`,
+      body: `${confirmDel.tourId || 'Route'} marked Cancelled — its Tour ID and VRID${tourVridCount(confirmDel) === 1 ? '' : 's'} are free to reassign. The record is kept.`,
       tone: 'info',
     });
     setConfirmDel(null);
+  }
+
+  /** Put a cancelled route back on the board, re-claiming its VRIDs. */
+  async function doRestore(t: Tour) {
+    const clash = await restoreTour(t);
+    if (clash) {
+      push({ title: "Can't restore", body: `VRID ${clash} has since been used on another route. Free it there first.`, tone: 'warning' });
+      return;
+    }
+    push({ title: 'Route restored', body: `${t.tourId || 'Route'} is back on the board as Planned.`, tone: 'success' });
+  }
+
+  /**
+   * Build the tour record from whatever the form currently holds. Shared by the
+   * real save and "Save as draft" — a draft is the same record with `draft` set
+   * and no validation, so resuming it later refills the form exactly.
+   */
+  function buildCore() {
+    const tourLegs: TourLeg[] = legs.map((l) => ({
+      vrid: l.vrid.trim().toUpperCase(), loadType: l.loadType,
+      stops: l.stops.map((s) => ({ name: s.name.trim().toUpperCase(), mapUrl: s.mapUrl.trim(), location: s.mapUrl.trim(), arrivalAt: s.arrivalAt, departureAt: s.departureAt })),
+    }));
+    const svc = new Date(f.serviceAt);
+    return {
+      tourLegs,
+      core: {
+        date: isNaN(svc.getTime()) ? todayLabel() : svc.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
+        serviceAt: f.serviceAt,
+        tourId: f.tourId.trim(), vrId: tourLegs[0]?.vrid ?? '', vrIds: tourLegs.map((l) => l.vrid), legs: tourLegs,
+        amzEquipmentType: vehicleFeet, seEquipmentType: vehicleFeet,
+        scheduleAdhoc: f.tripType, noLoadLoad: legs[0]?.loadType ?? 'Load',
+        advanceAmount: f.advanceAmount, paidPending: f.paidPending, gpayName: f.gpayName.trim(), gpayNumber: f.gpayNumber.trim(),
+        driver: f.driver, vehicleId: f.vehicleId, driverNumber: f.driverNumber, vendorName: f.vendor === OWN_FLEET ? 'Sarva Express' : f.vendor,
+      },
+    };
+  }
+
+  /** Who the line is (or will be) handled by, for both save paths. */
+  function currentHandler() {
+    const handler = canAssign && f.handledBy ? members.find((m) => m.uid === f.handledBy) ?? null : null;
+    return handler
+      ? { uid: handler.uid, name: handler.name, leaderUid: teamOf(handler) }
+      : (member ? { uid: member.uid, name: member.name, leaderUid: teamOf(member) } : undefined);
+  }
+
+  /**
+   * Save a part-filled Route Assign — the client's point 7. No validation, no
+   * VRID claim, not on the board: just the form as it stands, so a POC
+   * interrupted mid-entry can pick it up later from the Drafts tab.
+   */
+  async function saveDraft() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const { core } = buildCore();
+      const handledBy = currentHandler();
+      if (editId) {
+        updateTour(editId, { ...core, draft: true });
+        push({ title: 'Draft saved', body: `${f.tourId.trim() || 'Untitled route'} — resume it from the Drafts tab.`, tone: 'info' });
+      } else {
+        await addTour({
+          ...core, draft: true,
+          seTracker: '', toll: '',
+          amzStatus: 'PLANNED', sarvaStatus: 'PLANNED', present: 'PRESENT',
+          stops: [], totalManualKm: '', amazonRelyKm: '', gpsKm: '', remarks: '',
+        }, handledBy);
+        push({ title: 'Draft saved', body: `${f.tourId.trim() || 'Untitled route'} — resume it from the Drafts tab.`, tone: 'info' });
+      }
+      resetForm(); setOpen(false);
+    } finally { setBusy(false); }
   }
 
   async function submit() {
@@ -232,35 +326,20 @@ export function Tours() {
         const holder = await vridHolder(v);
         if (holder && holder !== editId) { setLeg(i, { error: `VRID already exists — ${v} is used on another route.` }); setBusy(false); return; }
       }
-      const tourLegs: TourLeg[] = legs.map((l) => ({
-        vrid: l.vrid.trim().toUpperCase(), loadType: l.loadType,
-        stops: l.stops.map((s) => ({ name: s.name.trim().toUpperCase(), mapUrl: s.mapUrl.trim(), location: s.mapUrl.trim(), arrivalAt: s.arrivalAt, departureAt: s.departureAt })),
-      }));
-      const handler = canAssign && f.handledBy ? members.find((m) => m.uid === f.handledBy) ?? null : null;
-      const handledBy = handler
-        ? { uid: handler.uid, name: handler.name, leaderUid: teamOf(handler) }
-        : (member ? { uid: member.uid, name: member.name, leaderUid: teamOf(member) } : undefined);
-      const svc = new Date(f.serviceAt);
-      const core = {
-        date: isNaN(svc.getTime()) ? todayLabel() : svc.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
-        serviceAt: f.serviceAt,
-        tourId: f.tourId.trim(), vrId: tourLegs[0]?.vrid ?? '', vrIds: tourLegs.map((l) => l.vrid), legs: tourLegs,
-        amzEquipmentType: vehicleFeet, seEquipmentType: vehicleFeet,
-        scheduleAdhoc: f.tripType, noLoadLoad: legs[0]?.loadType ?? 'Load',
-        advanceAmount: f.advanceAmount, paidPending: f.paidPending, gpayName: f.gpayName.trim(), gpayNumber: f.gpayNumber.trim(),
-        driver: f.driver, vehicleId: f.vehicleId, driverNumber: f.driverNumber, vendorName: f.vendor === OWN_FLEET ? 'Sarva Express' : f.vendor,
-      };
+      const { core } = buildCore();
+      const handledBy = currentHandler();
 
       if (editId) {
         const existing = tours.find((t) => t.id === editId);
         if (existing) {
           // Keep the POC's own work — statuses, KM, photos, check-ins — and
           // re-point the VRID registry at this route, freeing any it dropped.
+          // Publishing a draft clears the flag and claims its VRIDs for real.
           await updateTourLegs(existing, {
-            ...core,
+            ...core, draft: false,
             ...(handledBy ? { ownerUid: handledBy.uid, ownerName: handledBy.name, leaderUid: handledBy.leaderUid } : {}),
           }, member?.uid ?? '');
-          push({ title: 'Route updated', body: `${f.tourId} saved.`, tone: 'success' });
+          push({ title: existing.draft ? 'Route created' : 'Route updated', body: `${f.tourId} saved.`, tone: 'success' });
         }
       } else {
         const id = await addTour({
@@ -278,9 +357,13 @@ export function Tours() {
     } finally { setBusy(false); }
   }
 
-  // Cancelled/archived routes are kept in Firestore but never shown.
-  const live = tours.filter((t) => !t.archived);
-  const shown = live.filter((t) => {
+  // The board shows live routes only; drafts and cancelled ones have their own
+  // tabs so nothing silently disappears.
+  const live = tours.filter((t) => !t.archived && !t.draft);
+  const drafts = tours.filter((t) => t.draft && !t.archived);
+  const cancelled = tours.filter((t) => t.archived);
+  const pool = tab === 'Drafts' ? drafts : tab === 'Cancelled' ? cancelled : live;
+  const shown = pool.filter((t) => {
     if (tab === 'Shared' && !isShared(t)) return false;
     // Calendar filter: the run's service date (or, failing that, its date label).
     if (dateF && (t.serviceAt ? t.serviceAt.slice(0, 10) !== dateF : true)) return false;
@@ -318,9 +401,14 @@ export function Tours() {
                   className="bg-transparent text-xs text-white outline-none [color-scheme:dark]" />
                 {dateF && <button onClick={() => setDateF('')} className="text-white/50 hover:text-white" title="Clear date"><X size={13} /></button>}
               </div>
-              {/* Export is Admin/TL only, per the client. */}
+              {/* Export is Admin/TL only, per the client. Two sheets: the full
+                  detail export (everything but the map links, one row per VRID)
+                  and Amazon's own 54-column operational template. */}
               {canEdit && (
-                <button onClick={() => exportAmazonSheet(shown)} className="hidden items-center gap-1.5 rounded-lg bg-white/10 px-3 py-2 text-xs font-bold text-white ring-1 ring-inset ring-white/15 hover:bg-white/15 sm:inline-flex"><FileSpreadsheet size={13} /> Export</button>
+                <>
+                  <button onClick={() => exportTourDetail(shown)} className="hidden items-center gap-1.5 rounded-lg bg-white/10 px-3 py-2 text-xs font-bold text-white ring-1 ring-inset ring-white/15 hover:bg-white/15 sm:inline-flex" title="Every trip detail except map links — one row per VRID"><FileSpreadsheet size={13} /> Export</button>
+                  <button onClick={() => exportAmazonSheet(shown)} className="hidden items-center gap-1.5 rounded-lg bg-white/10 px-3 py-2 text-xs font-bold text-white ring-1 ring-inset ring-white/15 hover:bg-white/15 sm:inline-flex" title="Amazon's own 54-column sheet"><FileSpreadsheet size={13} /> Amazon sheet</button>
+                </>
               )}
               <button onClick={() => { resetForm(); setOpen(true); }} className="inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-extrabold shadow-sm" style={{ background: ORANGE, color: INK }}><RouteIcon size={14} /> Route Assign</button>
             </div>
@@ -341,9 +429,12 @@ export function Tours() {
         <div className="flex items-center gap-1 overflow-x-auto border-b" style={{ borderColor: '#D5D9D9' }}>
           {FILTERS.map((x) => {
             const on = tab === x;
+            // Drafts and Cancelled carry a count — they're easy to forget about.
+            const n = x === 'Drafts' ? drafts.length : x === 'Cancelled' ? cancelled.length : 0;
             return (
               <button key={x} onClick={() => setTab(x)} className="relative whitespace-nowrap px-4 py-2.5 text-[13px] font-bold transition" style={{ color: on ? INK : '#5A6572' }}>
-                {x}{on && <span className="absolute inset-x-2 -bottom-px h-[3px] rounded-t" style={{ background: ORANGE }} />}
+                {x}{n > 0 && <span className="ml-1.5 rounded-full bg-neutral-200 px-1.5 py-0.5 text-[10px] font-extrabold text-neutral-600">{n}</span>}
+                {on && <span className="absolute inset-x-2 -bottom-px h-[3px] rounded-t" style={{ background: ORANGE }} />}
               </button>
             );
           })}
@@ -355,13 +446,17 @@ export function Tours() {
           <div className="divide-y" style={{ borderColor: '#EDEFF1' }}>
             {shown.map((t) => (
               <TourRow key={t.id} t={t} isAdmin={isAdmin} canEdit={canEdit} canAssign={canAssign}
+                state={t.archived ? 'cancelled' : t.draft ? 'draft' : 'live'}
                 onDiesel={() => t.id && setDieselId(t.id)}
                 onAssign={() => { setAssignPoc(t.ownerUid ?? ''); setAssignFor({ id: t.id!, tourId: t.tourId, vrids: t.legs?.length ?? 0 }); }}
-                onEdit={() => startEdit(t)} onDelete={() => setConfirmDel(t)} onShare={updateTour} />
+                onEdit={() => startEdit(t)} onDelete={() => setConfirmDel(t)} onShare={updateTour}
+                onRestore={() => void doRestore(t)} />
             ))}
             {shown.length === 0 && (
               <div className="py-12 text-center text-sm text-neutral-400">
-                {tours.length === 0 ? 'No lines yet — press "Route Assign" to add your first Amazon tour.' : 'No lines match this view.'}
+                {tab === 'Drafts' ? 'No drafts — a part-filled Route Assign saved with "Save as draft" appears here.'
+                  : tab === 'Cancelled' ? 'No cancelled routes. A cancelled route is kept here and its Tour ID & VRIDs are freed for reuse.'
+                    : tours.length === 0 ? 'No lines yet — press "Route Assign" to add your first Amazon tour.' : 'No lines match this view.'}
               </div>
             )}
           </div>
@@ -369,7 +464,12 @@ export function Tours() {
       </div>
 
       {/* ── Route Assign ──────────────────────────────────────────────── */}
-      <Modal open={open} onClose={() => setOpen(false)} title="Route Assign" subtitle="Assign an Amazon line — every field must be filled to create" onSubmit={submit} submitLabel={busy ? 'Checking VRIDs…' : 'Create route'} submitDisabled={!valid || busy} wide>
+      <Modal open={open} onClose={() => setOpen(false)} title="Route Assign"
+        subtitle="Assign an Amazon line — every field must be filled to create, or save it as a draft and finish later"
+        onSubmit={submit} submitLabel={busy ? 'Checking VRIDs…' : editingDraft ? 'Create route' : editId ? 'Save route' : 'Create route'}
+        submitDisabled={!valid || busy}
+        secondaryLabel={busy ? 'Saving…' : 'Save as draft'} onSecondary={() => void saveDraft()} secondaryDisabled={busy}
+        wide>
         <Row>
           <Field label="Service date & time"><DateTimeInput value={f.serviceAt} onChange={(v) => setF({ ...f, serviceAt: v })} /></Field>
           <Field label="Trip type">
@@ -632,10 +732,13 @@ function DieselRequest({ tour, onClose, onSave }: {
  * and the WhatsApp share/copy actions; collapsed it's ID, route summary, driver,
  * status, and the two primary actions (diesel + share).
  */
-function TourRow({ t, isAdmin, canEdit, canAssign, onDiesel, onEdit, onDelete, onShare, onAssign }: {
+function TourRow({ t, isAdmin, canEdit, canAssign, state, onDiesel, onEdit, onDelete, onShare, onAssign, onRestore }: {
   t: Tour; isAdmin: boolean; canEdit: boolean; canAssign: boolean;
+  /** Which tab this row is on — a draft or a cancelled route can't be shared,
+   *  fuelled or assigned; a cancelled one can be restored. */
+  state: 'live' | 'draft' | 'cancelled';
   onDiesel: () => void; onEdit: () => void; onDelete: () => void; onAssign: () => void;
-  onShare: (id: string, patch: Partial<Tour>) => void;
+  onShare: (id: string, patch: Partial<Tour>) => void; onRestore: () => void;
 }) {
   const legs = t.legs && t.legs.length ? t.legs : [];
   const allStops = legs.flatMap((l) => l.stops);
@@ -650,14 +753,29 @@ function TourRow({ t, isAdmin, canEdit, canAssign, onDiesel, onEdit, onDelete, o
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  function share(kind: 'vendor' | 'driver') {
-    const text = kind === 'vendor' ? vendorMessage(t) : driverMessage(t);
-    const phone = kind === 'vendor' ? (t.gpayNumber ?? '') : (t.driverNumber ?? '');
-    window.open(waLink(phone, text), '_blank', 'noopener');
+  /**
+   * The share links are real anchors, not window.open — a popup blocker will
+   * swallow a programmatic window.open but never a user's click on a link, and
+   * "the share button does nothing" was exactly the client's complaint. The
+   * href is built up-front so the tap opens WhatsApp immediately; marking the
+   * line as shared happens alongside and never delays the navigation.
+   */
+  const shareHref = (kind: 'vendor' | 'driver') =>
+    waLink(kind === 'vendor' ? (t.gpayNumber ?? '') : (t.driverNumber ?? ''),
+      kind === 'vendor' ? vendorMessage(t) : driverMessage(t));
+  const markShared = (kind: 'vendor' | 'driver') => {
     if (t.id) onShare(t.id, kind === 'vendor' ? { sharedVendor: true } : { sharedDriver: true });
-  }
+  };
+
+  /** Copy with a fallback — navigator.clipboard is unavailable on insecure
+   *  origins and in some in-app browsers, where it used to fail silently. */
   function copyMsg(text: string) {
-    void navigator.clipboard?.writeText(text).then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 1600); });
+    const done = () => { setCopied(true); window.setTimeout(() => setCopied(false), 1600); };
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(text).then(done).catch(() => legacyCopy(text) && done());
+      return;
+    }
+    if (legacyCopy(text)) done();
   }
 
   return (
@@ -679,6 +797,47 @@ function TourRow({ t, isAdmin, canEdit, canAssign, onDiesel, onEdit, onDelete, o
           {pct > 0 && pct < 100 && <span className="tabular-nums text-neutral-400">{pct}%</span>}
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
+          {state === 'cancelled' ? (
+            <>
+              <span className="rounded-full px-2 py-0.5 text-[10px] font-extrabold" style={{ background: '#FCE9EC', color: '#B12704' }}>Cancelled</span>
+              {canEdit && (
+                <button onClick={onRestore} className="inline-flex items-center gap-1 rounded-lg border px-2 py-1.5 text-xs font-extrabold"
+                  style={{ borderColor: '#D5D9D9', color: '#0F5C9E', background: '#fff' }}
+                  title="Put this route back on the board and re-claim its VRIDs">
+                  <RouteIcon size={12} /> Restore
+                </button>
+              )}
+            </>
+          ) : state === 'draft' ? (
+            <>
+              <span className="rounded-full px-2 py-0.5 text-[10px] font-extrabold" style={{ background: '#EDEFF1', color: '#5A6572' }}>Draft</span>
+              {canEdit && (
+                <>
+                  <button onClick={onEdit} className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-extrabold shadow-sm" style={{ background: ORANGE, color: INK }}>
+                    <Pencil size={12} /> Resume
+                  </button>
+                  <button onClick={onDelete} className="rounded-lg p-1.5 text-neutral-400 hover:bg-amber-50 hover:text-amber-600" title="Discard this draft"><Trash2 size={14} /></button>
+                </>
+              )}
+            </>
+          ) : (
+          <>
+          {/* Share & copy sit on the collapsed row — the client asked for them
+              to work instantly, and they used to need the row expanded first. */}
+          <a href={shareHref('vendor')} target="_blank" rel="noreferrer noopener" onClick={() => markShared('vendor')}
+            className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-bold text-white" style={{ background: '#25D366' }}
+            title="Send the payment details to the vendor on WhatsApp">
+            <Send size={12} /> Vendor {t.sharedVendor && <Check size={11} />}
+          </a>
+          <a href={shareHref('driver')} target="_blank" rel="noreferrer noopener" onClick={() => markShared('driver')}
+            className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-bold text-white" style={{ background: '#25D366' }}
+            title="Send the full route to the driver on WhatsApp">
+            <Send size={12} /> Driver {t.sharedDriver && <Check size={11} />}
+          </a>
+          <button onClick={() => copyMsg(driverMessage(t))} className="rounded-lg p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-primary-600"
+            title="Copy the driver message exactly as laid out">
+            {copied ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
+          </button>
           <button onClick={onDiesel} className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-extrabold shadow-sm" style={{ background: ORANGE, color: INK }}><Fuel size={12} /> Diesel</button>
           {diesel && (
             <Badge tone={diesel.status === 'approved' ? 'success' : diesel.status === 'rejected' ? 'danger' : 'warning'}><Fuel size={10} /> {requestStatusLabel(diesel)}</Badge>
@@ -693,8 +852,10 @@ function TourRow({ t, isAdmin, canEdit, canAssign, onDiesel, onEdit, onDelete, o
           {canEdit && (
             <>
               <button onClick={onEdit} className="rounded-lg p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-primary-600" title="Edit route"><Pencil size={14} /></button>
-              <button onClick={onDelete} className="rounded-lg p-1.5 text-neutral-400 hover:bg-amber-50 hover:text-amber-600" title="Cancel / archive route"><Trash2 size={14} /></button>
+              <button onClick={onDelete} className="rounded-lg p-1.5 text-neutral-400 hover:bg-amber-50 hover:text-amber-600" title="Cancel route — keeps the record, frees the Tour ID & VRIDs"><Trash2 size={14} /></button>
             </>
+          )}
+          </>
           )}
         </div>
       </div>
@@ -725,12 +886,23 @@ function TourRow({ t, isAdmin, canEdit, canAssign, onDiesel, onEdit, onDelete, o
 
           <div className="mt-2 text-[11px] text-neutral-400">{t.date} · {t.vendorName || '—'} · Adv ₹{Number(t.advanceAmount || 0).toLocaleString('en-IN')}</div>
 
+          {/* Full-width share row — same actions as the collapsed row, with the
+              vendor message also copyable on its own. */}
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <span className="text-[10px] font-bold uppercase tracking-wide text-neutral-400">Share</span>
-            <button onClick={() => share('vendor')} className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold text-white" style={{ background: '#25D366' }}><Send size={12} /> Vendor {t.sharedVendor && <Check size={12} />}</button>
-            <button onClick={() => share('driver')} className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold text-white" style={{ background: '#25D366' }}><Send size={12} /> Driver {t.sharedDriver && <Check size={12} />}</button>
+            <a href={shareHref('vendor')} target="_blank" rel="noreferrer noopener" onClick={() => markShared('vendor')}
+              className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold text-white" style={{ background: '#25D366' }}>
+              <Send size={12} /> Vendor {t.sharedVendor && <Check size={12} />}
+            </a>
+            <a href={shareHref('driver')} target="_blank" rel="noreferrer noopener" onClick={() => markShared('driver')}
+              className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold text-white" style={{ background: '#25D366' }}>
+              <Send size={12} /> Driver {t.sharedDriver && <Check size={12} />}
+            </a>
             <button onClick={() => copyMsg(driverMessage(t))} className="inline-flex items-center gap-1.5 rounded-lg bg-white px-2.5 py-1.5 text-xs font-bold ring-1 ring-inset" style={{ color: INK, borderColor: '#D5D9D9' }} title="Copy the driver message exactly as laid out">
-              {copied ? <><Check size={12} /> Copied</> : <><Copy size={12} /> Copy</>}
+              {copied ? <><Check size={12} /> Copied</> : <><Copy size={12} /> Copy route</>}
+            </button>
+            <button onClick={() => copyMsg(vendorMessage(t))} className="inline-flex items-center gap-1.5 rounded-lg bg-white px-2.5 py-1.5 text-xs font-bold ring-1 ring-inset" style={{ color: INK, borderColor: '#D5D9D9' }} title="Copy the vendor payment message">
+              <Copy size={12} /> Copy vendor
             </button>
           </div>
         </div>
@@ -741,111 +913,100 @@ function TourRow({ t, isAdmin, canEdit, canAssign, onDiesel, onEdit, onDelete, o
 
 /* ─── POC operate / check-in view ────────────────────────────────────── */
 
+
 /**
- * The operational update for a run — Present/Absent, per-VRID load type, KM,
- * Amazon/GPS KM, expense, invoice, photos, and "submit & complete". The client
- * moved this OUT of the Amazon Tours board and INTO the Trips module, so it's
- * exported and mounted from Trips; Amazon Tours no longer shows an update action.
+ * The operational update for a run.
+ *
+ * The client's rule: "if a trip contains a single VRID, allow one update only.
+ * If a trip contains multiple VRIDs, allow separate updates for each VRID."
+ * So every figure — Present/Absent, load type, manual/Amazon/GPS KM, expense,
+ * invoice, POD, remarks, feedback and the photos — lives on the VRID, not the
+ * tour (see TourLegOps). A single-VRID run renders exactly one block; a
+ * multi-VRID run renders one collapsible block per VRID, each saved and
+ * submitted on its own. The tour completes once every VRID has been submitted.
+ *
+ * Feedback and remarks are optional, per the client. KM, Amazon KM, GPS KM and
+ * POD stay required — they're the figures the completion exists to capture.
+ *
+ * Mounted from Trips (the client moved updates out of the Amazon Tours board).
  */
 export function TourOperate({ tour, onClose, onUpdate, showOwner }: {
   tour: Tour; onClose: () => void; onUpdate: (id: string, patch: Partial<Tour>) => void; showOwner: boolean;
 }) {
   const { push } = useNotify();
   const legs = tour.legs ?? [];
+  const multi = legs.length > 1;
   const allStops = legs.flatMap((l) => l.stops);
   const done = allStops.filter((s) => s.actualDeparture).length;
   const pct = allStops.length ? Math.round((done / allStops.length) * 100) : 0;
   const finished = allStops.length > 0 && done === allStops.length;
+  // On a multi-VRID run only one block is expanded at a time, so a POC filling
+  // in VRID 2 isn't scrolling past VRID 1's twenty fields to reach it.
+  const [openLeg, setOpenLeg] = useState(0);
 
-  // locally-edited operational fields
-  const [present, setPresent] = useState(tour.present || 'PRESENT');
-  const [remarks, setRemarks] = useState(tour.remarks || '');
-  const [startKm, setStartKm] = useState(tour.startKm || '');
-  const [endKm, setEndKm] = useState(tour.endKm || '');
-  const [amazonKm, setAmazonKm] = useState(tour.amazonRelyKm || '');
-  const [gpsKm, setGpsKm] = useState(tour.gpsKm || '');
-  const [expenseAmount, setExpenseAmount] = useState(tour.expenseAmount || '');
-  const [expenseNote, setExpenseNote] = useState(tour.expenseNote || '');
-  const [invoiceGiven, setInvoiceGiven] = useState(!!tour.invoiceGiven);
-  const [podGiven, setPodGiven] = useState(!!tour.podGiven);
-  const [feedback, setFeedback] = useState(tour.feedback || '');
-  const [saved, setSaved] = useState(false);
-
-  // Total KM is derived from the odometer, never typed. Falls back to whatever
-  // was stored before start/end existed, so older routes keep their figure.
-  const kmSpan = (() => {
-    const a = Number(startKm), b = Number(endKm);
-    if (!startKm.trim() || !endKm.trim() || !Number.isFinite(a) || !Number.isFinite(b)) return null;
-    return b - a;
-  })();
-  const totalKm = kmSpan === null ? (tour.totalManualKm || '') : String(kmSpan);
-  const kmBackwards = kmSpan !== null && kmSpan < 0;
+  const submittedCount = legs.filter((_, i) => legOps(tour, i).completedAtMs).length;
+  const tourDone = tour.amzStatus === 'COMPLETED';
 
   function stampStop(li: number, si: number, key: 'actualArrival' | 'actualDeparture') {
     if (!tour.id) return;
     const next = legs.map((l, i) => (i !== li ? l : { ...l, stops: l.stops.map((s, j) => (j === si ? { ...s, [key]: Date.now() } : s)) }));
     const flat = next.flatMap((l) => l.stops);
     const anyIn = flat.some((s) => s.actualArrival);
-    // Checking out of the last stop does NOT complete the run. It used to, which
-    // meant a tour could reach Completed with no KM, no Amazon KM and no GPS KM
-    // — the very figures the completion is for. Completion is now only ever the
-    // explicit "Submit & complete", per the client: "by submitting all this, it
-    // will move to completed". And once completed, a stray stamp mustn't drag it
-    // back to In Transit.
-    const status = tour.amzStatus === 'COMPLETED' ? 'COMPLETED' : anyIn ? 'IN PROGRESS' : 'PLANNED';
+    // Checking out of the last stop does NOT complete the run — completion is
+    // only ever an explicit submit, so a run can't reach Completed with no KM.
+    const status = tourDone ? 'COMPLETED' : anyIn ? 'IN PROGRESS' : 'PLANNED';
     onUpdate(tour.id, { legs: next, amzStatus: status, sarvaStatus: status });
   }
 
-  /** Load type is per-VRID — one run can be loaded and the next empty. */
   function setLoadType(li: number, v: string) {
     if (!tour.id) return;
     onUpdate(tour.id, { legs: legs.map((l, i) => (i === li ? { ...l, loadType: v } : l)) });
   }
 
-  const ops = () => ({
-    present, remarks, startKm, endKm,
-    totalManualKm: totalKm, amazonRelyKm: amazonKm, gpsKm,
-    expenseAmount, expenseNote, invoiceGiven, podGiven, feedback,
-  });
-
-  function saveOps() {
-    if (!tour.id) return;
-    onUpdate(tour.id, ops());
-    setSaved(true); setTimeout(() => setSaved(false), 1500);
-  }
-
-  /** "By submitting all this, it will move to completed." */
-  function submitComplete() {
-    if (!tour.id) return;
-    onUpdate(tour.id, { ...ops(), amzStatus: 'COMPLETED', sarvaStatus: 'COMPLETED' });
-    push({ title: 'Trip completed', body: `${tour.tourId} moved to Completed.`, tone: 'success' });
-    onClose();
-  }
-
-  // What the client requires before a run can be called done — page 2:
-  // "loading/unloading, VR ID, ETA, diesel request, kilometers, delay details if
-  // any, POD, remarks, and feedback". KM, POD, remarks and feedback are the ones
-  // a person must fill; the rest come from the route itself.
-  const missingToComplete = [
-    !startKm.trim() && 'starting KM',
-    !endKm.trim() && 'ending KM',
-    kmBackwards && 'valid KM readings',
-    !amazonKm.trim() && 'Amazon KM',
-    !gpsKm.trim() && 'GPS KM',
-    !podGiven && 'POD (proof of delivery)',
-    !remarks.trim() && 'remarks',
-    !feedback.trim() && 'feedback',
-  ].filter(Boolean) as string[];
-  const canComplete = missingToComplete.length === 0;
-  function setPhoto(key: 'kmPhotoImg' | 'invoicePhotoImg' | 'gpsPhotoImg' | 'podImg', v: string | undefined) {
-    if (tour.id) onUpdate(tour.id, { [key]: v ?? '' });
-  }
-  /** POC's per-stop feedback note — fills the Amazon export's Feedback column. */
   function setStopFeedback(li: number, si: number, v: string) {
     if (!tour.id) return;
     onUpdate(tour.id, { legs: legs.map((l, i) => (i !== li ? l : { ...l, stops: l.stops.map((s, j) => (j === si ? { ...s, feedback: v } : s)) })) });
   }
-  const late = (s: TourLegStop) => s.actualArrival && s.arrivalAt && s.actualArrival > new Date(s.arrivalAt).getTime();
+
+  /** Write one VRID's operational figures back onto its leg. */
+  function writeOps(li: number, ops: TourLegOps, alsoComplete: boolean) {
+    if (!tour.id) return;
+    const merged: TourLegOps = alsoComplete ? { ...ops, completedAtMs: Date.now() } : ops;
+    const nextLegs = legs.map((l, i) => (i === li ? { ...l, ops: merged } : l));
+    const patch: Partial<Tour> = { legs: nextLegs };
+    // Mirror leg 0 onto the tour-level fields so the legacy 54-column Amazon
+    // sheet and the board's KM figures keep working unchanged.
+    if (li === 0) {
+      Object.assign(patch, {
+        present: ops.present ?? tour.present,
+        startKm: ops.startKm ?? '', endKm: ops.endKm ?? '',
+        totalManualKm: ops.totalManualKm ?? '', amazonRelyKm: ops.amazonRelyKm ?? '',
+        gpsKm: ops.gpsKm ?? '', remarks: ops.remarks ?? '', feedback: ops.feedback ?? '',
+        podGiven: !!ops.podGiven, invoiceGiven: !!ops.invoiceGiven,
+        expenseAmount: ops.expenseAmount ?? '', expenseNote: ops.expenseNote ?? '',
+        podImg: ops.podPhotos?.[0] ?? '', kmPhotoImg: ops.kmPhotos?.[0] ?? '',
+        invoicePhotoImg: ops.invoicePhotos?.[0] ?? '', gpsPhotoImg: ops.gpsPhotos?.[0] ?? '',
+      });
+    }
+    // The run is complete only when every VRID on it has been submitted.
+    if (alsoComplete) {
+      const allIn = nextLegs.every((l, i) => (i === li ? true : !!legOps(tour, i).completedAtMs));
+      if (allIn) { patch.amzStatus = 'COMPLETED'; patch.sarvaStatus = 'COMPLETED'; }
+    }
+    onUpdate(tour.id, patch);
+  }
+
+  function onLegSubmit(li: number, ops: TourLegOps) {
+    writeOps(li, ops, true);
+    const remaining = legs.length - (submittedCount + 1);
+    if (remaining > 0) {
+      push({ title: `${legs[li]?.vrid ?? 'VRID'} submitted`, body: `${remaining} more VRID${remaining === 1 ? '' : 's'} to update on ${tour.tourId}.`, tone: 'success' });
+      setOpenLeg(li + 1);
+    } else {
+      push({ title: 'Trip completed', body: `${tour.tourId} moved to Completed.`, tone: 'success' });
+      onClose();
+    }
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-neutral-900/50 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={onClose}>
@@ -863,67 +1024,193 @@ export function TourOperate({ tour, onClose, onUpdate, showOwner }: {
             <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, background: '#067D62' }} />
             <div className="absolute -top-2.5 -translate-x-1/2 text-lg" style={{ left: `${pct}%` }}><span className={finished ? '' : 'inline-block animate-bounce'}>{finished ? '🏁' : '🚚'}</span></div>
           </div>
+          {multi && (
+            <p className="mt-2 text-center text-[11px] font-bold" style={{ color: submittedCount === legs.length ? '#067D62' : '#B15C00' }}>
+              {submittedCount} of {legs.length} VRIDs updated — each one is submitted separately.
+            </p>
+          )}
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4">
-          {/* per-VRID legs with check-in/out */}
           {legs.map((leg, li) => (
-            <div key={li} className="mb-4">
-              <div className="mb-2 flex items-center gap-2">
-                <span className="rounded px-1.5 py-0.5 font-mono text-[11px] font-extrabold" style={{ background: '#EAF1F8', color: '#0F5C9E' }}>{leg.vrid}</span>
-                <span className="text-[10px] font-bold uppercase text-neutral-400">{leg.loadType || 'Load'}</span>
-              </div>
-              <ol className="relative">
-                {leg.stops.map((s, si) => {
-                  const inDone = !!s.actualArrival, outDone = !!s.actualDeparture;
-                  const globalIdx = legs.slice(0, li).flatMap((l) => l.stops).length + si;
-                  const current = !outDone && (globalIdx === 0 || !!allStops[globalIdx - 1]?.actualDeparture);
-                  return (
-                    <li key={si} className="relative flex gap-3 pb-4 last:pb-0">
-                      {si < leg.stops.length - 1 && <span className="absolute left-[13px] top-6 h-full w-0.5" style={{ background: outDone ? '#067D62' : '#D5D9D9' }} />}
-                      <span className="z-10 flex h-[27px] w-[27px] shrink-0 items-center justify-center rounded-full text-white ring-4 ring-white" style={{ background: outDone ? '#067D62' : current ? INK : '#c3c9cf' }}>
-                        {outDone ? <Check size={15} /> : <span className="font-mono text-[11px] font-black">{si + 1}</span>}
-                      </span>
-                      <div className="min-w-0 flex-1 pt-0.5">
-                        <div className="flex flex-wrap items-center gap-2 text-sm font-bold" style={{ color: INK }}>
-                          <span className="font-mono">{s.name}</span>
-                          {current && !outDone && <span className="rounded-full px-2 py-0.5 text-[10px] font-extrabold" style={{ background: '#FFF3E0', color: '#B15C00' }}>Now</span>}
-                          {late(s) && <span className="rounded-full px-2 py-0.5 text-[10px] font-extrabold" style={{ background: '#FCE9EC', color: '#B12704' }}>Late</span>}
-                          {s.mapUrl && <a href={s.mapUrl} target="_blank" rel="noreferrer" className="text-[11px] font-bold" style={{ color: '#007185' }}>Map</a>}
-                        </div>
-                        <div className="mt-1 grid grid-cols-2 gap-2 text-[11px]">
-                          <div>
-                            <div className="text-neutral-400">Arrival · plan {fmtDTShort(s.arrivalAt)}</div>
-                            {s.actualArrival ? <div className="font-bold" style={{ color: '#067D62' }}>✓ In {fmtClock(s.actualArrival)}</div>
-                              : current ? <button onClick={() => stampStop(li, si, 'actualArrival')} className="mt-0.5 inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-bold text-white" style={{ background: INK }}><LogIn size={11} /> Check in</button>
-                                : <div className="text-neutral-300">—</div>}
-                          </div>
-                          <div>
-                            <div className="text-neutral-400">Departure · plan {fmtDTShort(s.departureAt)}</div>
-                            {s.actualDeparture ? <div className="font-bold" style={{ color: '#067D62' }}>✓ Out {fmtClock(s.actualDeparture)}</div>
-                              : inDone ? <button onClick={() => stampStop(li, si, 'actualDeparture')} className="mt-0.5 inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-bold" style={{ background: ORANGE, color: INK }}><LogOut size={11} /> Check out</button>
-                                : <div className="text-neutral-300">—</div>}
-                          </div>
-                        </div>
-                        {/* Per-stop feedback — fills the export's Feedback column. */}
-                        {inDone && (
-                          <input value={s.feedback ?? ''} onChange={(e) => setStopFeedback(li, si, e.target.value)}
-                            placeholder="Feedback for this stop…"
-                            className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-2 py-1 text-[11px] outline-none focus:border-primary-400" />
-                        )}
-                      </div>
-                    </li>
-                  );
-                })}
-              </ol>
-            </div>
+            <LegUpdate
+              key={`${leg.vrid}-${li}`}
+              tour={tour} leg={leg} index={li} multi={multi}
+              expanded={!multi || openLeg === li}
+              onToggle={() => setOpenLeg(openLeg === li ? -1 : li)}
+              allStops={allStops}
+              onStamp={(si, key) => stampStop(li, si, key)}
+              onStopFeedback={(si, v) => setStopFeedback(li, si, v)}
+              onLoadType={(v) => setLoadType(li, v)}
+              onSave={(ops) => writeOps(li, ops, false)}
+              onSubmit={(ops) => onLegSubmit(li, ops)}
+            />
           ))}
+          {legs.length === 0 && <p className="py-8 text-center text-sm text-neutral-400">This route has no VRIDs to update.</p>}
+        </div>
 
-          {/* operational fields */}
-          <div className="rounded-xl p-3 ring-1 ring-inset" style={{ background: '#F7F8F8', borderColor: '#D5D9D9' }}>
-            <div className="mb-2 text-xs font-extrabold" style={{ color: INK }}>Open and update</div>
+        {tourDone && (
+          <div className="border-t border-neutral-100 px-5 py-3">
+            <div className="flex items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-extrabold" style={{ background: '#EAF3EC', color: '#067D62' }}>
+              <Flag size={15} /> Completed
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
-            {/* 1 — present & absent */}
+/**
+ * One VRID's update: its stop timeline plus its own operational figures. Holds
+ * the figures in local state so typing doesn't write to Firestore on every
+ * keystroke — Save and Submit are what persist.
+ */
+function LegUpdate({ tour, leg, index, multi, expanded, onToggle, allStops, onStamp, onStopFeedback, onLoadType, onSave, onSubmit }: {
+  tour: Tour; leg: TourLeg; index: number; multi: boolean;
+  expanded: boolean; onToggle: () => void;
+  allStops: TourLegStop[];
+  onStamp: (si: number, key: 'actualArrival' | 'actualDeparture') => void;
+  onStopFeedback: (si: number, v: string) => void;
+  onLoadType: (v: string) => void;
+  onSave: (ops: TourLegOps) => void;
+  onSubmit: (ops: TourLegOps) => void;
+}) {
+  const stored = legOps(tour, index);
+  const submitted = !!stored.completedAtMs;
+
+  const [present, setPresent] = useState(stored.present || 'PRESENT');
+  const [remarks, setRemarks] = useState(stored.remarks || '');
+  const [startKm, setStartKm] = useState(stored.startKm || '');
+  const [endKm, setEndKm] = useState(stored.endKm || '');
+  const [amazonKm, setAmazonKm] = useState(stored.amazonRelyKm || '');
+  const [gpsKm, setGpsKm] = useState(stored.gpsKm || '');
+  const [expenseAmount, setExpenseAmount] = useState(stored.expenseAmount || '');
+  const [expenseNote, setExpenseNote] = useState(stored.expenseNote || '');
+  const [invoiceGiven, setInvoiceGiven] = useState(!!stored.invoiceGiven);
+  const [podGiven, setPodGiven] = useState(!!stored.podGiven);
+  const [feedback, setFeedback] = useState(stored.feedback || '');
+  const [saved, setSaved] = useState(false);
+
+  // Total KM is derived from the odometer, never typed.
+  const kmSpan = (() => {
+    const a = Number(startKm), b = Number(endKm);
+    if (!startKm.trim() || !endKm.trim() || !Number.isFinite(a) || !Number.isFinite(b)) return null;
+    return b - a;
+  })();
+  const totalKm = kmSpan === null ? (stored.totalManualKm || '') : String(kmSpan);
+  const kmBackwards = kmSpan !== null && kmSpan < 0;
+
+  function collect(): TourLegOps {
+    return {
+      present, remarks, startKm, endKm,
+      totalManualKm: totalKm, amazonRelyKm: amazonKm, gpsKm,
+      expenseAmount, expenseNote, invoiceGiven, podGiven, feedback,
+      kmPhotos: stored.kmPhotos ?? [], invoicePhotos: stored.invoicePhotos ?? [],
+      gpsPhotos: stored.gpsPhotos ?? [], podPhotos: stored.podPhotos ?? [],
+      ...(stored.completedAtMs ? { completedAtMs: stored.completedAtMs } : {}),
+    };
+  }
+
+  // Photos persist immediately — an upload has already left the device, and
+  // losing it because the POC closed the sheet without pressing Save is the
+  // failure mode this whole change is meant to end.
+  const setPhotos = (key: 'kmPhotos' | 'invoicePhotos' | 'gpsPhotos' | 'podPhotos') => (urls: string[]) =>
+    onSave({ ...collect(), [key]: urls });
+
+  // What must be filled before this VRID can be submitted. Remarks and feedback
+  // are deliberately NOT here — the client made them optional.
+  const missing = [
+    !startKm.trim() && 'starting KM',
+    !endKm.trim() && 'ending KM',
+    kmBackwards && 'valid KM readings',
+    !amazonKm.trim() && 'Amazon KM',
+    !gpsKm.trim() && 'GPS KM',
+    !podGiven && 'POD (proof of delivery)',
+  ].filter(Boolean) as string[];
+  const canSubmit = missing.length === 0;
+
+  const late = (s: TourLegStop) => s.actualArrival && s.arrivalAt && s.actualArrival > new Date(s.arrivalAt).getTime();
+  const legDone = leg.stops.filter((s) => s.actualDeparture).length;
+  const photoPath = `tours/${tour.id}/${leg.vrid || index}`;
+
+  return (
+    <div className={multi ? 'mb-3 overflow-hidden rounded-xl ring-1 ring-inset' : 'mb-3'} style={multi ? { borderColor: submitted ? '#BFE3CD' : '#D5D9D9' } : undefined}>
+      {/* Header — on a multi-VRID run this is the accordion toggle */}
+      {multi ? (
+        <button type="button" onClick={onToggle}
+          className="flex w-full items-center gap-2 px-3 py-2.5 text-left"
+          style={{ background: submitted ? '#F0F8F3' : '#F7F8F8' }}>
+          <span className="rounded px-1.5 py-0.5 font-mono text-[11px] font-extrabold" style={{ background: '#EAF1F8', color: '#0F5C9E' }}>{leg.vrid}</span>
+          <span className="text-[10px] font-bold uppercase text-neutral-400">{leg.loadType || 'Load'}</span>
+          <span className="text-[11px] text-neutral-400">{legDone}/{leg.stops.length} stops</span>
+          <span className="ml-auto flex items-center gap-2">
+            {submitted
+              ? <span className="inline-flex items-center gap-1 text-[11px] font-extrabold" style={{ color: '#067D62' }}><Check size={12} /> Updated</span>
+              : <span className="text-[11px] font-bold" style={{ color: '#B15C00' }}>Needs update</span>}
+            <ChevronRight size={15} className={`text-neutral-400 transition ${expanded ? 'rotate-90' : ''}`} />
+          </span>
+        </button>
+      ) : (
+        <div className="mb-2 flex items-center gap-2">
+          <span className="rounded px-1.5 py-0.5 font-mono text-[11px] font-extrabold" style={{ background: '#EAF1F8', color: '#0F5C9E' }}>{leg.vrid}</span>
+          <span className="text-[10px] font-bold uppercase text-neutral-400">{leg.loadType || 'Load'}</span>
+          {submitted && <span className="inline-flex items-center gap-1 text-[11px] font-extrabold" style={{ color: '#067D62' }}><Check size={12} /> Updated</span>}
+        </div>
+      )}
+
+      {!expanded ? null : (
+        <div className={multi ? 'px-3 py-3' : ''}>
+          {/* Stop timeline with check-in / check-out */}
+          <ol className="relative">
+            {leg.stops.map((s, si) => {
+              const inDone = !!s.actualArrival, outDone = !!s.actualDeparture;
+              const globalIdx = allStops.indexOf(s);
+              const current = !outDone && (globalIdx === 0 || !!allStops[globalIdx - 1]?.actualDeparture);
+              return (
+                <li key={si} className="relative flex gap-3 pb-4 last:pb-0">
+                  {si < leg.stops.length - 1 && <span className="absolute left-[13px] top-6 h-full w-0.5" style={{ background: outDone ? '#067D62' : '#D5D9D9' }} />}
+                  <span className="z-10 flex h-[27px] w-[27px] shrink-0 items-center justify-center rounded-full text-white ring-4 ring-white" style={{ background: outDone ? '#067D62' : current ? INK : '#c3c9cf' }}>
+                    {outDone ? <Check size={15} /> : <span className="font-mono text-[11px] font-black">{si + 1}</span>}
+                  </span>
+                  <div className="min-w-0 flex-1 pt-0.5">
+                    <div className="flex flex-wrap items-center gap-2 text-sm font-bold" style={{ color: INK }}>
+                      <span className="font-mono">{s.name}</span>
+                      {current && !outDone && <span className="rounded-full px-2 py-0.5 text-[10px] font-extrabold" style={{ background: '#FFF3E0', color: '#B15C00' }}>Now</span>}
+                      {late(s) && <span className="rounded-full px-2 py-0.5 text-[10px] font-extrabold" style={{ background: '#FCE9EC', color: '#B12704' }}>Late</span>}
+                      {s.mapUrl && <a href={s.mapUrl} target="_blank" rel="noreferrer" className="text-[11px] font-bold" style={{ color: '#007185' }}>Map</a>}
+                    </div>
+                    <div className="mt-1 grid grid-cols-2 gap-2 text-[11px]">
+                      <div>
+                        <div className="text-neutral-400">Arrival · plan {fmtDTShort(s.arrivalAt)}</div>
+                        {s.actualArrival ? <div className="font-bold" style={{ color: '#067D62' }}>✓ In {fmtClock(s.actualArrival)}</div>
+                          : current ? <button onClick={() => onStamp(si, 'actualArrival')} className="mt-0.5 inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-bold text-white" style={{ background: INK }}><LogIn size={11} /> Check in</button>
+                            : <div className="text-neutral-300">—</div>}
+                      </div>
+                      <div>
+                        <div className="text-neutral-400">Departure · plan {fmtDTShort(s.departureAt)}</div>
+                        {s.actualDeparture ? <div className="font-bold" style={{ color: '#067D62' }}>✓ Out {fmtClock(s.actualDeparture)}</div>
+                          : inDone ? <button onClick={() => onStamp(si, 'actualDeparture')} className="mt-0.5 inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-bold" style={{ background: ORANGE, color: INK }}><LogOut size={11} /> Check out</button>
+                            : <div className="text-neutral-300">—</div>}
+                      </div>
+                    </div>
+                    {inDone && (
+                      <input value={s.feedback ?? ''} onChange={(e) => onStopFeedback(si, e.target.value)}
+                        placeholder="Feedback for this stop…"
+                        className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-2 py-1 text-[11px] outline-none focus:border-primary-400" />
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+
+          {/* This VRID's operational figures */}
+          <div className="mt-3 rounded-xl p-3 ring-1 ring-inset" style={{ background: '#F7F8F8', borderColor: '#D5D9D9' }}>
+            <div className="mb-2 text-xs font-extrabold" style={{ color: INK }}>
+              {multi ? `Update ${leg.vrid}` : 'Open and update'}
+            </div>
+
             <Field label="Present / Absent">
               <div className="grid grid-cols-2 gap-2">
                 {['PRESENT', 'ABSENT'].map((m) => (
@@ -933,31 +1220,24 @@ export function TourOperate({ tour, onClose, onUpdate, showOwner }: {
               </div>
             </Field>
 
-            {/* 2 — load type, per VRID: it's decided per run, not per route */}
-            <div className="mt-2 space-y-2">
-              {legs.map((leg, li) => (
-                <Field key={li} label={`Load type · ${leg.vrid}`}>
-                  <div className="grid grid-cols-2 gap-2">
-                    {['Load', 'No Load'].map((m) => (
-                      <button key={m} type="button" onClick={() => setLoadType(li, m)} className="rounded-lg px-2 py-2 text-xs font-bold ring-1 ring-inset"
-                        style={(leg.loadType || 'Load') === m ? { background: INK, color: '#fff', borderColor: INK } : { background: '#fff', color: '#5A6572', borderColor: '#D5D9D9' }}>{m}</button>
-                    ))}
-                  </div>
-                </Field>
-              ))}
+            <div className="mt-2">
+              <Field label="Load type">
+                <div className="grid grid-cols-2 gap-2">
+                  {['Load', 'No Load'].map((m) => (
+                    <button key={m} type="button" onClick={() => onLoadType(m)} className="rounded-lg px-2 py-2 text-xs font-bold ring-1 ring-inset"
+                      style={(leg.loadType || 'Load') === m ? { background: INK, color: '#fff', borderColor: INK } : { background: '#fff', color: '#5A6572', borderColor: '#D5D9D9' }}>{m}</button>
+                  ))}
+                </div>
+              </Field>
             </div>
 
-            {/* 3 — manual KM: the total is worked out, not typed */}
             <div className="mt-2 grid grid-cols-3 gap-2">
               <Field label="Starting KM"><TextInput inputMode="numeric" value={startKm} onChange={(e) => setStartKm(e.target.value)} placeholder="12500" /></Field>
               <Field label="Ending KM"><TextInput inputMode="numeric" value={endKm} onChange={(e) => setEndKm(e.target.value)} placeholder="12582" /></Field>
-              <Field label="Total KM" hint="auto"><TextInput value={totalKm} disabled placeholder="—" /></Field>
+              <Field label="Manual KM" hint="auto"><TextInput value={totalKm} disabled placeholder="—" /></Field>
             </div>
-            {kmBackwards && (
-              <p className="mt-1 text-[11px] font-bold" style={{ color: '#B12704' }}>Ending KM is lower than starting KM — check the readings.</p>
-            )}
+            {kmBackwards && <p className="mt-1 text-[11px] font-bold" style={{ color: '#B12704' }}>Ending KM is lower than starting KM — check the readings.</p>}
 
-            {/* 4, 5 — Amazon & GPS KM */}
             <div className="mt-2 grid grid-cols-2 gap-2">
               <Field label="Amazon KM"><TextInput inputMode="numeric" value={amazonKm} onChange={(e) => setAmazonKm(e.target.value)} placeholder="80" /></Field>
               <Field label="Vehicle GPS KM"><TextInput inputMode="numeric" value={gpsKm} onChange={(e) => setGpsKm(e.target.value)} placeholder="84" /></Field>
@@ -974,9 +1254,9 @@ export function TourOperate({ tour, onClose, onUpdate, showOwner }: {
               </Field>
             </div>
             <div className="mt-2"><Field label="Expense note"><TextInput value={expenseNote} onChange={(e) => setExpenseNote(e.target.value)} placeholder="Toll / detention / repair…" /></Field></div>
-            {/* Required to complete — the client's "POD, remarks, and feedback". */}
-            <div className="mt-2"><Field label="Remarks" required><TextInput value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="On schedule / checkpost delay…" /></Field></div>
-            <div className="mt-2"><Field label="Feedback" required hint="How did the run go?"><TextInput value={feedback} onChange={(e) => setFeedback(e.target.value)} placeholder="Any feedback on this run…" /></Field></div>
+            {/* Optional, per the client — a run completes without them. */}
+            <div className="mt-2"><Field label="Remarks" hint="Optional"><TextInput value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="On schedule / checkpost delay…" /></Field></div>
+            <div className="mt-2"><Field label="Feedback" hint="Optional — how did the run go?"><TextInput value={feedback} onChange={(e) => setFeedback(e.target.value)} placeholder="Any feedback on this run…" /></Field></div>
             <div className="mt-2">
               <Field label="POD — proof of delivery" required>
                 <div className="grid grid-cols-2 gap-2">
@@ -987,42 +1267,43 @@ export function TourOperate({ tour, onClose, onUpdate, showOwner }: {
                 </div>
               </Field>
             </div>
-            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-              <div><div className="mb-1 text-[11px] font-bold text-neutral-500">KM photo</div><ImageUpload value={tour.kmPhotoImg} onChange={(v) => setPhoto('kmPhotoImg', v)} label="Add KM photo" path={`tours/${tour.id}/km`} /></div>
-              <div><div className="mb-1 text-[11px] font-bold text-neutral-500">Invoice photo</div><ImageUpload value={tour.invoicePhotoImg} onChange={(v) => setPhoto('invoicePhotoImg', v)} label="Add invoice" path={`tours/${tour.id}/invoice`} /></div>
-              <div><div className="mb-1 text-[11px] font-bold text-neutral-500">GPS photo</div><ImageUpload value={tour.gpsPhotoImg} onChange={(v) => setPhoto('gpsPhotoImg', v)} label="Add GPS" path={`tours/${tour.id}/gps`} /></div>
-              <div><div className="mb-1 text-[11px] font-bold text-neutral-500">POD photo</div><ImageUpload value={tour.podImg} onChange={(v) => setPhoto('podImg', v)} label="Add POD" path={`tours/${tour.id}/pod`} /></div>
+
+            {/* Photos — several per kind, saved the moment they upload. */}
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <MultiImageUpload label="KM photos" value={stored.kmPhotos} onChange={setPhotos('kmPhotos')} path={`${photoPath}/km`} />
+              <MultiImageUpload label="Invoice photos" value={stored.invoicePhotos} onChange={setPhotos('invoicePhotos')} path={`${photoPath}/invoice`} />
+              <MultiImageUpload label="GPS photos" value={stored.gpsPhotos} onChange={setPhotos('gpsPhotos')} path={`${photoPath}/gps`} />
+              <MultiImageUpload label="POD photos" value={stored.podPhotos} onChange={setPhotos('podPhotos')} path={`${photoPath}/pod`} />
             </div>
           </div>
-        </div>
 
-        <div className="border-t border-neutral-100 px-5 py-3">
-          {tour.amzStatus === 'COMPLETED' ? (
-            <div className="flex items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-extrabold" style={{ background: '#EAF3EC', color: '#067D62' }}>
-              <Flag size={15} /> Completed
+          {/* Save / submit — per VRID */}
+          {submitted ? (
+            <div className="mt-3 flex items-center justify-center gap-2 rounded-lg py-2 text-xs font-extrabold" style={{ background: '#EAF3EC', color: '#067D62' }}>
+              <Flag size={14} /> {leg.vrid} updated
             </div>
           ) : (
             <>
-              {!canComplete && (
-                <p className="mb-2 text-center text-[11px] font-semibold" style={{ color: '#B15C00' }}>
-                  To complete, still needed: {missingToComplete.join(' · ')}.
+              {!canSubmit && (
+                <p className="mt-2 text-center text-[11px] font-semibold" style={{ color: '#B15C00' }}>
+                  Still needed: {missing.join(' · ')}.
                 </p>
               )}
-              <div className="flex items-center gap-2">
-                <button onClick={saveOps} className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-bold ring-1 ring-inset" style={{ color: INK, borderColor: '#D5D9D9', background: '#fff' }}>
+              <div className="mt-2 flex items-center gap-2">
+                <button onClick={() => { onSave(collect()); setSaved(true); setTimeout(() => setSaved(false), 1500); }}
+                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-bold ring-1 ring-inset" style={{ color: INK, borderColor: '#D5D9D9', background: '#fff' }}>
                   {saved ? <><Check size={15} /> Saved</> : <><Save size={15} /> Save</>}
                 </button>
-                {/* "By submitting all this, it will move to completed." */}
-                <button onClick={submitComplete} disabled={!canComplete}
+                <button onClick={() => onSubmit(collect())} disabled={!canSubmit}
                   className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-extrabold disabled:opacity-40"
                   style={{ background: ORANGE, color: INK }}>
-                  <Flag size={15} /> Submit &amp; complete
+                  <Flag size={15} /> {multi ? `Submit ${leg.vrid}` : 'Submit & complete'}
                 </button>
               </div>
             </>
           )}
         </div>
-      </div>
+      )}
     </div>
   );
 }

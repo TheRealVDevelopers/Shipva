@@ -15,7 +15,7 @@ import type {
 } from './mocks.js';
 import { tripSteps, statusFromStep } from './trip.js';
 import { watchTrips, addTripDoc, updateTripDoc, archiveTripDoc } from './trips.js';
-import { watchToursFs, addTourDoc, updateTourDoc, archiveTourDoc } from './tours.js';
+import { watchToursFs, addTourDoc, updateTourDoc, archiveTourDoc, restoreTourDoc } from './tours.js';
 import { customersCol, driversCol, trucksCol, ownersCol } from './common.js';
 import { invoicesCol, expensesCol, fuelLogsCol, payrollCol, requestsCol } from './money.js';
 import type { VendorDocState } from './vendorDocs.js';
@@ -231,11 +231,65 @@ export interface TourLegStop {
   /** POC's note for this stop — the "Feedback" column in the Amazon export. */
   feedback?: string;
 }
-/** One VRID and the ordered stops it runs. */
+/**
+ * The operational update for ONE VRID — the client's rule: "if a trip contains
+ * a single VRID, allow one update only; if it contains multiple VRIDs, allow
+ * separate updates for each VRID". Every figure a POC fills in during the run
+ * lives here rather than on the tour, so two VRIDs on the same vehicle can each
+ * carry their own KM, POD and photos.
+ *
+ * Tours created before this existed keep their figures at tour level; the UI
+ * and the export read the leg first and fall back to the tour (see legOps).
+ */
+export interface TourLegOps {
+  present?: string | undefined;
+  startKm?: string | undefined; endKm?: string | undefined; totalManualKm?: string | undefined;
+  amazonRelyKm?: string | undefined; gpsKm?: string | undefined;
+  podGiven?: boolean | undefined; invoiceGiven?: boolean | undefined;
+  expenseAmount?: string | undefined; expenseNote?: string | undefined;
+  /** Optional, per the client — a run can be completed without them. */
+  remarks?: string | undefined; feedback?: string | undefined;
+  /** Multiple photos per kind, not one (the client asked for multi-upload). */
+  kmPhotos?: string[] | undefined; invoicePhotos?: string[] | undefined;
+  gpsPhotos?: string[] | undefined; podPhotos?: string[] | undefined;
+  /** Set when this VRID's own update is submitted. */
+  completedAtMs?: number | undefined;
+}
+
+/** One VRID: the ordered stops it runs, plus its own operational update. */
 export interface TourLeg {
   vrid: string;
   loadType?: string;          // 'Load' | 'No Load' (per leg)
   stops: TourLegStop[];
+  ops?: TourLegOps;
+}
+
+/**
+ * This VRID's operational figures, falling back to the tour-level ones for
+ * routes created before updates were per-VRID. Leg 0 inherits the old fields so
+ * a single-VRID run that was half-filled under the previous build opens with
+ * everything still in place; later legs start empty.
+ */
+export function legOps(t: Tour, index: number): TourLegOps {
+  const own = t.legs?.[index]?.ops ?? {};
+  if (index > 0) return own;
+  const legacy: TourLegOps = {
+    present: t.present, startKm: t.startKm, endKm: t.endKm,
+    totalManualKm: t.totalManualKm, amazonRelyKm: t.amazonRelyKm, gpsKm: t.gpsKm,
+    podGiven: t.podGiven, invoiceGiven: t.invoiceGiven,
+    expenseAmount: t.expenseAmount, expenseNote: t.expenseNote,
+    remarks: t.remarks, feedback: t.feedback,
+    ...(t.kmPhotoImg ? { kmPhotos: [t.kmPhotoImg] } : {}),
+    ...(t.invoicePhotoImg ? { invoicePhotos: [t.invoicePhotoImg] } : {}),
+    ...(t.gpsPhotoImg ? { gpsPhotos: [t.gpsPhotoImg] } : {}),
+    ...(t.podImg ? { podPhotos: [t.podImg] } : {}),
+  };
+  // Anything the leg has of its own wins; undefined keys fall through.
+  const merged: TourLegOps = { ...legacy };
+  (Object.keys(own) as (keyof TourLegOps)[]).forEach((k) => {
+    if (own[k] !== undefined) (merged as Record<string, unknown>)[k] = own[k];
+  });
+  return merged;
 }
 
 export interface Tour {
@@ -269,10 +323,15 @@ export interface Tour {
   sharedVendor?: boolean; sharedDriver?: boolean;
   /** Reported delays, oldest first — the audit log. */
   reports?: DelayReport[];
-  /** Cancelled/archived — kept for the record, hidden from the board. The client's
-   *  rule: never permanently delete; archive or cancel instead. */
+  /** Cancelled/archived — kept for the record, shown under the Cancelled tab
+   *  rather than the live board. The client's rule: never permanently delete.
+   *  A cancelled route releases its VRIDs AND frees its Tour ID for reuse. */
   archived?: boolean;
   archivedAtMs?: number;
+  /** A part-filled Route Assign saved with "Save as draft". Drafts are not on
+   *  the board, not exported, and hold no VRIDs — they're resumed and then
+   *  published as a real route. */
+  draft?: boolean;
 }
 
 /** A remembered pickup/drop location, suggested while typing a new trip. */
@@ -335,6 +394,7 @@ interface StoreApi extends StoreShape {
    *  record, hidden from the board; a tour's VRIDs are freed. */
   archiveTrip: (id: string) => void;
   archiveTour: (t: Tour) => void;
+  restoreTour: (t: Tour) => Promise<string | null>;
   /** Advance a trip one step along its live timeline; pass a remark when finishing. */
   advanceTrip: (id: string, remark?: string) => void;
   addSavedPoint: (p: SavedPoint) => void;
@@ -506,6 +566,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const updateTrip = useCallback((id: string, patch: Partial<Trip>) => { void updateTripDoc(id, patch); }, []);
   const archiveTrip = useCallback((id: string) => { void archiveTripDoc(id); }, []);
   const archiveTour = useCallback((t: Tour) => { void archiveTourDoc(t); }, []);
+  /** Resolves to the clashing VRID if the route can't come back, else null. */
+  const restoreTour = useCallback((t: Tour) => restoreTourDoc(t), []);
 
   const advanceTrip = useCallback((id: string, remark?: string) => {
     const t = tripsRef.current.find((x) => x.id === id);
@@ -630,7 +692,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const value = useMemo<StoreApi>(() => ({
     ...s, trips, tours, customers, drivers, trucks, attached,
     invoices, expenses, fuelLogs, payroll, requests,
-    addTrip, updateTripStatus, updateTrip, archiveTrip, archiveTour,
+    addTrip, updateTripStatus, updateTrip, archiveTrip, archiveTour, restoreTour,
     advanceTrip, addSavedPoint, addInvoice, markInvoicePaid, addExpense, addFuelLog,
     addExpenseCategory, addRequest, resolveRequest, addCustomer, addDriver, addTruck,
     setDriverDocs, setTruckDocs, updateDriver, updateTruck, deleteDriver, deleteTruck,
@@ -638,7 +700,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     addStaff, addAttached, recordOwnerPayment, addTour, updateTour, runPayroll, reset,
   }), [s, trips, tours, customers, drivers, trucks, attached,
     invoices, expenses, fuelLogs, payroll, requests,
-    addTrip, updateTripStatus, updateTrip, archiveTrip, archiveTour,
+    addTrip, updateTripStatus, updateTrip, archiveTrip, archiveTour, restoreTour,
     advanceTrip, addSavedPoint, addInvoice, markInvoicePaid, addExpense, addFuelLog,
     addExpenseCategory, addRequest, resolveRequest, addCustomer, addDriver, addTruck,
     setDriverDocs, setTruckDocs, updateDriver, updateTruck, deleteDriver, deleteTruck,

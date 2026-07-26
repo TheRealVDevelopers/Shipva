@@ -5,9 +5,15 @@ import { isoToLabel, labelToIso } from '../../lib/format.js';
 
 export function Modal({
   open, onClose, title, subtitle, children, onSubmit, submitLabel = 'Save', submitDisabled, wide,
+  secondaryLabel, onSecondary, secondaryDisabled,
 }: {
   open: boolean; onClose: () => void; title: string; subtitle?: string; children: ReactNode;
   onSubmit?: () => void; submitLabel?: string; submitDisabled?: boolean; wide?: boolean;
+  /** An extra footer action beside Cancel — e.g. "Save as draft", which saves
+   *  without passing the form's validation. */
+  secondaryLabel?: string | undefined;
+  onSecondary?: (() => void) | undefined;
+  secondaryDisabled?: boolean | undefined;
 }) {
   useEffect(() => {
     if (!open) return;
@@ -38,6 +44,9 @@ export function Modal({
           <div className="space-y-3.5">{children}</div>
           <div className="mt-6 flex items-center justify-end gap-2">
             <Button type="button" variant="secondary" size="sm" onClick={onClose}>Cancel</Button>
+            {secondaryLabel && onSecondary && (
+              <Button type="button" variant="secondary" size="sm" onClick={onSecondary} disabled={secondaryDisabled}>{secondaryLabel}</Button>
+            )}
             <Button type="submit" size="sm" disabled={submitDisabled}>{submitLabel}</Button>
           </div>
         </form>
