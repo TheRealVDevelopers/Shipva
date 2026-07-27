@@ -179,14 +179,14 @@ export function Tours() {
   // in the Diesel Request. Requiring them here would make the form unsavable.
   // Leadership must pick who the line is assigned to, in the form.
   const assignOk = !canAssign || !!f.handledBy;
-  // A Tour ID may only be live on one route at a time. Cancelled routes and
-  // drafts are skipped, which is what frees the ID for reassignment after a
-  // route is cancelled — the client's point 6.
-  const tourIdClash = tours.find((t) => !t.archived && !t.draft && t.id !== editId
-    && t.tourId.trim().toUpperCase() === f.tourId.trim().toUpperCase() && !!f.tourId.trim());
+  // The Trip ID is deliberately NOT unique. The same trip runs across several
+  // routes — different vendors, vehicles and days can all sit under one ID, and
+  // blocking that stopped legitimate work. Only the VRID is exclusive: it's
+  // checked company-wide against the orgVrids registry on submit, and a
+  // cancelled route releases its VRIDs so they can be entered again.
   const baseComplete = !!(f.serviceAt && f.vendor && f.driver && f.vehicleId && f.tourId.trim()) && assignOk;
   const valid = baseComplete && legs.length > 0 && legs.every(legComplete)
-    && !vendorBlocked && !driverUnverified && !truckUnverified && !tourIdClash;
+    && !vendorBlocked && !driverUnverified && !truckUnverified;
 
   const missing: string[] = [];
   if (!f.serviceAt) missing.push('service date & time');
@@ -200,7 +200,6 @@ export function Tours() {
   // Hard blocks are shown apart from missing fields — a blocked vendor or an
   // unverified truck can't be assigned no matter what else is filled in.
   const blocks: string[] = [];
-  if (tourIdClash) blocks.push(`Trip ID ${f.tourId.trim()} is already live on another route${tourIdClash.driver ? ` (${tourIdClash.driver})` : ''}. Cancel that one to free the ID, or use a different one.`);
   if (vendorBlocked) blocks.push(`${f.vendor} is blocked — agreement overdue (past day ${8 + 1}). Approve it in Vendors Register first.`);
   if (driverUnverified) blocks.push(`Driver ${f.driver} isn't document-verified yet.`);
   if (truckUnverified) blocks.push(`Vehicle ${f.vehicleId} isn't document-verified yet.`);
@@ -237,7 +236,7 @@ export function Tours() {
     archiveTour(confirmDel);
     push({
       title: 'Route cancelled',
-      body: `${confirmDel.tourId || 'Route'} marked Cancelled — its Tour ID and VRID${tourVridCount(confirmDel) === 1 ? '' : 's'} are free to reassign. The record is kept.`,
+      body: `${confirmDel.tourId || 'Route'} marked Cancelled — its VRID${tourVridCount(confirmDel) === 1 ? ' is' : 's are'} free to reassign. The record is kept.`,
       tone: 'info',
     });
     setConfirmDel(null);
@@ -455,7 +454,7 @@ export function Tours() {
             {shown.length === 0 && (
               <div className="py-12 text-center text-sm text-neutral-400">
                 {tab === 'Drafts' ? 'No drafts — a part-filled Route Assign saved with "Save as draft" appears here.'
-                  : tab === 'Cancelled' ? 'No cancelled routes. A cancelled route is kept here and its Tour ID & VRIDs are freed for reuse.'
+                  : tab === 'Cancelled' ? 'No cancelled routes. A cancelled route is kept here and its VRIDs are freed for reuse.'
                     : tours.length === 0 ? 'No lines yet — press "Route Assign" to add your first Amazon tour.' : 'No lines match this view.'}
               </div>
             )}
