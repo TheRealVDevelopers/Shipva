@@ -20,7 +20,8 @@ import { vendorNamesOf, driversForVendor, trucksForVendor } from '../../lib/vend
 import { Badge } from '../../components/ui/Badge.js';
 import { vridHolder, updateTourLegs } from '../../lib/tours.js';
 import { exportAmazonSheet } from '../../lib/exportAmazonSheet.js';
-import { exportRuns, exportRunHistory } from '../../lib/exportRuns.js';
+import { exportRunHistory } from '../../lib/exportRuns.js';
+import { exportAmazonTemplate } from '../../lib/exportAmazonTemplate.js';
 import { vendorMessage, driverMessage, dieselRequestMessage, waLink } from '../../lib/tourMessages.js';
 import { requiredError, phoneError, positiveError, normalizePhone, allClear } from '../../lib/validate.js';
 import { useNotify } from '../../lib/notify.js';
@@ -409,9 +410,9 @@ export function Tours() {
                   and Amazon's own 54-column operational template. */}
               {canEdit && (
                 <>
-                  <button onClick={() => { const n = exportRuns({ tours: shown, requests, name: 'amazon-tours' }); push({ title: 'Exported', body: `${n} VRID row${n === 1 ? '' : 's'} downloaded.`, tone: 'success' }); }}
+                  <button onClick={() => void exportAmazonTemplate({ tours: shown, requests, name: 'amazon-export' }).then((n) => push({ title: 'Exported', body: `${n} VRID row${n === 1 ? '' : 's'} in your Amazon template.`, tone: 'success' }))}
                     className="hidden items-center gap-1.5 rounded-lg bg-white/10 px-3 py-2 text-xs font-bold text-white ring-1 ring-inset ring-white/15 hover:bg-white/15 sm:inline-flex"
-                    title="One row per VR ID, every column, with the full update history"><FileSpreadsheet size={13} /> Export</button>
+                    title="Your Amazon workbook layout, one row per VR ID, plus created/updated by and the full update history"><FileSpreadsheet size={13} /> Export</button>
                   <button onClick={() => { const n = exportRunHistory({ tours: shown, requests, name: 'amazon-tours' }); push({ title: 'History exported', body: `${n} update${n === 1 ? '' : 's'} downloaded.`, tone: 'success' }); }}
                     className="hidden items-center gap-1.5 rounded-lg bg-white/10 px-3 py-2 text-xs font-bold text-white ring-1 ring-inset ring-white/15 hover:bg-white/15 sm:inline-flex"
                     title="Every individual update, one per row — who changed what and when"><FileSpreadsheet size={13} /> Update history</button>

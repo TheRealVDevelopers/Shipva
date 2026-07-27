@@ -28,7 +28,8 @@ import { canEditRecords } from '../../lib/roles.js';
 import { useNotify } from '../../lib/notify.js';
 import { printLR } from '../../lib/print.js';
 import { exportRows, rupeeCell, type Cell } from '../../lib/exportExcel.js';
-import { exportRuns, exportRunHistory } from '../../lib/exportRuns.js';
+import { exportRunHistory } from '../../lib/exportRuns.js';
+import { exportAmazonTemplate } from '../../lib/exportAmazonTemplate.js';
 import { tripSteps, tripPoints, currentStep, progressPct } from '../../lib/trip.js';
 
 // Three tabs, no "All" — the client's call. Amazon tours and ordinary trips
@@ -302,14 +303,12 @@ export function Trips() {
    */
   function exportShown() {
     const laneByTourId = new Map(shown.filter((i) => i.kind === 'tour').map((i) => [(i.source as Tour).id, i.lane]));
-    const n = exportRuns({
+    void exportAmazonTemplate({
       tours: shown.filter((i) => i.kind === 'tour').map((i) => i.source as Tour),
-      trips: shown.filter((i) => i.kind === 'trip').map((i) => i.source as Trip),
       requests,
       laneOf: (t) => laneByTourId.get(t.id) ?? '',
       name: `trips-${filter.toLowerCase().replace(/\s+/g, '-')}`,
-    });
-    push({ title: 'Exported', body: `${n} row${n === 1 ? '' : 's'} downloaded — one per VR ID.`, tone: 'success' });
+    }).then((n) => push({ title: 'Exported', body: `${n} row${n === 1 ? '' : 's'} downloaded — one per VR ID.`, tone: 'success' }));
   }
 
   /** The same runs, one row per individual update — who changed what, when. */
