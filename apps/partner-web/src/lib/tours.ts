@@ -7,10 +7,10 @@
  * scoped reads couldn't otherwise see each other's tours to check).
  */
 import {
-  addDoc, collection, deleteDoc, doc, getDoc, onSnapshot, query, setDoc, updateDoc, where,
+  addDoc, arrayUnion, collection, deleteDoc, doc, getDoc, onSnapshot, query, setDoc, updateDoc, where,
 } from 'firebase/firestore';
 import { db } from '../firebase.js';
-import type { Tour, TourStop, TourLeg } from './store.js';
+import type { Tour, TourStop, TourLeg, TourEvent } from './store.js';
 
 interface Scope { uid: string; role: string; leaderUid?: string }
 interface Handler { uid: string; name: string; leaderUid?: string }
@@ -144,15 +144,27 @@ export async function updateTourLegs(tour: Tour, patch: Partial<Tour>, uid: stri
 
 /** Creates the route and returns its new doc id — the caller needs it to hand
  *  the line to a POC as a second step. */
-export async function addTourDoc(t: Omit<Tour, 'id'>, scope: Scope, handledBy?: Handler): Promise<string> {
+export async function addTourDoc(t: Omit<Tour, 'id'>, scope: Scope, handledBy?: Handler, createdByName?: string): Promise<string> {
   const owner = handledBy ?? { uid: scope.uid, name: '', leaderUid: scope.leaderUid };
+  const now = Date.now();
+  const who = createdByName || owner.name || '';
   const payload: Record<string, unknown> = {
     ...t,
     stops: cleanStops(t.stops),
     ownerUid: owner.uid,
     ownerName: owner.name,
     leaderUid: owner.leaderUid || owner.uid,
-    createdAtMs: Date.now(),
+    createdAtMs: now,
+    createdBy: scope.uid,
+    createdByName: who,
+    updatedAtMs: now,
+    updatedByName: who,
+    // The trail starts at creation, so an export always has a first entry.
+    history: [{
+      atMs: now, by: who, byUid: scope.uid,
+      action: t.draft ? 'Draft saved' : 'Route created',
+      detail: `${(t.legs ?? []).length || (t.vrIds ?? []).length} VRID(s)${owner.name ? ` · assigned to ${owner.name}` : ''}`,
+    }],
   };
   if (t.legs) payload.legs = cleanLegs(t.legs);
   const ref = await addDoc(collection(db, 'orgTours'), clean(payload));
@@ -162,12 +174,37 @@ export async function addTourDoc(t: Omit<Tour, 'id'>, scope: Scope, handledBy?: 
   return ref.id;
 }
 
-export async function updateTourDoc(id: string, patch: Partial<Tour>): Promise<void> {
+/**
+ * Patch a tour, and optionally append an audit entry in the same write.
+ *
+ * The entry goes in with arrayUnion rather than read-modify-write: two POCs
+ * updating different VRIDs on the same route at the same moment would
+ * otherwise overwrite each other's history. `updatedAtMs`/`updatedByName` are
+ * stamped alongside so the export's "Updated by / Updated at" is always the
+ * genuine last touch, whatever changed.
+ */
+export async function updateTourDoc(id: string, patch: Partial<Tour>, event?: TourEvent): Promise<void> {
   const p: Record<string, unknown> = { ...patch };
   if (patch.stops) p.stops = cleanStops(patch.stops);
   if (patch.legs) p.legs = cleanLegs(patch.legs);
+  // `history` is append-only — never let a caller's stale copy overwrite it.
+  delete p.history;
   Object.keys(p).forEach((k) => p[k] === undefined && delete p[k]);
+  if (event) {
+    p.history = arrayUnion(clean({ ...event } as Record<string, unknown>));
+    p.updatedAtMs = event.atMs;
+    p.updatedByName = event.by;
+  }
   await updateDoc(doc(db, 'orgTours', id), p);
+}
+
+/** Append an audit entry on its own, with no other change. */
+export async function logTourEvent(id: string, event: TourEvent): Promise<void> {
+  await updateDoc(doc(db, 'orgTours', id), {
+    history: arrayUnion(clean({ ...event } as Record<string, unknown>)),
+    updatedAtMs: event.atMs,
+    updatedByName: event.by,
+  });
 }
 
 /** Free a VRID back up (admin fixing a typo). */

@@ -28,6 +28,7 @@ import { canEditRecords } from '../../lib/roles.js';
 import { useNotify } from '../../lib/notify.js';
 import { printLR } from '../../lib/print.js';
 import { exportRows, rupeeCell, type Cell } from '../../lib/exportExcel.js';
+import { exportRuns, exportRunHistory } from '../../lib/exportRuns.js';
 import { tripSteps, tripPoints, currentStep, progressPct } from '../../lib/trip.js';
 
 // Three tabs, no "All" — the client's call. Amazon tours and ordinary trips
@@ -286,48 +287,39 @@ export function Trips() {
     push({ title: 'Reassigned', body: `${i.code} handed to ${m.name}.`, tone: 'success' });
   }
 
-  /** Export exactly what's on screen — the tab, dates and search applied. The
-   *  full column set the client listed on page 2: trip ID, client, vehicle,
-   *  driver, routes, load, arrival/departure, VR IDs, ETAs, revised ETAs, delay +
-   *  reason codes, diesel request, source/dest KM, POD, remarks, feedback,
-   *  status and last-updated. (No trip sample sheet was supplied, so the order is
-   *  this list; layout will be matched once a sample arrives.) */
+  /**
+   * Export exactly what's on screen — the tab, dates and search applied.
+   *
+   * Shares one column set with Amazon Tours (lib/exportRuns) so the two
+   * modules can't drift: one row per VR ID, every column the client listed,
+   * created/updated by and when, status, manual KM, and the full update
+   * history rather than only the latest values. The board's own lane is passed
+   * through so "Status" matches the tab the run is sitting under.
+   *
+   * (No trip sample sheet has ever been supplied — the column ORDER is our own
+   * grouping and will be matched exactly once a sample arrives. See the note in
+   * lib/exportRuns.)
+   */
   function exportShown() {
-    const fmtTs = (ms?: number) => (ms ? new Date(ms).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false }) : '');
-    const stopTimes = (i: BoardItem, key: 'arrivalAt' | 'departureAt') => i.stops.map((s) => s[key] || '').filter(Boolean).map(fmtPlan).join(' · ');
-    exportRows(`sarva-trips-${filter.toLowerCase().replace(/\s+/g, '-')}`,
-      ['Type', 'Trip ID', 'Client / Vendor', 'Vehicle', 'Vehicle type', 'Driver', 'Driver no',
-        'Route', 'Load', 'Scheduled arrivals', 'Scheduled departures', 'VR IDs',
-        'ETA', 'Revised ETA', 'Delay reason(s)', 'Diesel request', 'Source→Dest KM',
-        'POD', 'Remarks', 'Feedback', 'Status', 'Last updated'],
-      shown.map((i): Cell[] => {
-        const t = i.kind === 'tour' ? (i.source as Tour) : null;
-        const trip = i.kind === 'trip' ? (i.source as Trip) : null;
-        const reps = i.source.reports ?? [];
-        const diesel = t ? dieselRequestFor(requests, t.id) : undefined;
-        const km = t ? [t.startKm, t.endKm].filter(Boolean).join('→') : '';
-        return [
-          i.kind === 'tour' ? 'Amazon tour' : 'Trip',
-          i.code,
-          t ? (t.vendorName ?? '') : (trip?.customer ?? ''),
-          i.vehicle, i.vehicleType, i.driver, i.driverNumber,
-          i.stops.map((s) => s.name).join(' → '),
-          i.legs.map((l) => l.loadType).filter(Boolean).join(', '),
-          stopTimes(i, 'arrivalAt'), stopTimes(i, 'departureAt'),
-          i.vrids.join(', '),
-          i.nextUpdateMs ? fmtActual(i.nextUpdateMs) : '',
-          reps.map((r) => r.estimatedAt).filter(Boolean).join(' · '),
-          reps.map((r) => `${r.event}: ${r.reason}`).join(' · '),
-          diesel ? requestStatusLabel(diesel) : '',
-          km || i.distanceLabel,
-          t?.podGiven ? 'Received' : '',
-          [t?.remarks, trip?.remark].filter(Boolean).join(' · '),
-          t?.feedback ?? '',
-          i.lane,
-          fmtTs(i.lastUpdatedMs),
-        ];
-      }));
-    push({ title: 'Exported', body: `${shown.length} run${shown.length === 1 ? '' : 's'} downloaded.`, tone: 'success' });
+    const laneByTourId = new Map(shown.filter((i) => i.kind === 'tour').map((i) => [(i.source as Tour).id, i.lane]));
+    const n = exportRuns({
+      tours: shown.filter((i) => i.kind === 'tour').map((i) => i.source as Tour),
+      trips: shown.filter((i) => i.kind === 'trip').map((i) => i.source as Trip),
+      requests,
+      laneOf: (t) => laneByTourId.get(t.id) ?? '',
+      name: `trips-${filter.toLowerCase().replace(/\s+/g, '-')}`,
+    });
+    push({ title: 'Exported', body: `${n} row${n === 1 ? '' : 's'} downloaded — one per VR ID.`, tone: 'success' });
+  }
+
+  /** The same runs, one row per individual update — who changed what, when. */
+  function exportHistory() {
+    const n = exportRunHistory({
+      tours: shown.filter((i) => i.kind === 'tour').map((i) => i.source as Tour),
+      requests,
+      name: `trips-${filter.toLowerCase().replace(/\s+/g, '-')}`,
+    });
+    push({ title: 'History exported', body: `${n} update${n === 1 ? '' : 's'} downloaded.`, tone: 'success' });
   }
 
   /** Save a delay report back to whichever kind of record it came from. */
@@ -541,9 +533,16 @@ export function Trips() {
               </div>
               {/* Export is Admin/TL only, per the client. */}
               {canEdit && (
-                <Button size="sm" variant="secondary" onClick={exportShown} disabled={shown.length === 0}>
-                  <Download size={13} /> Export
-                </Button>
+                <>
+                  <Button size="sm" variant="secondary" onClick={exportShown} disabled={shown.length === 0}
+                    title="One row per VR ID, every column, with the full update history">
+                    <Download size={13} /> Export
+                  </Button>
+                  <Button size="sm" variant="secondary" onClick={exportHistory} disabled={shown.length === 0}
+                    title="Every individual update, one per row — who changed what and when">
+                    <Download size={13} /> Update history
+                  </Button>
+                </>
               )}
               <Button size="sm" onClick={() => { resetForm(); setOpen(true); }}><Plus size={13} /> New Trip</Button>
             </div>

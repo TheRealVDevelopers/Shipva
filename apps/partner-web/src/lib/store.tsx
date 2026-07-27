@@ -15,11 +15,12 @@ import type {
 } from './mocks.js';
 import { tripSteps, statusFromStep } from './trip.js';
 import { watchTrips, addTripDoc, updateTripDoc, archiveTripDoc } from './trips.js';
-import { watchToursFs, addTourDoc, updateTourDoc, archiveTourDoc, restoreTourDoc } from './tours.js';
+import { watchToursFs, addTourDoc, updateTourDoc, archiveTourDoc, restoreTourDoc, logTourEvent } from './tours.js';
 import { customersCol, driversCol, trucksCol, ownersCol } from './common.js';
 import { invoicesCol, expensesCol, fuelLogsCol, payrollCol, requestsCol } from './money.js';
 import type { VendorDocState } from './vendorDocs.js';
 import { useAuth } from './auth.js';
+import { roleLabel } from './roles.js';
 
 /** Vendor agreement — absence means "not created yet". */
 export interface Agreement {
@@ -336,6 +337,46 @@ export interface TourLegOps {
   completedAtMs?: number | undefined;
 }
 
+/**
+ * One entry in a run's audit trail.
+ *
+ * The client asked the export to carry the **full update history, not just the
+ * latest**, so every change to a route is appended here rather than only
+ * overwriting the field. Append-only: a correction is another entry.
+ *
+ * Kept on the tour document (append via arrayUnion) rather than in its own
+ * collection — the export is built client-side from data already loaded, and a
+ * separate collection would mean a read per run to produce one sheet.
+ */
+export interface TourEvent {
+  atMs: number;
+  /** Who did it — "Prakash Nayak · Supervisor". */
+  by: string;
+  byUid?: string;
+  /** The VRID this touched. Absent means it was the whole route. */
+  vrid?: string;
+  /** Short verb: Created, Route edited, Assigned, Checked in, Updated… */
+  action: string;
+  /** What actually changed, e.g. "Amazon KM 80 → 84". */
+  detail?: string;
+}
+
+/** Newest-last, and defensive about a document that predates the trail. */
+export const tourHistory = (t: Tour): TourEvent[] =>
+  [...(t.history ?? [])].sort((a, b) => (a.atMs ?? 0) - (b.atMs ?? 0));
+
+/** This VRID's entries, plus the route-wide ones that affected it. */
+export const legHistory = (t: Tour, vrid: string): TourEvent[] =>
+  tourHistory(t).filter((e) => !e.vrid || e.vrid === vrid);
+
+/** One history entry as a single readable line, for a spreadsheet cell. */
+export const formatEvent = (e: TourEvent): string => {
+  const when = e.atMs
+    ? new Date(e.atMs).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })
+    : '';
+  return [when, e.by, e.vrid, e.action, e.detail].filter(Boolean).join(' | ');
+};
+
 /** One VRID: the ordered stops it runs, plus its own operational update. */
 export interface TourLeg {
   vrid: string;
@@ -412,6 +453,15 @@ export interface Tour {
    *  the board, not exported, and hold no VRIDs — they're resumed and then
    *  published as a real route. */
   draft?: boolean;
+  /** Who raised the route, and when. `createdAtMs` already existed as the
+   *  ordering key; these name the person for the export's "Created by". */
+  createdBy?: string;
+  createdByName?: string;
+  /** Last change of any kind — the export's "Updated by / Updated at". */
+  updatedAtMs?: number;
+  updatedByName?: string;
+  /** Append-only audit trail; see TourEvent. */
+  history?: TourEvent[];
 }
 
 /** A remembered pickup/drop location, suggested while typing a new trip. */
@@ -531,7 +581,8 @@ interface StoreApi extends StoreShape {
   recordOwnerPayment: (id: string, amountPaise: number) => void;
   /** Returns the new route's id so the caller can assign it to a POC next. */
   addTour: (t: Omit<Tour, 'id'>, handledBy?: { uid: string; name: string; leaderUid?: string }) => Promise<string>;
-  updateTour: (id: string, patch: Partial<Tour>) => void;
+  updateTour: (id: string, patch: Partial<Tour>, log?: { action: string; detail?: string; vrid?: string }) => void;
+  logTour: (id: string, action: string, opts?: { detail?: string; vrid?: string }) => void;
   runPayroll: (period?: string) => void;
   addPayrollLine: (l: Omit<PayrollLine, 'id'>) => void;
   updatePayrollLine: (id: string, patch: Partial<PayrollLine>) => void;
@@ -611,14 +662,39 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return watchToursFs({ uid: member.uid, role: member.role, leaderUid: member.leaderUid || member.uid }, setTours);
   }, [member?.uid, member?.role, member?.leaderUid]);
 
+  /** "Prakash Nayak · Supervisor" — who an audit entry is attributed to. */
+  const actorName = member ? `${member.name} · ${roleLabel(member.role)}` : 'Staff';
+
   const addTour = useCallback(async (t: Omit<Tour, 'id'>, handledBy?: { uid: string; name: string; leaderUid?: string }): Promise<string> => {
     if (!member) return '';
-    return addTourDoc(t, { uid: member.uid, role: member.role, leaderUid: member.leaderUid || member.uid }, handledBy);
-  }, [member?.uid, member?.role, member?.leaderUid]);
+    return addTourDoc(t, { uid: member.uid, role: member.role, leaderUid: member.leaderUid || member.uid }, handledBy, actorName);
+  }, [member?.uid, member?.role, member?.leaderUid, actorName]);
 
-  const updateTour = useCallback((id: string, patch: Partial<Tour>) => {
-    void updateTourDoc(id, patch);
-  }, []);
+  /**
+   * Patch a tour. Pass `log` to record what changed in the audit trail — the
+   * export carries the full history, not just the current values, so anything
+   * a person deliberately did should say so here. Stamped with the signed-in
+   * member automatically.
+   */
+  const updateTour = useCallback((id: string, patch: Partial<Tour>, log?: { action: string; detail?: string; vrid?: string }) => {
+    void updateTourDoc(id, patch, log
+      ? {
+        atMs: Date.now(), by: actorName, byUid: member?.uid ?? '',
+        action: log.action,
+        ...(log.detail ? { detail: log.detail } : {}),
+        ...(log.vrid ? { vrid: log.vrid } : {}),
+      }
+      : undefined);
+  }, [actorName, member?.uid]);
+
+  /** Record something that changed nothing on the document itself. */
+  const logTour = useCallback((id: string, action: string, opts?: { detail?: string; vrid?: string }) => {
+    void logTourEvent(id, {
+      atMs: Date.now(), by: actorName, byUid: member?.uid ?? '', action,
+      ...(opts?.detail ? { detail: opts.detail } : {}),
+      ...(opts?.vrid ? { vrid: opts.vrid } : {}),
+    });
+  }, [actorName, member?.uid]);
 
   // ── Shared org data — reference (customers/drivers/trucks/owners) + money ────
   // Firestore-backed and common to the whole org: everyone reads the same lists
@@ -826,7 +902,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     addExpenseCategory, addRequest, resolveRequest, addCustomer, addDriver, addTruck,
     setDriverDocs, setTruckDocs, updateDriver, updateTruck, deleteDriver, deleteTruck,
     setCustomerAgreement, setAttachedAgreement, updateCustomer, deleteCustomer, updateAttached, deleteAttached,
-    addStaff, addAttached, recordOwnerPayment, addTour, updateTour, runPayroll,
+    addStaff, addAttached, recordOwnerPayment, addTour, updateTour, logTour, runPayroll,
     addPayrollLine, updatePayrollLine, deletePayrollLine, reset,
   }), [s, trips, tours, customers, drivers, trucks, attached,
     invoices, expenses, fuelLogs, payroll, requests,
@@ -835,7 +911,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     addExpenseCategory, addRequest, resolveRequest, addCustomer, addDriver, addTruck,
     setDriverDocs, setTruckDocs, updateDriver, updateTruck, deleteDriver, deleteTruck,
     setCustomerAgreement, setAttachedAgreement, updateCustomer, deleteCustomer, updateAttached, deleteAttached,
-    addStaff, addAttached, recordOwnerPayment, addTour, updateTour, runPayroll,
+    addStaff, addAttached, recordOwnerPayment, addTour, updateTour, logTour, runPayroll,
     addPayrollLine, updatePayrollLine, deletePayrollLine, reset]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

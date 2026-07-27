@@ -20,7 +20,7 @@ import { vendorNamesOf, driversForVendor, trucksForVendor } from '../../lib/vend
 import { Badge } from '../../components/ui/Badge.js';
 import { vridHolder, updateTourLegs } from '../../lib/tours.js';
 import { exportAmazonSheet } from '../../lib/exportAmazonSheet.js';
-import { exportTourDetail } from '../../lib/exportTourDetail.js';
+import { exportRuns, exportRunHistory } from '../../lib/exportRuns.js';
 import { vendorMessage, driverMessage, dieselRequestMessage, waLink } from '../../lib/tourMessages.js';
 import { requiredError, phoneError, positiveError, normalizePhone, allClear } from '../../lib/validate.js';
 import { useNotify } from '../../lib/notify.js';
@@ -82,7 +82,7 @@ const fmtDTShort = (v?: string) => {
 };
 
 export function Tours() {
-  const { tours, drivers, trucks, attached, customers, addTour, updateTour, archiveTour, restoreTour } = useStore();
+  const { tours, drivers, trucks, attached, customers, requests, addTour, updateTour, logTour, archiveTour, restoreTour } = useStore();
   const { member } = useAuth();
   const isAdmin = member?.role === 'owner' || member?.role === 'manager';
   const canAssign = isAdmin || member?.role === 'team_leader';
@@ -233,6 +233,7 @@ export function Tours() {
 
   function doDelete() {
     if (!confirmDel) return;
+    if (confirmDel.id) logTour(confirmDel.id, 'Route cancelled', { detail: `VRIDs released: ${tourVridList(confirmDel).join(', ') || 'none'}` });
     archiveTour(confirmDel);
     push({
       title: 'Route cancelled',
@@ -249,6 +250,7 @@ export function Tours() {
       push({ title: "Can't restore", body: `VRID ${clash} has since been used on another route. Free it there first.`, tone: 'warning' });
       return;
     }
+    if (t.id) logTour(t.id, 'Route restored', { detail: `VRIDs re-claimed: ${tourVridList(t).join(', ') || 'none'}` });
     push({ title: 'Route restored', body: `${t.tourId || 'Route'} is back on the board as Planned.`, tone: 'success' });
   }
 
@@ -338,6 +340,8 @@ export function Tours() {
             ...core, draft: false,
             ...(handledBy ? { ownerUid: handledBy.uid, ownerName: handledBy.name, leaderUid: handledBy.leaderUid } : {}),
           }, member?.uid ?? '');
+          logTour(existing.id, existing.draft ? 'Route created from draft' : 'Route edited',
+            { detail: `${core.vrIds.length} VRID(s): ${core.vrIds.join(', ')}` });
           push({ title: existing.draft ? 'Route created' : 'Route updated', body: `${f.tourId} saved.`, tone: 'success' });
         }
       } else {
@@ -405,7 +409,12 @@ export function Tours() {
                   and Amazon's own 54-column operational template. */}
               {canEdit && (
                 <>
-                  <button onClick={() => exportTourDetail(shown)} className="hidden items-center gap-1.5 rounded-lg bg-white/10 px-3 py-2 text-xs font-bold text-white ring-1 ring-inset ring-white/15 hover:bg-white/15 sm:inline-flex" title="Every trip detail except map links — one row per VRID"><FileSpreadsheet size={13} /> Export</button>
+                  <button onClick={() => { const n = exportRuns({ tours: shown, requests, name: 'amazon-tours' }); push({ title: 'Exported', body: `${n} VRID row${n === 1 ? '' : 's'} downloaded.`, tone: 'success' }); }}
+                    className="hidden items-center gap-1.5 rounded-lg bg-white/10 px-3 py-2 text-xs font-bold text-white ring-1 ring-inset ring-white/15 hover:bg-white/15 sm:inline-flex"
+                    title="One row per VR ID, every column, with the full update history"><FileSpreadsheet size={13} /> Export</button>
+                  <button onClick={() => { const n = exportRunHistory({ tours: shown, requests, name: 'amazon-tours' }); push({ title: 'History exported', body: `${n} update${n === 1 ? '' : 's'} downloaded.`, tone: 'success' }); }}
+                    className="hidden items-center gap-1.5 rounded-lg bg-white/10 px-3 py-2 text-xs font-bold text-white ring-1 ring-inset ring-white/15 hover:bg-white/15 sm:inline-flex"
+                    title="Every individual update, one per row — who changed what and when"><FileSpreadsheet size={13} /> Update history</button>
                   <button onClick={() => exportAmazonSheet(shown)} className="hidden items-center gap-1.5 rounded-lg bg-white/10 px-3 py-2 text-xs font-bold text-white ring-1 ring-inset ring-white/15 hover:bg-white/15 sm:inline-flex" title="Amazon's own 54-column sheet"><FileSpreadsheet size={13} /> Amazon sheet</button>
                 </>
               )}
@@ -587,7 +596,8 @@ export function Tours() {
             onSubmit={() => {
               const m = assignable.find((x) => x.uid === assignPoc);
               if (m) {
-                updateTour(assignFor.id, { ownerUid: m.uid, ownerName: m.name, leaderUid: teamOf(m) });
+                updateTour(assignFor.id, { ownerUid: m.uid, ownerName: m.name, leaderUid: teamOf(m) },
+                  { action: reassigning ? 'Reassigned' : 'Assigned', detail: `${cur?.ownerName ? `${cur.ownerName} → ` : ''}${m.name}` });
                 push({ title: reassigning ? 'Reassigned' : 'Assigned', body: `${assignFor.tourId} handed to ${m.name}.`, tone: 'success' });
               }
               setAssignFor(null);
@@ -638,7 +648,8 @@ export function Tours() {
  * the only things to type are the payee and the amount.
  */
 function DieselRequest({ tour, onClose, onSave }: {
-  tour: Tour; onClose: () => void; onSave: (id: string, patch: Partial<Tour>) => void;
+  tour: Tour; onClose: () => void;
+  onSave: (id: string, patch: Partial<Tour>, log?: { action: string; detail?: string; vrid?: string }) => void;
 }) {
   const { push } = useNotify();
   const { member } = useAuth();
@@ -666,7 +677,10 @@ function DieselRequest({ tour, onClose, onSave }: {
     setTried(true);
     if (!ready) return;
     const patch = { gpayName: gpayName.trim(), gpayNumber: normalizePhone(gpayNumber), advanceAmount: advanceAmount.trim() };
-    onSave(tour.id, patch);
+    onSave(tour.id, patch, {
+      action: existing ? 'Diesel request re-sent' : 'Diesel advance requested',
+      detail: `₹${advanceAmount.trim() || '0'} to ${gpayName.trim()} (${normalizePhone(gpayNumber)})`,
+    });
 
     // The request itself goes to Expenses & Fuel, where it's marked paid or
     // rejected — the status is no longer something this form decides.
@@ -936,7 +950,9 @@ function TourRow({ t, isAdmin, canEdit, canAssign, state, onDiesel, onEdit, onDe
  * Mounted from Trips (the client moved updates out of the Amazon Tours board).
  */
 export function TourOperate({ tour, onClose, onUpdate, showOwner }: {
-  tour: Tour; onClose: () => void; onUpdate: (id: string, patch: Partial<Tour>) => void; showOwner: boolean;
+  tour: Tour; onClose: () => void;
+  onUpdate: (id: string, patch: Partial<Tour>, log?: { action: string; detail?: string; vrid?: string }) => void;
+  showOwner: boolean;
 }) {
   const { push } = useNotify();
   const legs = tour.legs ?? [];
@@ -960,17 +976,48 @@ export function TourOperate({ tour, onClose, onUpdate, showOwner }: {
     // Checking out of the last stop does NOT complete the run — completion is
     // only ever an explicit submit, so a run can't reach Completed with no KM.
     const status = tourDone ? 'COMPLETED' : anyIn ? 'IN PROGRESS' : 'PLANNED';
-    onUpdate(tour.id, { legs: next, amzStatus: status, sarvaStatus: status });
+    const stop = legs[li]?.stops[si];
+    onUpdate(tour.id, { legs: next, amzStatus: status, sarvaStatus: status }, {
+      action: key === 'actualArrival' ? 'Checked in' : 'Checked out',
+      vrid: legs[li]?.vrid ?? '',
+      detail: `${stop?.name ?? 'Stop'} at ${new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false })}`,
+    });
   }
 
   function setLoadType(li: number, v: string) {
     if (!tour.id) return;
-    onUpdate(tour.id, { legs: legs.map((l, i) => (i === li ? { ...l, loadType: v } : l)) });
+    onUpdate(tour.id, { legs: legs.map((l, i) => (i === li ? { ...l, loadType: v } : l)) }, {
+      action: 'Load type set', vrid: legs[li]?.vrid ?? '', detail: v,
+    });
   }
 
   function setStopFeedback(li: number, si: number, v: string) {
     if (!tour.id) return;
+    // No audit line per keystroke — the VRID's Save records the final text.
     onUpdate(tour.id, { legs: legs.map((l, i) => (i !== li ? l : { ...l, stops: l.stops.map((s, j) => (j === si ? { ...s, feedback: v } : s)) })) });
+  }
+
+  /**
+   * What actually changed on this VRID, as "Amazon KM 80 → 84" lines. The
+   * export carries the full history rather than only the latest figures, so an
+   * update has to say what it altered, not merely that it happened.
+   */
+  function diffOps(before: TourLegOps, after: TourLegOps): string {
+    const fields: [keyof TourLegOps, string][] = [
+      ['present', 'Present'], ['startKm', 'Start KM'], ['endKm', 'End KM'],
+      ['totalManualKm', 'Manual KM'], ['amazonRelyKm', 'Amazon KM'], ['gpsKm', 'GPS KM'],
+      ['podGiven', 'POD'], ['invoiceGiven', 'Invoice'],
+      ['expenseAmount', 'Expense'], ['expenseNote', 'Expense note'],
+      ['remarks', 'Remarks'], ['feedback', 'Feedback'],
+    ];
+    const show = (v: unknown) => (v === true ? 'Yes' : v === false ? 'No' : String(v ?? '').trim() || '—');
+    const out = fields
+      .filter(([k]) => show(before[k]) !== show(after[k]))
+      .map(([k, label]) => `${label} ${show(before[k])} → ${show(after[k])}`);
+    const photoCount = (o: TourLegOps) =>
+      (o.kmPhotos?.length ?? 0) + (o.invoicePhotos?.length ?? 0) + (o.gpsPhotos?.length ?? 0) + (o.podPhotos?.length ?? 0);
+    if (photoCount(before) !== photoCount(after)) out.push(`Photos ${photoCount(before)} → ${photoCount(after)}`);
+    return out.join('; ');
   }
 
   /** Write one VRID's operational figures back onto its leg. */
@@ -998,7 +1045,15 @@ export function TourOperate({ tour, onClose, onUpdate, showOwner }: {
       const allIn = nextLegs.every((l, i) => (i === li ? true : !!legOps(tour, i).completedAtMs));
       if (allIn) { patch.amzStatus = 'COMPLETED'; patch.sarvaStatus = 'COMPLETED'; }
     }
-    onUpdate(tour.id, patch);
+    const vrid = legs[li]?.vrid ?? '';
+    const changed = diffOps(legOps(tour, li), merged);
+    onUpdate(tour.id, patch, {
+      action: alsoComplete ? 'VRID submitted' : 'VRID updated',
+      vrid,
+      // A save with nothing altered still belongs in the trail — it records
+      // that someone looked, which is what "not just the latest" is about.
+      ...(changed ? { detail: changed } : {}),
+    });
   }
 
   function onLegSubmit(li: number, ops: TourLegOps) {
