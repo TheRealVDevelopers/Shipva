@@ -28,9 +28,25 @@
 import type { Customer, AttachedTruck } from './store.js';
 import type { FleetDriver, Truck } from './mocks.js';
 
-/** Compare vendor names the way a person would: ignore case and stray spaces. */
+/**
+ * Compare vendor names the way a person would.
+ *
+ * Punctuation is dropped, not just case and spacing — the live register has
+ * the same vendor written every which way, and these must all be one name:
+ *   "A A Transport (Abhilash)"      (how the vendor picker lists it)
+ *   "(A A Transport) Abhilash"      (how the drivers were saved)
+ *   "(Lucky Transport)Manoj M"      (no space after the bracket)
+ *   "(Raju Kamal Transport ) Raju"  (space before it)
+ * Every bracket becomes a space and runs of space collapse, so all four land
+ * on the same string. Word ORDER is still respected, so two genuinely
+ * different vendors can't be merged by accident.
+ */
 const norm = (s?: string | undefined): string =>
-  (s ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+  (s ?? '')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')  // brackets, dots, dashes → space
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toLowerCase();
 
 /** The trading name a truck owner is listed under on the vendor picker. */
 export const ownerVendorName = (a: AttachedTruck): string =>
@@ -70,11 +86,12 @@ export function vendorAliases(vendor: string, book?: VendorBook): Set<string> {
   book.owners.forEach((a) => {
     const own = norm(a.owner);
     const trading = norm(a.transporterName);
-    // Match on either name, then accept both — this is the case that broke.
-    if (own === want || trading === want) {
-      if (own) out.add(own);
-      if (trading) out.add(trading);
-    }
+    // An owner is also commonly written as the two names together — the
+    // register has both "A A Transport Abhilash" and "Abhilash A A Transport".
+    // Treat every form of this one owner as the same vendor.
+    const forms = [own, trading, `${trading} ${own}`.trim(), `${own} ${trading}`.trim()]
+      .map((s) => s.trim()).filter(Boolean);
+    if (forms.includes(want)) forms.forEach((f) => out.add(f));
   });
   return out;
 }

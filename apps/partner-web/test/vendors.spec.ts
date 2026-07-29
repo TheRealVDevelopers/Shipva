@@ -28,6 +28,54 @@ const book: VendorBook = {
   ] as unknown as VendorBook['owners'],
 };
 
+/**
+ * Verbatim from the live Driver Register (28 July screenshot). The vendor
+ * picker lists these owners one way and the drivers were saved another; every
+ * pair below is ONE vendor and must match.
+ */
+describe('the live register’s real spellings', () => {
+  const cases: [picker: string, storedOnDriver: string, driver: string][] = [
+    ['A A Transport (Abhilash)', '(A A Transport) Abhilash', 'Karthik'],
+    ['Lucky Transport (Manoj M)', '(Lucky Transport)Manoj M', 'Ravi Chanappa Devasur'],
+    ['Raju Kamal Transport (Raju)', '(Raju Kamal Transport ) Raju', 'Raju'],
+    ['Tharun Gwoda Transport (Anjanappa)', '(Tharun Gwoda Transport)Anjanappa', 'Manjunath Gowda'],
+    ['Vijai Transport (Vijai Kumar)', 'Vijai Transport (Vijai Kumar )', 'Mithun G'],
+    ['S L V Transport (B H MAHESH)', '(S L V Transport ) B H MAHESH', 'Suhas'],
+    ['Nikshith Transport', 'Nikshith Transport', 'Uday coorg'],
+    ['Basavaraju S C', 'Basavaraju S C', 'Basavaraju S C'],
+  ];
+
+  it.each(cases)('%s finds the driver saved as "%s"', (picker, stored, driverName) => {
+    const b: VendorBook = {
+      customers: [],
+      owners: [{ owner: picker, transporterName: '' }] as unknown as VendorBook['owners'],
+    };
+    const drivers = [drv('d1', driverName, stored), drv('d2', 'Someone Else', 'Totally Different Transport')];
+    expect(driversForVendor(drivers, picker, b).map((d) => d.name)).toEqual([driverName]);
+  });
+
+  it('still refuses a genuinely different vendor', () => {
+    const b: VendorBook = {
+      customers: [],
+      owners: [{ owner: 'A A Transport (Abhilash)', transporterName: '' }] as unknown as VendorBook['owners'],
+    };
+    // Same shape, different words — must NOT match.
+    const drivers = [drv('d1', 'Wrong', '(B B Transport) Bhaskar')];
+    expect(driversForVendor(drivers, 'A A Transport (Abhilash)', b)).toEqual([]);
+  });
+
+  it('matches when the owner record keeps the two names in separate fields', () => {
+    const b: VendorBook = {
+      customers: [],
+      owners: [{ owner: 'Abhilash', transporterName: 'A A Transport' }] as unknown as VendorBook['owners'],
+    };
+    const drivers = [drv('d1', 'Karthik', '(A A Transport) Abhilash')];
+    // Listed as just "A A Transport", driver saved with both names.
+    expect(driversForVendor(drivers, 'A A Transport', b).map((d) => d.name)).toEqual(['Karthik']);
+    expect(driversForVendor(drivers, 'Abhilash', b).map((d) => d.name)).toEqual(['Karthik']);
+  });
+});
+
 describe('vendor linkage', () => {
   it('THE BUG: a driver registered under the owner’s name still shows once the owner is put under a transporter', () => {
     // Registered back when the owner was listed as "Ramesh K".
