@@ -705,6 +705,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [trucks, setTrucks] = useState<Truck[]>([]);
   const [attached, setAttached] = useState<AttachedTruck[]>([]);
   const attachedRef = useRef<AttachedTruck[]>([]);
+  // Live copies for relinkVendor, which must read the current lists without
+  // re-creating itself (and every action that depends on it) on each snapshot.
+  const customersRef = useRef<Customer[]>([]);
+  const driversRef = useRef<FleetDriver[]>([]);
+  const trucksRef = useRef<Truck[]>([]);
   // Money — shared too. Invoices and payroll keep a ref so a mutation can resolve
   // the affected doc id from the human key (invoice `no`) it's called with.
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -718,14 +723,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!member) {
       setCustomers([]); setDrivers([]); setTrucks([]); setAttached([]); attachedRef.current = [];
+      customersRef.current = []; driversRef.current = []; trucksRef.current = [];
       setInvoices([]); invoicesRef.current = []; setExpenses([]); setFuelLogs([]);
       setPayroll([]); payrollRef.current = []; setRequests([]);
       return;
     }
     const unsubs = [
-      customersCol.watch(setCustomers),
-      driversCol.watch(setDrivers),
-      trucksCol.watch(setTrucks),
+      customersCol.watch((l) => { setCustomers(l); customersRef.current = l; }),
+      driversCol.watch((l) => { setDrivers(l); driversRef.current = l; }),
+      trucksCol.watch((l) => { setTrucks(l); trucksRef.current = l; }),
       ownersCol.watch((l) => { setAttached(l); attachedRef.current = l; }),
       invoicesCol.watch((l) => { setInvoices(l); invoicesRef.current = l; }),
       expensesCol.watch(setExpenses),
@@ -850,9 +856,50 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     void customersCol.update(id, { agreement: a });
   }, []);
 
-  const updateCustomer = useCallback((id: string, patch: Partial<Customer>) => { void customersCol.update(id, patch); }, []);
+  /**
+   * Re-link every driver and truck when a vendor is renamed.
+   *
+   * A driver stores its vendor as a NAME, chosen from the picker. Renaming the
+   * vendor used to leave those names pointing at a vendor that no longer went
+   * by them, so the route-assign driver list came back empty — which is exactly
+   * how "(A A Transport) Abhilash" and "A A Transport (Abhilash)" came to be
+   * two different vendors in the data. Matching is now tolerant of that, but
+   * tolerance is a safety net; this stops the drift happening at all.
+   *
+   * Returns how many records were moved, so the UI can say so.
+   */
+  const relinkVendor = useCallback((fromName: string, toName: string): number => {
+    const from = (fromName ?? '').trim();
+    const to = (toName ?? '').trim();
+    if (!from || !to || from === to) return 0;
+    let moved = 0;
+    driversRef.current.forEach((d) => {
+      if (d.id && (d.vendor ?? '').trim() === from) { void driversCol.update(d.id, { vendor: to }); moved++; }
+    });
+    trucksRef.current.forEach((t) => {
+      if (t.id && (t.vendor ?? '').trim() === from) { void trucksCol.update(t.id, { vendor: to }); moved++; }
+    });
+    return moved;
+  }, []);
+
+  /** Patch a transporter, moving its drivers & trucks with it if renamed. */
+  const updateCustomer = useCallback((id: string, patch: Partial<Customer>) => {
+    const before = customersRef.current.find((c) => c.id === id);
+    void customersCol.update(id, patch);
+    if (before && patch.name !== undefined) relinkVendor(before.name, patch.name);
+  }, [relinkVendor]);
   const deleteCustomer = useCallback((id: string) => { void customersCol.remove(id); }, []);
-  const updateAttached = useCallback((id: string, patch: Partial<AttachedTruck>) => { void ownersCol.update(id, patch); }, []);
+
+  /** Patch a truck owner. The name it trades under is `transporterName` when
+   *  set, else `owner` — so a change to either can move the vendor's label. */
+  const updateAttached = useCallback((id: string, patch: Partial<AttachedTruck>) => {
+    const before = attachedRef.current.find((a) => a.id === id);
+    void ownersCol.update(id, patch);
+    if (before && (patch.owner !== undefined || patch.transporterName !== undefined)) {
+      const nameOf = (a: { owner: string; transporterName?: string }) => (a.transporterName?.trim() || a.owner.trim());
+      relinkVendor(nameOf(before), nameOf({ ...before, ...patch }));
+    }
+  }, [relinkVendor]);
   const deleteAttached = useCallback((id: string) => { void ownersCol.remove(id); }, []);
 
   const setAttachedAgreement = useCallback((id: string, a: Agreement) => {
