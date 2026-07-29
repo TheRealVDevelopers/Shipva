@@ -10,7 +10,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   driversForVendor, trucksForVendor, vendorNamesOf, canonicalVendorName,
-  orphanedVendorNames, type VendorBook,
+  orphanedVendorNames, auditVendorLinks, type VendorBook,
 } from '../src/lib/vendors.js';
 
 type Driver = Parameters<typeof driversForVendor>[0][number];
@@ -73,6 +73,46 @@ describe('the live register’s real spellings', () => {
     // Listed as just "A A Transport", driver saved with both names.
     expect(driversForVendor(drivers, 'A A Transport', b).map((d) => d.name)).toEqual(['Karthik']);
     expect(driversForVendor(drivers, 'Abhilash', b).map((d) => d.name)).toEqual(['Karthik']);
+  });
+});
+
+describe('vendor link audit', () => {
+  const b: VendorBook = {
+    customers: [{ name: 'Nikshith Transport' }] as unknown as VendorBook['customers'],
+    owners: [{ owner: 'A A Transport (Abhilash)', transporterName: '' }] as unknown as VendorBook['owners'],
+  };
+
+  it('says nothing about records that already match exactly', () => {
+    const drivers = [drv('d1', 'Uday coorg', 'Nikshith Transport')];
+    expect(auditVendorLinks(drivers, [], b)).toEqual([]);
+  });
+
+  it('ignores own-fleet records with no vendor', () => {
+    expect(auditVendorLinks([drv('d1', 'Staff')], [], b)).toEqual([]);
+  });
+
+  it('flags a differently-spelt name as loose, and names the vendor to tidy it to', () => {
+    const drivers = [drv('d1', 'Karthik', '(A A Transport) Abhilash')];
+    const [issue] = auditVendorLinks(drivers, [], b);
+    expect(issue).toMatchObject({
+      kind: 'Driver', label: 'Karthik',
+      stored: '(A A Transport) Abhilash',
+      state: 'loose', suggested: 'A A Transport (Abhilash)',
+    });
+  });
+
+  it('flags a name matching no vendor as an orphan, with no suggestion', () => {
+    const drivers = [drv('d1', 'Ghost', 'Deleted Transport Co')];
+    const [issue] = auditVendorLinks(drivers, [], b);
+    expect(issue!.state).toBe('orphan');
+    expect(issue!.suggested).toBeUndefined();
+  });
+
+  it('covers trucks too, and lists orphans before untidy names', () => {
+    const drivers = [drv('d1', 'Karthik', '(A A Transport) Abhilash')];
+    const trucks = [trk('t1', 'KA05K2245', 'Gone Transport')];
+    const out = auditVendorLinks(drivers, trucks, b);
+    expect(out.map((i) => [i.kind, i.state])).toEqual([['Truck', 'orphan'], ['Driver', 'loose']]);
   });
 });
 

@@ -27,6 +27,7 @@ import {
   type TruckType,
 } from '../../lib/truckTypes.js';
 import { vendorNamesOf } from '../../lib/vendors.js';
+import { VendorLinkAudit } from '../../components/VendorLinkAudit.js';
 const TABS = ['Drivers', 'Trucks'] as const;
 
 /** A document only counts as on file when BOTH the number and the photo are
@@ -203,6 +204,10 @@ export function Fleet({ register }: { register: 'drivers' | 'trucks' }) {
       title={tab === 'Drivers' ? 'Driver Register' : 'Truck Register'}
       subtitle={tab === 'Drivers' ? `${drivers.length} drivers` : `${trucks.length} trucks`}>
       <div className="space-y-4">
+        {/* Drivers and trucks whose vendor name doesn't match the register —
+            the ones marked "Not linked" never appear in Route Assign. Hides
+            itself entirely when there's nothing to report. */}
+        <VendorLinkAudit />
         {(driversPending > 0 || trucksPending > 0) && (
           <div className="flex items-center gap-2.5 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800 ring-1 ring-inset ring-amber-200">
             <AlertTriangle size={16} className="shrink-0 text-amber-500" />

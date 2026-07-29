@@ -150,3 +150,68 @@ export function orphanedVendorNames(
   });
   return [...seen].sort((a, b) => a.localeCompare(b));
 }
+
+/**
+ * How well one record's stored vendor name lines up with the register.
+ *  exact  — identical to a registered vendor. Nothing to do.
+ *  loose  — the same vendor written differently (brackets, spacing, case, or
+ *           the owner/transporter pair in the other order). It WORKS, because
+ *           matching is tolerant, but the text is untidy and it is what made
+ *           this fragile in the first place.
+ *  orphan — matches no registered vendor at all. This record is invisible in
+ *           Route Assign and needs a human to say who it belongs to.
+ */
+export type VendorLinkState = 'exact' | 'loose' | 'orphan';
+
+export interface VendorLinkIssue {
+  kind: 'Driver' | 'Truck';
+  id: string;
+  /** Driver's name or truck's registration — how a person identifies it. */
+  label: string;
+  /** Exactly what the record holds today. */
+  stored: string;
+  state: VendorLinkState;
+  /** The registered vendor this resolves to, when it resolves at all. */
+  suggested?: string;
+}
+
+/**
+ * Every driver and truck whose vendor name isn't an exact match, so the team
+ * can tidy the register in one pass. Own-fleet records (no vendor) are not
+ * issues and are left out.
+ */
+export function auditVendorLinks(
+  drivers: FleetDriver[], trucks: Truck[], book: VendorBook,
+): VendorLinkIssue[] {
+  const registered = vendorNamesOf(book.customers, book.owners);
+  const exact = new Set(registered.map((n) => n.trim()));
+
+  const classify = (stored: string): { state: VendorLinkState; suggested?: string } => {
+    if (exact.has(stored.trim())) return { state: 'exact' };
+    // Tolerant matching is what Route Assign uses — if that finds the vendor,
+    // the record works and only the spelling is off.
+    const hit = registered.find((v) => vendorAliases(v, book).has(norm(stored)));
+    if (hit) return { state: 'loose', suggested: hit };
+    return { state: 'orphan' };
+  };
+
+  const issues: VendorLinkIssue[] = [];
+  drivers.forEach((d) => {
+    const stored = (d.vendor ?? '').trim();
+    if (!stored || !d.id) return;
+    const { state, suggested } = classify(stored);
+    if (state !== 'exact') issues.push({ kind: 'Driver', id: d.id, label: d.name, stored, state, ...(suggested ? { suggested } : {}) });
+  });
+  trucks.forEach((t) => {
+    const stored = (t.vendor ?? '').trim();
+    if (!stored || !t.id) return;
+    const { state, suggested } = classify(stored);
+    if (state !== 'exact') issues.push({ kind: 'Truck', id: t.id, label: t.reg, stored, state, ...(suggested ? { suggested } : {}) });
+  });
+
+  // Orphans first — those are the ones actually broken.
+  const rank = (s: VendorLinkState) => (s === 'orphan' ? 0 : 1);
+  return issues.sort((a, b) => rank(a.state) - rank(b.state)
+    || a.stored.localeCompare(b.stored)
+    || a.label.localeCompare(b.label));
+}
