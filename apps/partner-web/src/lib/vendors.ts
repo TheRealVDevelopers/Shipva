@@ -6,13 +6,31 @@
  * only the vehicles and drivers linked to the vendor chosen for that run — you
  * can't put someone else's driver on your vendor's truck by accident.
  *
- * A vendor is identified by the name it trades under. For a truck owner that's
- * `transporterName` when set, else the owner's own name; for a transporter it's
- * the legal entity name. These are the same strings the driver and truck forms
- * save into their `vendor` field, so linkage is a plain name match.
+ * ── Why the matching is alias-aware ──────────────────────────────────────────
+ * A driver stores its vendor as the NAME it was picked under, and the link is a
+ * name match. That is fragile, and it broke in production: a truck owner is
+ * listed under `transporterName` when set, else their own `owner` name, so the
+ * moment somebody filled in the optional "operates under" field on an existing
+ * owner, the picker started showing the transporter's name while every driver
+ * already registered still held the owner's name. Selecting that vendor then
+ * produced an empty driver list — for every owner the field had been filled
+ * for. Renaming a transporter did the same thing.
+ *
+ * So a vendor now resolves to EVERY name it is known by, and a driver or truck
+ * matches if its stored name is any of them, compared case- and
+ * whitespace-insensitively. Renaming or reclassifying a vendor no longer
+ * orphans the people attached to it.
+ *
+ * The real fix is a stable vendor id on the driver rather than a name; that
+ * needs a migration of live records, so this keeps the existing data working
+ * without one. `canonicalVendorName` is here for when that migration happens.
  */
 import type { Customer, AttachedTruck } from './store.js';
 import type { FleetDriver, Truck } from './mocks.js';
+
+/** Compare vendor names the way a person would: ignore case and stray spaces. */
+const norm = (s?: string | undefined): string =>
+  (s ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
 
 /** The trading name a truck owner is listed under on the vendor picker. */
 export const ownerVendorName = (a: AttachedTruck): string =>
@@ -28,10 +46,90 @@ export function vendorNamesOf(customers: Customer[], owners: AttachedTruck[]): s
   return [...new Set(names)].sort((a, b) => a.localeCompare(b));
 }
 
-/** Drivers linked to a vendor (own-fleet drivers have no vendor). */
-export const driversForVendor = (drivers: FleetDriver[], vendor: string): FleetDriver[] =>
-  vendor ? drivers.filter((d) => (d.vendor ?? '') === vendor) : drivers.filter((d) => !d.vendor);
+/** The registers a vendor name is resolved against. */
+export interface VendorBook {
+  customers: Customer[];
+  owners: AttachedTruck[];
+}
+
+/**
+ * Every name this vendor may have been recorded under — its current listed
+ * name plus, for a truck owner, both their own name and the transporter they
+ * run under. Normalised, so callers can compare directly.
+ */
+export function vendorAliases(vendor: string, book?: VendorBook): Set<string> {
+  const want = norm(vendor);
+  const out = new Set<string>();
+  if (!want) return out;
+  out.add(want);
+  if (!book) return out;
+
+  book.customers.forEach((c) => {
+    if (norm(c.name) === want) out.add(norm(c.name));
+  });
+  book.owners.forEach((a) => {
+    const own = norm(a.owner);
+    const trading = norm(a.transporterName);
+    // Match on either name, then accept both — this is the case that broke.
+    if (own === want || trading === want) {
+      if (own) out.add(own);
+      if (trading) out.add(trading);
+    }
+  });
+  return out;
+}
+
+/** Does this record's stored vendor name belong to `vendor`? */
+const linked = (stored: string | undefined, aliases: Set<string>): boolean =>
+  aliases.has(norm(stored));
+
+/**
+ * Drivers linked to a vendor. Own-fleet drivers (no vendor) show when no
+ * vendor is chosen. Pass the `book` so a driver registered under an owner's
+ * old name still appears once that owner is listed under a transporter.
+ */
+export const driversForVendor = (drivers: FleetDriver[], vendor: string, book?: VendorBook): FleetDriver[] => {
+  if (!vendor) return drivers.filter((d) => !d.vendor);
+  const aliases = vendorAliases(vendor, book);
+  return drivers.filter((d) => linked(d.vendor, aliases));
+};
 
 /** Trucks linked to a vendor (own-fleet trucks have no vendor). */
-export const trucksForVendor = (trucks: Truck[], vendor: string): Truck[] =>
-  vendor ? trucks.filter((t) => (t.vendor ?? '') === vendor) : trucks.filter((t) => !t.vendor);
+export const trucksForVendor = (trucks: Truck[], vendor: string, book?: VendorBook): Truck[] => {
+  if (!vendor) return trucks.filter((t) => !t.vendor);
+  const aliases = vendorAliases(vendor, book);
+  return trucks.filter((t) => linked(t.vendor, aliases));
+};
+
+/**
+ * The name a vendor should be stored under going forward — its current listed
+ * name. Use when writing a driver or truck so new records don't inherit an
+ * out-of-date alias.
+ */
+export function canonicalVendorName(vendor: string, book?: VendorBook): string {
+  const want = norm(vendor);
+  if (!book || !want) return vendor.trim();
+  const owner = book.owners.find((a) => norm(a.owner) === want || norm(a.transporterName) === want);
+  if (owner) return ownerVendorName(owner);
+  const cust = book.customers.find((c) => norm(c.name) === want);
+  return cust ? cust.name.trim() : vendor.trim();
+}
+
+/**
+ * Drivers and trucks whose vendor name matches no registered vendor at all —
+ * genuinely orphaned records, which the UI should surface rather than silently
+ * omit. Distinct from the alias case above, which is now handled.
+ */
+export function orphanedVendorNames(
+  drivers: FleetDriver[], trucks: Truck[], book: VendorBook,
+): string[] {
+  const known = new Set<string>();
+  book.customers.forEach((c) => known.add(norm(c.name)));
+  book.owners.forEach((a) => { known.add(norm(a.owner)); if (a.transporterName) known.add(norm(a.transporterName)); });
+  const seen = new Set<string>();
+  [...drivers.map((d) => d.vendor), ...trucks.map((t) => t.vendor)].forEach((v) => {
+    const n = norm(v);
+    if (n && !known.has(n)) seen.add(v!.trim());
+  });
+  return [...seen].sort((a, b) => a.localeCompare(b));
+}

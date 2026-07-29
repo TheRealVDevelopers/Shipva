@@ -121,14 +121,18 @@ export function Tours() {
   // Only the drivers and vehicles linked to the chosen vendor — the client's
   // "only display linked vehicles and drivers in route assignments". Own fleet is
   // the no-vendor set; a named vendor matches by the name drivers/trucks store.
+  // The registers a vendor name is resolved against. Passing this is what makes
+  // the lists survive a vendor being renamed or an owner being put under a
+  // transporter — without it, drivers registered under the old name vanish.
+  const vendorBook = useMemo(() => ({ customers, owners: attached }), [customers, attached]);
   const vendorDrivers = useMemo(() => {
     if (!f.vendor) return [];
-    return driversForVendor(drivers, f.vendor === OWN_FLEET ? '' : f.vendor);
-  }, [drivers, f.vendor]);
+    return driversForVendor(drivers, f.vendor === OWN_FLEET ? '' : f.vendor, vendorBook);
+  }, [drivers, f.vendor, vendorBook]);
   const vendorTrucks = useMemo(() => {
     if (!f.vendor) return [];
-    return trucksForVendor(trucks, f.vendor === OWN_FLEET ? '' : f.vendor);
-  }, [trucks, f.vendor]);
+    return trucksForVendor(trucks, f.vendor === OWN_FLEET ? '' : f.vendor, vendorBook);
+  }, [trucks, f.vendor, vendorBook]);
   const vehicleFeet = trucks.find((t) => t.reg === f.vehicleId)?.feet ?? '';
 
   function pickDriver(name: string) {
@@ -503,15 +507,20 @@ export function Tours() {
           </Select>
         </Field>
         <Row>
-          <Field label="Driver name">
+          {/* An empty list used to be a blank dropdown with no explanation —
+              which is how a vendor-rename silently looked like a broken app.
+              Say what's happening and where to fix it. */}
+          <Field label="Driver name"
+            error={f.vendor && vendorDrivers.length === 0 ? `No drivers are registered under ${f.vendor}. Add one in Driver Register.` : undefined}>
             <Select value={f.driver} onChange={(e) => pickDriver(e.target.value)} disabled={!f.vendor}>
-              <option value="">{f.vendor ? 'Select driver' : 'Pick vendor first'}</option>
+              <option value="">{f.vendor ? (vendorDrivers.length ? 'Select driver' : 'No drivers for this vendor') : 'Pick vendor first'}</option>
               {vendorDrivers.map((d) => <option key={d.id} value={d.name}>{d.name}</option>)}
             </Select>
           </Field>
-          <Field label="Vehicle number">
+          <Field label="Vehicle number"
+            error={f.vendor && vendorTrucks.length === 0 ? `No vehicles are registered under ${f.vendor}. Add one in Truck Register.` : undefined}>
             <Select value={f.vehicleId} onChange={(e) => setF({ ...f, vehicleId: e.target.value })} disabled={!f.vendor}>
-              <option value="">{f.vendor ? 'Select vehicle' : 'Pick vendor first'}</option>
+              <option value="">{f.vendor ? (vendorTrucks.length ? 'Select vehicle' : 'No vehicles for this vendor') : 'Pick vendor first'}</option>
               {vendorTrucks.map((t) => <option key={t.id} value={t.reg}>{t.reg}{t.feet ? ` · ${t.feet}` : ''}</option>)}
             </Select>
           </Field>
