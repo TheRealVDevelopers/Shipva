@@ -11,6 +11,7 @@ import { Badge, type BadgeTone } from '../../components/ui/Badge.js';
 import { Button } from '../../components/ui/Button.js';
 import { Modal, Field, TextInput, DateInput, Select, Row } from '../../components/ui/Modal.js';
 import { ImageUpload } from '../../components/ui/ImageUpload.js';
+import { DocumentUpload } from '../../components/ui/DocumentUpload.js';
 import { VendorDocs } from '../../components/VendorDocs.js';
 import { watchTruckTypes, optionsFor, type TruckType } from '../../lib/truckTypes.js';
 import { kycPending, vendorStatus, SIGN_BACK_DAYS, type VendorDocKind } from '../../lib/vendorDocs.js';
@@ -799,7 +800,8 @@ function RateCardForm({ card, vendor, employeeName, onCancel, onSave }: {
         </div>
         <div className="mt-2">
           <div className="mb-1 text-[11px] font-bold text-neutral-500">Signed copy for this card</div>
-          <ImageUpload value={signedImg} onChange={setSignedImg} label="Upload signed rate card" path={`documents/transporters/${vendor.id}/ratecard-${card.id}`} />
+          {/* A rate card comes back as a signed PDF like the other paperwork. */}
+          <DocumentUpload value={signedImg} onChange={setSignedImg} label="Upload signed rate card" path={`documents/transporters/${vendor.id}/ratecard-${card.id}`} />
         </div>
       </div>
     </Modal>

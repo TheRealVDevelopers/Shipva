@@ -25,4 +25,16 @@ export async function uploadDocImage(blob: Blob, path: string): Promise<string> 
   return getDownloadURL(r);
 }
 
+/**
+ * Upload any supported document — a PDF or an image — preserving its real
+ * content type so the browser opens it correctly later. Storage rules already
+ * allow `application/pdf` under `documents/`; this is what finally sends one.
+ */
+export async function uploadDocFile(file: Blob, path: string): Promise<string> {
+  await ensureAuth();
+  const r = ref(storage, path);
+  await uploadBytes(r, file, { contentType: file.type || 'application/octet-stream' });
+  return getDownloadURL(r);
+}
+
 export const cloudStorageReady = typeof storage !== 'undefined';

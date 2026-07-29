@@ -13,7 +13,7 @@
  * card and a truck owner's aren't built from the same record.
  */
 import { FileText, Upload, Check, AlertTriangle, Clock } from 'lucide-react';
-import { ImageUpload } from './ui/ImageUpload.js';
+import { DocumentUpload } from './ui/DocumentUpload.js';
 import { Badge } from './ui/Badge.js';
 import { docStatuses, agreementReady, type VendorDocState, type VendorDocKind } from '../lib/vendorDocs.js';
 
@@ -70,8 +70,9 @@ export function VendorDocs({ state, path, onSend, onSigned, hide = [] }: VendorD
               <div className="mt-2.5 border-t border-neutral-200 pt-2.5">
                 <div className="mb-1.5 flex items-center gap-1 text-[11px] font-bold text-neutral-600">
                   <Upload size={11} /> Signed copy from the vendor
+                  <span className="font-normal text-neutral-400">— PDF or photo</span>
                 </div>
-                <ImageUpload
+                <DocumentUpload
                   value={d.signedImg || undefined}
                   onChange={(v) => onSigned(d.kind, v)}
                   label="Upload signed document"
