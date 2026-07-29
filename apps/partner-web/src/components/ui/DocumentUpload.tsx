@@ -40,6 +40,41 @@ export const isPdfUrl = (url?: string): boolean => {
   return /\.pdf$/i.test(pathPart);
 };
 
+/**
+ * Read-only view of a stored document — a thumbnail for a photo, a link for a
+ * PDF. Anywhere that shows an uploaded document must use this: a bare <img>
+ * pointed at a PDF renders as a broken image with no way to open it.
+ */
+export function DocPreview({ url, label, size = 'h-16 w-16' }: {
+  url?: string | undefined; label: string; size?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  if (!url) {
+    return (
+      <div className={`flex ${size} items-center justify-center rounded-lg bg-neutral-50 text-[10px] font-bold text-neutral-300 ring-1 ring-inset ring-neutral-200`}>
+        Missing
+      </div>
+    );
+  }
+  if (isPdfUrl(url)) {
+    return (
+      <a href={url} target="_blank" rel="noreferrer" title={`${label} (PDF)`}
+        className={`flex ${size} flex-col items-center justify-center gap-0.5 rounded-lg bg-rose-50 text-rose-600 ring-1 ring-inset ring-rose-200 hover:bg-rose-100`}>
+        <FileText size={18} />
+        <span className="text-[9px] font-extrabold">PDF</span>
+      </a>
+    );
+  }
+  return (
+    <>
+      <button type="button" onClick={() => setOpen(true)} title={label}>
+        <img src={url} alt={label} className={`${size} rounded-lg object-cover ring-1 ring-neutral-200 hover:ring-primary-300`} />
+      </button>
+      {open && <Lightbox src={url} title={label} onClose={() => setOpen(false)} />}
+    </>
+  );
+}
+
 /** Downscale an image; PDFs are never touched. */
 function compressImage(file: File): Promise<Blob> {
   return new Promise((resolve, reject) => {

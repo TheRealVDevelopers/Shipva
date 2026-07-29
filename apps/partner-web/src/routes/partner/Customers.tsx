@@ -445,7 +445,7 @@ export function Customers() {
               <TextInput value={f.gstin} onChange={(e) => setF({ ...f, gstin: e.target.value.toUpperCase() })} placeholder="29ABCDE1234F1Z5" />
             </Field>
             <Field label="GST certificate">
-              <ImageUpload value={f.gstinImg} onChange={(v) => setF({ ...f, gstinImg: v })} label="Upload GST certificate" path={`documents/transporters/${editId ?? 'new'}/gstin`} />
+              <DocumentUpload value={f.gstinImg} onChange={(v) => setF({ ...f, gstinImg: v })} label="Upload GST certificate" path={`documents/transporters/${editId ?? 'new'}/gstin`} />
             </Field>
             <Row>
               <Field label="PAN" required hint="Needed for TDS" error={tried ? errs.pan : undefined}>
@@ -457,10 +457,10 @@ export function Customers() {
             </Row>
             <Row>
               <Field label="PAN card">
-                <ImageUpload value={f.panImg} onChange={(v) => setF({ ...f, panImg: v })} label="Upload PAN" path={`documents/transporters/${editId ?? 'new'}/pan`} />
+                <DocumentUpload value={f.panImg} onChange={(v) => setF({ ...f, panImg: v })} label="Upload PAN" path={`documents/transporters/${editId ?? 'new'}/pan`} />
               </Field>
               <Field label="Aadhaar card">
-                <ImageUpload value={f.aadhaarImg} onChange={(v) => setF({ ...f, aadhaarImg: v })} label="Upload Aadhaar" path={`documents/transporters/${editId ?? 'new'}/aadhaar`} />
+                <DocumentUpload value={f.aadhaarImg} onChange={(v) => setF({ ...f, aadhaarImg: v })} label="Upload Aadhaar" path={`documents/transporters/${editId ?? 'new'}/aadhaar`} />
               </Field>
             </Row>
           </>
@@ -529,7 +529,7 @@ export function Customers() {
               </Field>
             </Row>
             <Field label="Cancelled cheque" hint="Proves the account belongs to them before any payout goes out">
-              <ImageUpload value={f.cancelledChequeImg} onChange={(v) => setF({ ...f, cancelledChequeImg: v })} label="Upload cancelled cheque" path={`documents/transporters/${editId ?? 'new'}/cheque`} />
+              <DocumentUpload value={f.cancelledChequeImg} onChange={(v) => setF({ ...f, cancelledChequeImg: v })} label="Upload cancelled cheque" path={`documents/transporters/${editId ?? 'new'}/cheque`} />
             </Field>
           </>
         )}

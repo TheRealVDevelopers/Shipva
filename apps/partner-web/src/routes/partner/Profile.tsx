@@ -6,6 +6,7 @@ import { Button } from '../../components/ui/Button.js';
 import { Badge } from '../../components/ui/Badge.js';
 import { Field, TextInput, DateInput } from '../../components/ui/Modal.js';
 import { ImageUpload } from '../../components/ui/ImageUpload.js';
+import { DocumentUpload } from '../../components/ui/DocumentUpload.js';
 import { useAuth } from '../../lib/auth.js';
 import { roleLabel } from '../../lib/roles.js';
 import { updateMember, missingProfile, profileComplete, isActivated, ASSIGNABLE_PAGES } from '../../lib/members.js';
@@ -142,15 +143,15 @@ export function Profile() {
             <div className="sm:col-span-2 grid gap-4 sm:grid-cols-3">
               <div>
                 <div className="mb-1 text-xs font-bold text-neutral-700">Aadhaar document <span className="text-rose-500">*</span></div>
-                <ImageUpload value={member.aadhaarImg} onChange={(v) => void onDoc('aadhaarImg', v)} path={`members/${member.uid}/aadhaar`} label="Upload Aadhaar" />
+                <DocumentUpload value={member.aadhaarImg} onChange={(v) => void onDoc('aadhaarImg', v)} path={`members/${member.uid}/aadhaar`} label="Upload Aadhaar" />
               </div>
               <div>
                 <div className="mb-1 text-xs font-bold text-neutral-700">PAN document <span className="text-rose-500">*</span></div>
-                <ImageUpload value={member.panImg} onChange={(v) => void onDoc('panImg', v)} path={`members/${member.uid}/pan`} label="Upload PAN" />
+                <DocumentUpload value={member.panImg} onChange={(v) => void onDoc('panImg', v)} path={`members/${member.uid}/pan`} label="Upload PAN" />
               </div>
               <div>
                 <div className="mb-1 text-xs font-bold text-neutral-700">Cancelled cheque <span className="text-rose-500">*</span></div>
-                <ImageUpload value={member.cancelledChequeImg} onChange={(v) => void onDoc('cancelledChequeImg', v)} path={`members/${member.uid}/cheque`} label="Upload cheque" />
+                <DocumentUpload value={member.cancelledChequeImg} onChange={(v) => void onDoc('cancelledChequeImg', v)} path={`members/${member.uid}/cheque`} label="Upload cheque" />
               </div>
             </div>
 

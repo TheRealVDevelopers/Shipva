@@ -12,6 +12,7 @@ import { DutyBadge } from '../../components/ui/StatusBadge.js';
 import { VehicleArt } from '../../components/art.js';
 import { Modal, Field, TextInput, DateInput, Select, Row } from '../../components/ui/Modal.js';
 import { ImageUpload } from '../../components/ui/ImageUpload.js';
+import { DocumentUpload } from '../../components/ui/DocumentUpload.js';
 import { useStore } from '../../lib/store.js';
 import { useAuth } from '../../lib/auth.js';
 import { canEditRecords } from '../../lib/roles.js';
@@ -371,14 +372,14 @@ export function Fleet({ register }: { register: 'drivers' | 'trucks' }) {
       <Modal open={!!docDriver} onClose={() => setDocDriverId(null)} title={`Documents · ${docDriver?.name ?? ''}`} subtitle="Aadhaar, driving licence & PAN"
         onSubmit={() => { if (docDriver) { setDriverDocs(docDriver.id, dForm); setDocDriverId(null); } }} submitLabel="Save documents" wide>
         <Field label="Aadhaar number" hint="12-digit UIDAI number"><TextInput value={dForm.aadhaar} onChange={(e) => setDForm({ ...dForm, aadhaar: e.target.value })} placeholder="4821 7745 9012" /></Field>
-        <Field label="Aadhaar card image"><ImageUpload value={dForm.aadhaarImg} onChange={(v) => setDForm({ ...dForm, aadhaarImg: v })} label="Upload Aadhaar" path={`documents/drivers/${docDriver?.id}/aadhaar`} /></Field>
+        <Field label="Aadhaar card"><DocumentUpload value={dForm.aadhaarImg} onChange={(v) => setDForm({ ...dForm, aadhaarImg: v })} label="Upload Aadhaar" path={`documents/drivers/${docDriver?.id}/aadhaar`} /></Field>
         <Row>
           <Field label="Driving licence no"><TextInput value={dForm.licenseNo} onChange={(e) => setDForm({ ...dForm, licenseNo: e.target.value.toUpperCase() })} placeholder="KA0120200012345" /></Field>
           <Field label="Licence expiry"><DateInput value={dForm.licenseExpiry} onChange={(v) => setDForm({ ...dForm, licenseExpiry: v })} /></Field>
         </Row>
-        <Field label="Driving licence image"><ImageUpload value={dForm.licenseImg} onChange={(v) => setDForm({ ...dForm, licenseImg: v })} label="Upload licence" path={`documents/drivers/${docDriver?.id}/licence`} /></Field>
+        <Field label="Driving licence"><DocumentUpload value={dForm.licenseImg} onChange={(v) => setDForm({ ...dForm, licenseImg: v })} label="Upload licence" path={`documents/drivers/${docDriver?.id}/licence`} /></Field>
         <Field label="PAN number"><TextInput value={dForm.pan} onChange={(e) => setDForm({ ...dForm, pan: e.target.value.toUpperCase() })} placeholder="ABCDE1234F" /></Field>
-        <Field label="PAN card image"><ImageUpload value={dForm.panImg} onChange={(v) => setDForm({ ...dForm, panImg: v })} label="Upload PAN" path={`documents/drivers/${docDriver?.id}/pan`} /></Field>
+        <Field label="PAN card"><DocumentUpload value={dForm.panImg} onChange={(v) => setDForm({ ...dForm, panImg: v })} label="Upload PAN" path={`documents/drivers/${docDriver?.id}/pan`} /></Field>
         {docDriver && <VerifyPanel record={docDriver} missing={driverMissing({ ...docDriver, ...dForm })} isAdmin={isAdmin} onVerify={(on) => verify('driver', docDriver.id, on)} />}
       </Modal>
 
@@ -386,17 +387,17 @@ export function Fleet({ register }: { register: 'drivers' | 'trucks' }) {
       <Modal open={!!docTruck} onClose={() => setDocTruckId(null)} title={`Documents · ${docTruck?.reg ?? ''}`} subtitle="RC, insurance & fitness"
         onSubmit={() => { if (docTruck) { setTruckDocs(docTruck.id, tForm); setDocTruckId(null); } }} submitLabel="Save documents" wide>
         <Field label="RC number"><TextInput value={tForm.rc} onChange={(e) => setTForm({ ...tForm, rc: e.target.value.toUpperCase() })} placeholder="RC-KA01C5521" /></Field>
-        <Field label="RC image"><ImageUpload value={tForm.rcImg} onChange={(v) => setTForm({ ...tForm, rcImg: v })} label="Upload RC" path={`documents/trucks/${docTruck?.id}/rc`} /></Field>
+        <Field label="RC"><DocumentUpload value={tForm.rcImg} onChange={(v) => setTForm({ ...tForm, rcImg: v })} label="Upload RC" path={`documents/trucks/${docTruck?.id}/rc`} /></Field>
         <Row>
           <Field label="Insurance no"><TextInput value={tForm.insuranceNo} onChange={(e) => setTForm({ ...tForm, insuranceNo: e.target.value.toUpperCase() })} placeholder="INS-778812" /></Field>
           <Field label="Insurance expiry"><DateInput value={tForm.insuranceExpiry} onChange={(v) => setTForm({ ...tForm, insuranceExpiry: v })} /></Field>
         </Row>
-        <Field label="Insurance image"><ImageUpload value={tForm.insuranceImg} onChange={(v) => setTForm({ ...tForm, insuranceImg: v })} label="Upload insurance" path={`documents/trucks/${docTruck?.id}/insurance`} /></Field>
+        <Field label="Insurance"><DocumentUpload value={tForm.insuranceImg} onChange={(v) => setTForm({ ...tForm, insuranceImg: v })} label="Upload insurance" path={`documents/trucks/${docTruck?.id}/insurance`} /></Field>
         <Row>
           <Field label="Fitness cert no"><TextInput value={tForm.fitnessNo} onChange={(e) => setTForm({ ...tForm, fitnessNo: e.target.value.toUpperCase() })} placeholder="FIT-4521" /></Field>
           <Field label="Fitness expiry"><DateInput value={tForm.fitnessExpiry} onChange={(v) => setTForm({ ...tForm, fitnessExpiry: v })} /></Field>
         </Row>
-        <Field label="Fitness certificate image"><ImageUpload value={tForm.fitnessImg} onChange={(v) => setTForm({ ...tForm, fitnessImg: v })} label="Upload fitness" path={`documents/trucks/${docTruck?.id}/fitness`} /></Field>
+        <Field label="Fitness certificate"><DocumentUpload value={tForm.fitnessImg} onChange={(v) => setTForm({ ...tForm, fitnessImg: v })} label="Upload fitness" path={`documents/trucks/${docTruck?.id}/fitness`} /></Field>
         {docTruck && <VerifyPanel record={docTruck} missing={truckMissing({ ...docTruck, ...tForm })} isAdmin={isAdmin} onVerify={(on) => verify('truck', docTruck.id, on)} />}
       </Modal>
 

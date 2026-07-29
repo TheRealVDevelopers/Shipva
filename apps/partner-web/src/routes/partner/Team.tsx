@@ -26,6 +26,7 @@ import { watchWorklogFor, fmtTime, type WorklogEntry } from '../../lib/worklog.j
 import { AssignTaskModal } from '../../components/AssignTaskModal.js';
 import { useNotify } from '../../lib/notify.js';
 import { printEmployeeJoiningLetter } from '../../lib/hrDocs.js';
+import { DocPreview } from '../../components/ui/DocumentUpload.js';
 
 const ROLE_TONE: Record<Role, BadgeTone> = { owner: 'success', manager: 'primary', team_leader: 'warning', supervisor: 'info', accountant: 'accent' };
 const EMPTY = { name: '', email: '', phone: '', role: 'supervisor' as Role, pages: defaultPages('supervisor'), leaderUid: '' };
@@ -495,11 +496,10 @@ function EmployeeDetail({ member: m, actor, onClose }: { member: Member; actor: 
 
       <Field label="Documents">
         <div className="flex flex-wrap items-center gap-4">
+          {/* DocPreview, not a bare <img> — these may now be PDFs. */}
           {([['Aadhaar', m.aadhaarImg], ['PAN', m.panImg], ['Cheque', m.cancelledChequeImg]] as const).map(([label, url]) => (
             <div key={label} className="text-center">
-              {url
-                ? <a href={url} target="_blank" rel="noreferrer"><img src={url} alt={label} className="h-16 w-16 rounded-lg object-cover ring-1 ring-neutral-200 hover:ring-primary-300" /></a>
-                : <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-neutral-50 text-[10px] font-bold text-neutral-300 ring-1 ring-inset ring-neutral-200">Missing</div>}
+              <DocPreview url={url} label={label} />
               <div className="mt-1 text-[10px] font-bold text-neutral-500">{label}</div>
             </div>
           ))}

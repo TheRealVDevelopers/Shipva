@@ -12,6 +12,7 @@ import { Badge, type BadgeTone } from '../../components/ui/Badge.js';
 import { Button } from '../../components/ui/Button.js';
 import { Modal, Field, TextInput, DateInput, Select, Row } from '../../components/ui/Modal.js';
 import { ImageUpload } from '../../components/ui/ImageUpload.js';
+import { DocumentUpload } from '../../components/ui/DocumentUpload.js';
 import { VendorDocs } from '../../components/VendorDocs.js';
 // Aliased: this page already has a `kycPending` KPI count for the whole list.
 import { kycPending as docsKycPending, vendorStatus, SIGN_BACK_DAYS, type VendorDocKind } from '../../lib/vendorDocs.js';
@@ -417,10 +418,10 @@ export function Payables() {
                 one still need it on their invoice. */}
             <Row>
               <Field label="PAN card">
-                <ImageUpload value={f.panImg} onChange={(v) => setF({ ...f, panImg: v })} label="Upload PAN" path={`documents/owners/${editId ?? 'new'}/pan`} />
+                <DocumentUpload value={f.panImg} onChange={(v) => setF({ ...f, panImg: v })} label="Upload PAN" path={`documents/owners/${editId ?? 'new'}/pan`} />
               </Field>
               <Field label="Aadhaar card">
-                <ImageUpload value={f.aadhaarImg} onChange={(v) => setF({ ...f, aadhaarImg: v })} label="Upload Aadhaar" path={`documents/owners/${editId ?? 'new'}/aadhaar`} />
+                <DocumentUpload value={f.aadhaarImg} onChange={(v) => setF({ ...f, aadhaarImg: v })} label="Upload Aadhaar" path={`documents/owners/${editId ?? 'new'}/aadhaar`} />
               </Field>
             </Row>
             <Field label="GSTIN" hint="Optional — many owner-drivers aren't registered" error={tried ? errs.gstin : undefined}>
@@ -471,7 +472,7 @@ export function Payables() {
               </Field>
             </Row>
             <Field label="Cancelled cheque" hint="Proves the account belongs to them before any payout goes out">
-              <ImageUpload value={f.cancelledChequeImg} onChange={(v) => setF({ ...f, cancelledChequeImg: v })} label="Upload cancelled cheque" path={`documents/owners/${editId ?? 'new'}/cheque`} />
+              <DocumentUpload value={f.cancelledChequeImg} onChange={(v) => setF({ ...f, cancelledChequeImg: v })} label="Upload cancelled cheque" path={`documents/owners/${editId ?? 'new'}/cheque`} />
             </Field>
           </>
         )}

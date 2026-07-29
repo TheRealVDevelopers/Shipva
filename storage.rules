@@ -45,6 +45,19 @@ service firebase.storage {
       allow delete: if signedIn();
     }
 
+    // Staff profile photos and HR documents (Aadhaar, PAN, cancelled cheque).
+    // These were writing to members/… which matched no rule, so every upload
+    // was denied and silently kept as an inline copy instead — fine for a small
+    // thumbnail, not for an identity document. PDFs allowed: a bank passbook or
+    // an e-Aadhaar arrives as one.
+    match /members/{uid}/{allPaths=**} {
+      allow read: if signedIn();
+      allow create, update: if signedIn()
+        && request.resource.size < 8 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*|application/pdf');
+      allow delete: if signedIn();
+    }
+
     // Tour operational photos (KM / invoice / GPS / POD). Signed-in staff, images
     // only. (Previously these fell through to the local-copy fallback.)
     match /tours/{allPaths=**} {
