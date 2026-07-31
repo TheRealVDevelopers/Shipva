@@ -13,7 +13,7 @@ import { FEATURES, type FeatureId } from '../../lib/features.js';
 import { useNotify } from '../../lib/notify.js';
 import { roleLabel, canExportData } from '../../lib/roles.js';
 import { useAuth } from '../../lib/auth.js';
-import { memberCanAccess } from '../../lib/members.js';
+import { memberCanAccess, watchMembers } from '../../lib/members.js';
 import { touchActivity } from '../../lib/activity.js';
 import { watchAllTasks, isOverdue, type Task } from '../../lib/tasks.js';
 import { BRAND } from '../../lib/brand.js';
@@ -73,21 +73,43 @@ function useTripReminders() {
   }, [status, push, navigate]);
 }
 
-/** Owner/manager alerts: chime + notification when a teammate finishes a task
- *  or a deadline is crossed. Pre-existing states are primed so only live
- *  transitions notify. */
+/**
+ * Task alerts — chime + notification when a watched teammate finishes a task or
+ * crosses a deadline. Owner and manager watch the whole org; a team leader
+ * watches their own POCs, so when a POC is moved to a new TL their task updates
+ * follow to that TL (the client's TL-change requirement). Pre-existing states
+ * are primed so only live transitions notify.
+ */
 function useTeamTaskAlerts() {
   const { member, status } = useAuth();
   const { push } = useNotify();
   const isAdmin = member?.role === 'owner' || member?.role === 'manager';
+  const isTL = member?.role === 'team_leader';
+  const enabled = isAdmin || isTL;
+
+  // A TL's POCs — recomputed live, so a reassignment (in either direction)
+  // changes who they're alerted about without a reload.
+  const [myPocUids, setMyPocUids] = useState<Set<string> | null>(null);
+  useEffect(() => {
+    if (status !== 'ready' || !isTL || !member) { setMyPocUids(null); return; }
+    return watchMembers((list) => {
+      setMyPocUids(new Set(list.filter((x) => x.leaderUid === member.uid).map((x) => x.uid)));
+    });
+  }, [status, isTL, member?.uid]);
+
   const tasksRef = useRef<Task[]>([]);
   const prevStatus = useRef<Map<string, string>>(new Map());
   const notifiedDone = useRef<Set<string>>(new Set());
   const notifiedOverdue = useRef<Set<string>>(new Set());
   const primed = useRef(false);
+  // A TL only hears about their own POCs; an admin hears about everyone.
+  const watched = (t: Task) => isAdmin || (myPocUids?.has(t.assigneeUid) ?? false);
 
   useEffect(() => {
-    if (status !== 'ready' || !isAdmin) return;
+    if (status !== 'ready' || !enabled) return;
+    // A TL's watch can't run until their POC set has loaded, or it would prime
+    // against an empty set and miss the first transitions.
+    if (isTL && myPocUids === null) return;
     primed.current = false;
     prevStatus.current = new Map();
     notifiedDone.current = new Set();
@@ -106,7 +128,7 @@ function useTeamTaskAlerts() {
       }
       tasks.forEach((t) => {
         const prev = prevStatus.current.get(t.id);
-        if (t.status === 'done' && prev !== 'done' && !notifiedDone.current.has(t.id)) {
+        if (t.status === 'done' && prev !== 'done' && !notifiedDone.current.has(t.id) && watched(t)) {
           notifiedDone.current.add(t.id);
           push({ title: 'Task completed ✅', body: `${t.assigneeName} completed: ${t.title}`, tone: 'success' });
         }
@@ -118,7 +140,7 @@ function useTeamTaskAlerts() {
       if (!primed.current) return;
       const now = Date.now();
       tasksRef.current.forEach((t) => {
-        if (isOverdue(t, now) && !notifiedOverdue.current.has(t.id)) {
+        if (isOverdue(t, now) && !notifiedOverdue.current.has(t.id) && watched(t)) {
           notifiedOverdue.current.add(t.id);
           push({ title: 'Task overdue ⏰', body: `${t.assigneeName}'s task is overdue: ${t.title}`, tone: 'warning' });
         }
@@ -126,7 +148,7 @@ function useTeamTaskAlerts() {
     }, 20_000);
 
     return () => { unsub(); window.clearInterval(overdueTimer); };
-  }, [status, isAdmin, push]);
+  }, [status, enabled, isTL, myPocUids, push]);
 }
 
 interface NavItem { key: FeatureId; to: string; label: string; icon: LucideIcon; end?: boolean; group?: string; soon?: boolean }

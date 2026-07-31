@@ -219,7 +219,7 @@ export function Trips() {
   const canEdit = canEditRecords(member?.role);
   const { push } = useNotify();
   const navigate = useNavigate();
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const [members, setMembers] = useState<Member[]>([]);
   const initialFilter = FILTERS.find((x) => x === params.get('f')) ?? 'Upcoming';
   const [filter, setFilter] = useState<Filter>(initialFilter);
@@ -230,6 +230,32 @@ export function Trips() {
   // id and look the live record up, so a save re-renders instead of freezing.
   const [operateId, setOperateId] = useState<string | null>(null);
   const operating = operateId ? tours.find((t) => t.id === operateId) ?? null : null;
+
+  /**
+   * `?open=<tour id>` — a trip reminder was clicked.
+   *
+   * The point of those tickets is to save the POC hunting for the run, so this
+   * opens its update sheet straight away rather than merely landing on the
+   * board. It waits for the tours to arrive (the notification can fire before
+   * the first snapshot), switches to the lane the run is actually in so the
+   * board behind isn't showing an empty tab, and then clears the parameter so
+   * refreshing or navigating back doesn't reopen the sheet unexpectedly.
+   */
+  const openParam = params.get('open');
+  useEffect(() => {
+    if (!openParam) return;
+    const t = tours.find((x) => x.id === openParam);
+    if (!t) return;                       // snapshot hasn't landed yet
+    setOperateId(t.id);
+    const lane = t.amzStatus === 'COMPLETED' ? 'Completed'
+      : t.amzStatus === 'IN PROGRESS' ? 'In Transit' : 'Upcoming';
+    setFilter(lane as Filter);
+    setParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete('open');
+      return next;
+    }, { replace: true });
+  }, [openParam, tours, setParams]);
   const [reassignFor, setReassignFor] = useState<BoardItem | null>(null);
   const [reassignTo, setReassignTo] = useState('');
   // `?mine=1` (e.g. the dashboard's "My runs" link) opens the board pre-filtered.

@@ -11,7 +11,7 @@ import { Modal, Field, TextInput, Select, Row } from '../../components/ui/Modal.
 import { useAuth } from '../../lib/auth.js';
 import { roleLabel, defaultPages, type Role } from '../../lib/roles.js';
 import {
-  watchMembers, inviteMember, updateMember, deleteMember, releaseOrphanLogin, pagesForRole,
+  watchMembers, inviteMember, updateMember, deleteMember, releaseOrphanLogin, changeMemberLeader, pagesForRole,
   missingProfile, profileComplete, isActivated,
   canManageMember, canDeleteMember, ASSIGNABLE_PAGES, type Member,
 } from '../../lib/members.js';
@@ -27,6 +27,7 @@ import { AssignTaskModal } from '../../components/AssignTaskModal.js';
 import { useNotify } from '../../lib/notify.js';
 import { printEmployeeJoiningLetter } from '../../lib/hrDocs.js';
 import { DocPreview } from '../../components/ui/DocumentUpload.js';
+import { useStore } from '../../lib/store.js';
 
 const ROLE_TONE: Record<Role, BadgeTone> = { owner: 'success', manager: 'primary', team_leader: 'warning', supervisor: 'info', accountant: 'accent' };
 const EMPTY = { name: '', email: '', phone: '', role: 'supervisor' as Role, pages: defaultPages('supervisor'), leaderUid: '' };
@@ -239,7 +240,7 @@ export function Team() {
       {todayFor && <TodayModal member={todayFor} activity={activity[todayFor.uid] ?? null} onClose={() => setTodayFor(null)} />}
 
       {/* Employee detail, documents, employment terms & activation */}
-      {detailFor && me && <EmployeeDetail member={detailFor} actor={me} onClose={() => setDetailFor(null)} />}
+      {detailFor && me && <EmployeeDetail member={detailFor} actor={me} members={members} onClose={() => setDetailFor(null)} />}
 
       {/* Remove employee */}
       {confirmDel && (
@@ -421,17 +422,51 @@ function EditMember({ member, onClose, isSelf, adminEditor }: { member: Member; 
  * Activation is deliberately blocked until every required field and document
  * is in, and issuing the letter is what marks the registration finished.
  */
-function EmployeeDetail({ member: m, actor, onClose }: { member: Member; actor: Member; onClose: () => void }) {
+function EmployeeDetail({ member: m, actor, members, onClose }: { member: Member; actor: Member; members: Member[]; onClose: () => void }) {
   const { push } = useNotify();
+  const { reassignActiveWork } = useStore();
   const [designation, setDesignation] = useState(m.designation ?? '');
   const [joinedOn, setJoinedOn] = useState(m.joinedOn ?? '');
   const [salary, setSalary] = useState(m.monthlySalaryPaise ? String(m.monthlySalaryPaise / 100) : '');
   const [busy, setBusy] = useState(false);
+  // Reporting line — the new team leader to move this person to.
+  const [newLeader, setNewLeader] = useState(m.leaderUid ?? '');
 
   const gaps = missingProfile(m);
   const ready = gaps.length === 0;
   const activated = isActivated(m);
   const seesMoney = actor.role === 'owner' || actor.role === 'manager' || actor.role === 'accountant';
+
+  // Only an owner/manager moves someone between team leaders; a TL manages
+  // only their own POCs and can't reassign them elsewhere. The member being
+  // viewed must be a POC (supervisor/accountant) — a TL or manager has no TL.
+  const isAdminActor = actor.role === 'owner' || actor.role === 'manager';
+  const isPoc = m.role === 'supervisor' || m.role === 'accountant';
+  const canMoveTeam = isAdminActor && isPoc;
+  const teamLeaders = members.filter((x) => x.role === 'team_leader');
+  const nameOf = (uid?: string) => members.find((x) => x.uid === uid)?.name ?? '';
+  const currentLeaderName = m.leaderUid ? (nameOf(m.leaderUid) || 'Team leader') : 'Owner (no team leader)';
+
+  async function moveTeam() {
+    if (!canMoveTeam || busy) return;
+    const target = newLeader.trim();
+    if ((m.leaderUid ?? '') === target) return;
+    setBusy(true);
+    try {
+      // A run's team is teamOf(owner) — the TL's uid, or the POC's own uid when
+      // they report to the owner directly. Move active runs onto that team.
+      const newTeamUid = target || m.uid;
+      const moved = reassignActiveWork(m.uid, newTeamUid);
+      await changeMemberLeader(m, target, `${actor.name} · ${roleLabel(actor.role)}`, moved, target ? nameOf(target) : '');
+      push({
+        title: 'Reporting line changed',
+        body: `${m.name} now reports to ${target ? nameOf(target) : 'the owner'}${moved ? ` · ${moved} active run${moved === 1 ? '' : 's'} moved` : ''}.`,
+        tone: 'success',
+      });
+      onClose();
+    } catch { push({ title: "Couldn't change the reporting line", body: 'Please try again.', tone: 'warning' }); }
+    finally { setBusy(false); }
+  }
 
   async function saveTerms() {
     setBusy(true);
@@ -490,9 +525,43 @@ function EmployeeDetail({ member: m, actor, onClose }: { member: Member; actor: 
         {row('Aadhaar', m.aadhaar)}
         {row('PAN', m.pan)}
         {seesMoney && row('Bank', [m.bankName, m.bankAccountNo, m.bankIfsc].filter(Boolean).join(' · '))}
-        {row('Reports to', m.leaderUid ? 'Team leader' : '—')}
+        {row('Reports to', currentLeaderName)}
         {m.profileApprovedOn ? row('Activated', `${m.profileApprovedOn} by ${m.profileApprovedBy ?? '—'}`) : null}
       </div>
+
+      {/* Change reporting line — the client's TL-change flow. Active runs move
+          with the person; a record of the change is kept on their profile. */}
+      {canMoveTeam && (
+        <Field label="Reporting line"
+          hint="Changing this moves the person’s active trips & tours to the new team leader, and records the change.">
+          <div className="flex flex-wrap items-center gap-2">
+            <Select value={newLeader} onChange={(e) => setNewLeader(e.target.value)} className="min-w-[14rem] flex-1">
+              <option value="">Owner — no team leader</option>
+              {teamLeaders.map((tl) => <option key={tl.uid} value={tl.uid}>{tl.name}</option>)}
+            </Select>
+            <Button size="sm" onClick={() => void moveTeam()} disabled={busy || (m.leaderUid ?? '') === newLeader.trim()}>
+              <UserCog size={13} /> {busy ? 'Moving…' : 'Change'}
+            </Button>
+          </div>
+        </Field>
+      )}
+
+      {/* The record of past changes, newest first. */}
+      {(m.leaderHistory?.length ?? 0) > 0 && (
+        <div>
+          <div className="mb-1 text-[11px] font-bold uppercase tracking-wide text-neutral-400">Reporting-line history</div>
+          <div className="space-y-1">
+            {[...(m.leaderHistory ?? [])].reverse().map((h, i) => (
+              <div key={i} className="text-[11px] text-neutral-500">
+                {new Date(h.atMs).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}
+                {' · '}{h.fromUid ? (nameOf(h.fromUid) || 'a team leader') : 'Owner'} → {h.toUid ? (h.toName || nameOf(h.toUid) || 'a team leader') : 'Owner'}
+                {h.movedCount ? ` · ${h.movedCount} run${h.movedCount === 1 ? '' : 's'} moved` : ''}
+                {' · '}{h.by}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <Field label="Documents">
         <div className="flex flex-wrap items-center gap-4">

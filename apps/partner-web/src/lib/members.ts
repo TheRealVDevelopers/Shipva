@@ -10,7 +10,7 @@
 import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 import {
-  collection, deleteDoc, doc, getDoc, setDoc, updateDoc, onSnapshot, serverTimestamp,
+  collection, deleteDoc, doc, getDoc, setDoc, updateDoc, onSnapshot, serverTimestamp, arrayUnion,
 } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { db, functions, firebaseConfig } from '../firebase.js';
@@ -49,6 +49,9 @@ export interface Member {
   /** The Team Leader this member reports to (a POC's TL). Empty for owner/
    *  manager/team-leader who report to the owner. */
   leaderUid?: string;
+  /** Every time this member's reporting line changed — kept as a record, per
+   *  the client: "keep a record of the change". Newest last. */
+  leaderHistory?: LeaderChange[];
   /** Forces the "set your own password" screen on first sign-in. */
   mustSetPassword?: boolean;
 
@@ -80,6 +83,21 @@ export interface Member {
   monthlySalaryPaise?: number;
   /** Generated once the employee is activated. */
   joiningLetterIssuedOn?: string;
+}
+
+/** One entry in a member's reporting-line history. */
+export interface LeaderChange {
+  atMs: number;
+  /** Previous team-leader uid, or '' when they reported to the owner. */
+  fromUid?: string;
+  fromName?: string;
+  /** New team-leader uid, or '' for "reports to owner". */
+  toUid?: string;
+  toName?: string;
+  /** Who made the change. */
+  by: string;
+  /** How many active trips & tours moved with them. */
+  movedCount?: number;
 }
 
 /** The profile fields the client requires before an employee is activated. */
@@ -186,6 +204,33 @@ function memberFromSnap(uid: string, data: Record<string, unknown>): Member {
 export async function getMember(uid: string): Promise<Member | null> {
   const snap = await getDoc(doc(db, 'orgMembers', uid));
   return snap.exists() ? memberFromSnap(uid, snap.data()) : null;
+}
+
+/**
+ * Change a member's team leader, recording the change on their document.
+ *
+ * Only the member doc is touched here — the reporting line itself and its
+ * history. Moving the POC's active trips and tours onto the new team is done by
+ * the caller (it has the run lists), and the count it moved is passed back in
+ * so the one history entry captures the whole event.
+ *
+ * `leaderHistory` appends via arrayUnion so a change can't clobber the log, and
+ * `leaderUid` is written as '' rather than deleted when clearing it, so the
+ * field always exists for the scoped queries that read it.
+ */
+export async function changeMemberLeader(
+  m: Member, newLeaderUid: string, by: string, movedCount: number, newLeaderName?: string,
+): Promise<void> {
+  const change: LeaderChange = {
+    atMs: Date.now(),
+    by, movedCount,
+    ...(m.leaderUid ? { fromUid: m.leaderUid } : {}),
+    ...(newLeaderUid ? { toUid: newLeaderUid, toName: newLeaderName ?? '' } : {}),
+  };
+  await updateDoc(doc(db, 'orgMembers', m.uid), {
+    leaderUid: newLeaderUid || '',
+    leaderHistory: arrayUnion(change),
+  });
 }
 
 /** Create the owner's own member doc on first sign-in (allowed by rules for the bootstrap email). */

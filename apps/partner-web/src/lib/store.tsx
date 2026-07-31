@@ -583,6 +583,7 @@ interface StoreApi extends StoreShape {
   addTour: (t: Omit<Tour, 'id'>, handledBy?: { uid: string; name: string; leaderUid?: string }) => Promise<string>;
   updateTour: (id: string, patch: Partial<Tour>, log?: { action: string; detail?: string; vrid?: string }) => void;
   logTour: (id: string, action: string, opts?: { detail?: string; vrid?: string }) => void;
+  reassignActiveWork: (pocUid: string, newTeamUid: string) => number;
   runPayroll: (period?: string) => void;
   addPayrollLine: (l: Omit<PayrollLine, 'id'>) => void;
   updatePayrollLine: (id: string, patch: Partial<PayrollLine>) => void;
@@ -695,6 +696,37 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       ...(opts?.vrid ? { vrid: opts.vrid } : {}),
     });
   }, [actorName, member?.uid]);
+
+  /**
+   * Move a POC's active trips and tours onto a new team — used when their team
+   * leader changes (see Team → change reporting line).
+   *
+   * A run's `leaderUid` is the team it belongs to (the owner's TL, or the owner
+   * themselves). When a POC is moved, their in-flight runs must move with them,
+   * or the new TL wouldn't see them and the old TL still would. Only active
+   * runs are touched: a finished trip stays in the team that ran it, for the
+   * record. Called by an admin, whose `tours`/`trips` are the full unscoped
+   * lists, so this sees every run. Returns how many moved.
+   */
+  const reassignActiveWork = useCallback((pocUid: string, newTeamUid: string): number => {
+    let moved = 0;
+    tours.forEach((t) => {
+      if (t.id && t.ownerUid === pocUid && !t.archived && t.amzStatus !== 'COMPLETED' && t.leaderUid !== newTeamUid) {
+        updateTourDoc(t.id, { leaderUid: newTeamUid }, {
+          atMs: Date.now(), by: actorName, byUid: member?.uid ?? '',
+          action: 'Team changed', detail: `Moved to a new team leader`,
+        });
+        moved++;
+      }
+    });
+    trips.forEach((t) => {
+      if (t.id && t.ownerUid === pocUid && !t.archived && t.status !== 'closed' && t.leaderUid !== newTeamUid) {
+        void updateTripDoc(t.id, { leaderUid: newTeamUid });
+        moved++;
+      }
+    });
+    return moved;
+  }, [tours, trips, actorName, member?.uid]);
 
   // ── Shared org data — reference (customers/drivers/trucks/owners) + money ────
   // Firestore-backed and common to the whole org: everyone reads the same lists
@@ -949,7 +981,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     addExpenseCategory, addRequest, resolveRequest, addCustomer, addDriver, addTruck,
     setDriverDocs, setTruckDocs, updateDriver, updateTruck, deleteDriver, deleteTruck,
     setCustomerAgreement, setAttachedAgreement, updateCustomer, deleteCustomer, updateAttached, deleteAttached,
-    addStaff, addAttached, recordOwnerPayment, addTour, updateTour, logTour, runPayroll,
+    addStaff, addAttached, recordOwnerPayment, addTour, updateTour, logTour, reassignActiveWork, runPayroll,
     addPayrollLine, updatePayrollLine, deletePayrollLine, reset,
   }), [s, trips, tours, customers, drivers, trucks, attached,
     invoices, expenses, fuelLogs, payroll, requests,
@@ -958,7 +990,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     addExpenseCategory, addRequest, resolveRequest, addCustomer, addDriver, addTruck,
     setDriverDocs, setTruckDocs, updateDriver, updateTruck, deleteDriver, deleteTruck,
     setCustomerAgreement, setAttachedAgreement, updateCustomer, deleteCustomer, updateAttached, deleteAttached,
-    addStaff, addAttached, recordOwnerPayment, addTour, updateTour, logTour, runPayroll,
+    addStaff, addAttached, recordOwnerPayment, addTour, updateTour, logTour, reassignActiveWork, runPayroll,
     addPayrollLine, updatePayrollLine, deletePayrollLine, reset]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
