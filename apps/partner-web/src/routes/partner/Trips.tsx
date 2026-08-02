@@ -258,6 +258,12 @@ export function Trips() {
   }, [openParam, tours, setParams]);
   const [reassignFor, setReassignFor] = useState<BoardItem | null>(null);
   const [reassignTo, setReassignTo] = useState('');
+  // Bulk reassign — tick several runs and hand them over together. Held by id
+  // so a Firestore snapshot doesn't drop the selection mid-edit.
+  const [picking, setPicking] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkTo, setBulkTo] = useState('');
+  const [bulkOpen, setBulkOpen] = useState(false);
   // `?mine=1` (e.g. the dashboard's "My runs" link) opens the board pre-filtered.
   const [mineOnly, setMineOnly] = useState(params.get('mine') === '1');
   const [q, setQ] = useState('');
@@ -285,13 +291,17 @@ export function Trips() {
   // scoped per member upstream, so whatever a POC can see here is already theirs.
   const board = useMemo(() => buildBoard(tours, trips), [tours, trips]);
 
-  // Completed date window — "which runs finished between these dates". Uses the
-  // run's own timestamp, not its display label, which has no year on old rows.
+  // Date window — a single date or a range, on EVERY tab (the client asked for
+  // it on Upcoming and In Transit too, not just Completed). Uses the run's own
+  // timestamp — its scheduled start — rather than a display label, which has no
+  // year on older rows. Leaving "to" blank filters to a single day.
   const inDateWindow = (i: BoardItem): boolean => {
-    if (filter !== 'Completed' || (!from && !to)) return true;
+    if (!from && !to) return true;
     if (!i.startMs) return false;
-    if (from && i.startMs < new Date(`${from}T00:00:00`).getTime()) return false;
-    if (to && i.startMs > new Date(`${to}T23:59:59`).getTime()) return false;
+    const lo = from || to;                 // one date filled → that single day
+    const hi = to || from;
+    if (lo && i.startMs < new Date(`${lo}T00:00:00`).getTime()) return false;
+    if (hi && i.startMs > new Date(`${hi}T23:59:59`).getTime()) return false;
     return true;
   };
 
@@ -313,6 +323,27 @@ export function Trips() {
     if (i.kind === 'tour') updateTour(i.id, patch); else updateTrip(i.id, patch);
     push({ title: 'Reassigned', body: `${i.code} handed to ${m.name}.`, tone: 'success' });
   }
+
+  /** Reassign every ticked run in one go. */
+  function reassignSelected(uid: string) {
+    const m = members.find((x) => x.uid === uid);
+    if (!m) return;
+    const patch = { ownerUid: m.uid, ownerName: m.name, leaderUid: teamOf(m) };
+    let n = 0;
+    board.forEach((i) => {
+      if (!selected.has(i.id)) return;
+      if (i.kind === 'tour') updateTour(i.id, patch); else updateTrip(i.id, patch);
+      n++;
+    });
+    push({ title: 'Reassigned', body: `${n} run${n === 1 ? '' : 's'} handed to ${m.name}.`, tone: 'success' });
+    setBulkOpen(false); setBulkTo(''); setSelected(new Set()); setPicking(false);
+  }
+
+  const toggleOne = (id: string) => setSelected((prev) => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
 
   /**
    * Export exactly what's on screen — the tab, dates and search applied.
@@ -531,20 +562,28 @@ export function Trips() {
               ))}
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              {/* Completed is the tab people go back through, so it gets the date
-                  window — "which trips finished between these dates". */}
-              {filter === 'Completed' && (
-                <div className="flex items-center gap-1.5 rounded-lg bg-neutral-50 px-2.5 py-1 ring-1 ring-inset ring-neutral-200">
-                  <CalendarRange size={13} className="shrink-0 text-neutral-400" />
-                  <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} aria-label="Completed from"
-                    className="bg-transparent text-xs text-neutral-700 outline-none" />
-                  <span className="text-xs text-neutral-400">→</span>
-                  <input type="date" value={to} onChange={(e) => setTo(e.target.value)} aria-label="Completed to"
-                    className="bg-transparent text-xs text-neutral-700 outline-none" />
-                  {(from || to) && (
-                    <button onClick={() => { setFrom(''); setTo(''); }} className="rounded p-0.5 text-neutral-400 hover:text-rose-500" title="Clear dates"><X size={12} /></button>
-                  )}
-                </div>
+              {/* Date filter on every tab — a single day (fill one box) or a
+                  range (fill both). The client wanted it on Upcoming and In
+                  Transit as well as Completed. */}
+              <div className="flex items-center gap-1.5 rounded-lg bg-neutral-50 px-2.5 py-1 ring-1 ring-inset ring-neutral-200">
+                <CalendarRange size={13} className="shrink-0 text-neutral-400" />
+                <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} aria-label="From date"
+                  className="bg-transparent text-xs text-neutral-700 outline-none" />
+                <span className="text-xs text-neutral-400">→</span>
+                <input type="date" value={to} onChange={(e) => setTo(e.target.value)} aria-label="To date"
+                  className="bg-transparent text-xs text-neutral-700 outline-none" />
+                {(from || to) && (
+                  <button onClick={() => { setFrom(''); setTo(''); }} className="rounded p-0.5 text-neutral-400 hover:text-rose-500" title="Clear dates"><X size={12} /></button>
+                )}
+              </div>
+              {/* Bulk reassign — tick several runs and hand them over together
+                  (leadership only, per the client). */}
+              {canAssign && (
+                <button onClick={() => { setPicking((v) => !v); setSelected(new Set()); }}
+                  className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold ring-1 ring-inset transition ${picking ? 'bg-primary-500 text-white ring-primary-500' : 'bg-neutral-50 text-neutral-600 ring-neutral-200 hover:bg-neutral-100'}`}
+                  title="Select multiple trips to reassign at once">
+                  <UserCog size={13} /> {picking ? 'Cancel select' : 'Select to reassign'}
+                </button>
               )}
               {/* "Assigned to me" — narrow the board to this member's own runs. */}
               <button onClick={() => setMineOnly((v) => !v)}
@@ -573,24 +612,48 @@ export function Trips() {
             </div>
           </div>
 
+          {/* Bulk-reassign action bar — sticky above the board while selecting. */}
+          {picking && (
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-primary-100 bg-primary-50 px-4 py-2.5">
+              <div className="flex items-center gap-3 text-xs font-bold text-primary-800">
+                <button onClick={() => setSelected(new Set(shown.map((i) => i.id)))} className="underline hover:text-primary-900">Select all {shown.length} shown</button>
+                {selected.size > 0 && <button onClick={() => setSelected(new Set())} className="underline hover:text-primary-900">Clear</button>}
+                <span>{selected.size} selected</span>
+              </div>
+              <Button size="sm" onClick={() => setBulkOpen(true)} disabled={selected.size === 0}>
+                <UserCog size={13} /> Reassign {selected.size || ''}
+              </Button>
+            </div>
+          )}
+
           {/* One board: Amazon tours and ordinary trips, newest first. */}
           <div className="divide-y divide-neutral-100">
             {shown.map((i) => (
-              <BoardRow key={`${i.kind}-${i.id || i.code}`} item={i}
-                expanded={openRow === `${i.kind}-${i.id}`}
-                onToggle={() => setOpenRow(openRow === `${i.kind}-${i.id}` ? null : `${i.kind}-${i.id}`)}
-                showOwner={isAdmin || canAssign}
-                canEdit={canEdit}
-                canAssign={canAssign}
-                onReport={() => setReportFor(i)}
-                onTrack={() => i.kind === 'trip' && i.id && setTrackId(i.id)}
-                onPrintLR={() => i.kind === 'trip' && printLR(i.source as Trip)}
-                onEdit={() => i.kind === 'trip' ? startEdit(i.source as Trip) : navigate('/p/tours')}
-                onDelete={() => i.kind === 'trip' && setConfirmDel(i.source as Trip)}
-                onAdvance={() => i.kind === 'trip' && advanceOnCard(i.source as Trip)}
-                onUpdate={() => i.kind === 'tour' && i.id && setOperateId(i.id)}
-                onReassign={() => { setReassignTo(i.ownerUid || ''); setReassignFor(i); }}
-              />
+              <div key={`${i.kind}-${i.id || i.code}`} className={`flex items-start ${picking && selected.has(i.id) ? 'bg-primary-50/50' : ''}`}>
+                {picking && (
+                  <label className="flex cursor-pointer items-center py-4 pl-4">
+                    <input type="checkbox" checked={selected.has(i.id)} onChange={() => toggleOne(i.id)}
+                      className="h-4 w-4 rounded border-neutral-300 text-primary-600 focus:ring-primary-400" aria-label={`Select ${i.code}`} />
+                  </label>
+                )}
+                <div className="min-w-0 flex-1">
+                  <BoardRow item={i}
+                    expanded={openRow === `${i.kind}-${i.id}`}
+                    onToggle={() => setOpenRow(openRow === `${i.kind}-${i.id}` ? null : `${i.kind}-${i.id}`)}
+                    showOwner={isAdmin || canAssign}
+                    canEdit={canEdit}
+                    canAssign={canAssign}
+                    onReport={() => setReportFor(i)}
+                    onTrack={() => i.kind === 'trip' && i.id && setTrackId(i.id)}
+                    onPrintLR={() => i.kind === 'trip' && printLR(i.source as Trip)}
+                    onEdit={() => i.kind === 'trip' ? startEdit(i.source as Trip) : navigate('/p/tours')}
+                    onDelete={() => i.kind === 'trip' && setConfirmDel(i.source as Trip)}
+                    onAdvance={() => i.kind === 'trip' && advanceOnCard(i.source as Trip)}
+                    onUpdate={() => i.kind === 'tour' && i.id && setOperateId(i.id)}
+                    onReassign={() => { setReassignTo(i.ownerUid || ''); setReassignFor(i); }}
+                  />
+                </div>
+              </div>
             ))}
             {shown.length === 0 && (
               <div className="py-10 text-center text-sm text-neutral-400">
@@ -625,6 +688,26 @@ export function Trips() {
               {assignable.map((m) => <option key={m.uid} value={m.uid}>{m.name}{m.uid === member?.uid ? ' (me)' : ''}</option>)}
             </Select>
           </Field>
+        </Modal>
+      )}
+
+      {/* Bulk reassign — every ticked run, to one employee, together */}
+      {bulkOpen && (
+        <Modal open onClose={() => setBulkOpen(false)}
+          title={`Reassign ${selected.size} run${selected.size === 1 ? '' : 's'}`}
+          subtitle="They all move to the same employee"
+          onSubmit={() => reassignSelected(bulkTo)}
+          submitLabel={`Reassign ${selected.size}`} submitDisabled={!bulkTo}>
+          <Field label="Assign to" required hint="Only this employee sees and updates the selected runs">
+            <Select value={bulkTo} onChange={(e) => setBulkTo(e.target.value)}>
+              <option value="">— Assign to an employee —</option>
+              {assignable.map((m) => <option key={m.uid} value={m.uid}>{m.name}{m.uid === member?.uid ? ' (me)' : ''}</option>)}
+            </Select>
+          </Field>
+          <p className="rounded-lg bg-neutral-50 px-3 py-2 text-[11px] text-neutral-500 ring-1 ring-inset ring-neutral-200">
+            {[...selected].length} selected · {board.filter((i) => selected.has(i.id)).map((i) => i.code).slice(0, 8).join(', ')}
+            {selected.size > 8 ? ` +${selected.size - 8} more` : ''}
+          </p>
         </Modal>
       )}
 
