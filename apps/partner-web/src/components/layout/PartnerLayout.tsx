@@ -59,11 +59,13 @@ function useTripReminders() {
     const tick = () => {
       const fresh = takeUnsent(dueAlerts(toursRef.current));
       fresh.forEach((a) => {
-        // The Trips board is where a run is opened and updated; searching by
-        // the tour code lands the POC straight on it.
-        const open = () => navigate(`/p/trips?q=${encodeURIComponent(a.tourCode)}&open=${encodeURIComponent(a.tourId)}`);
-        push({ title: alertTitle(a), body: alertBody(a), tone: 'warning' });
-        showDesktopAlert(a, open);
+        // The Trips board is where a run is opened and updated; `?open=<id>`
+        // opens its update pop-up straight away. The same link rides on the
+        // in-app notification so clicking the bell-tray entry works too, not
+        // only the desktop notification.
+        const link = `/p/trips?q=${encodeURIComponent(a.tourCode)}&open=${encodeURIComponent(a.tourId)}`;
+        push({ title: alertTitle(a), body: alertBody(a), tone: 'warning', link });
+        showDesktopAlert(a, () => navigate(link));
       });
     };
     tick();
@@ -272,6 +274,7 @@ function timeAgo(ts: number): string {
 
 function NotificationBell() {
   const { notes, unread, soundOn, toggleSound, markAllRead, clear } = useNotify();
+  const navigate = useNavigate();
   const [desktopOn, setDesktopOn] = useState(alertsEnabled());
   const [open, setOpen] = useState(false);
   const toneDot = { info: 'bg-sky-500', success: 'bg-emerald-500', warning: 'bg-amber-500' };
@@ -314,16 +317,28 @@ function NotificationBell() {
             )}
             <div className="max-h-80 overflow-y-auto">
               {notes.length === 0 && <p className="px-4 py-8 text-center text-sm text-neutral-400">No notifications.</p>}
-              {notes.map((n) => (
-                <div key={n.id} className={`flex gap-3 border-b border-neutral-50 px-4 py-3 ${n.read ? '' : 'bg-primary-50/40'}`}>
-                  <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${toneDot[n.tone]}`} />
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-bold text-neutral-900">{n.title}</div>
-                    <div className="text-xs text-neutral-600">{n.body}</div>
-                    <div className="mt-0.5 text-[10px] text-neutral-400">{timeAgo(n.ts)}</div>
-                  </div>
-                </div>
-              ))}
+              {notes.map((n) => {
+                // A notification with a link (a trip reminder) navigates to the
+                // run's update screen when clicked — the client's "clicking a
+                // notification opens the trip directly". Others stay static.
+                const row = (
+                  <>
+                    <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${toneDot[n.tone]}`} />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-bold text-neutral-900">{n.title}</div>
+                      <div className="text-xs text-neutral-600">{n.body}</div>
+                      <div className="mt-0.5 text-[10px] text-neutral-400">{timeAgo(n.ts)}{n.link && ' · tap to open'}</div>
+                    </div>
+                  </>
+                );
+                const base = `flex w-full gap-3 border-b border-neutral-50 px-4 py-3 text-left ${n.read ? '' : 'bg-primary-50/40'}`;
+                return n.link ? (
+                  <button key={n.id} onClick={() => { markAllRead(); setOpen(false); navigate(n.link!); }}
+                    className={`${base} hover:bg-primary-50`}>{row}</button>
+                ) : (
+                  <div key={n.id} className={base}>{row}</div>
+                );
+              })}
             </div>
             {notes.length > 0 && (
               <button onClick={clear} className="w-full border-t border-neutral-100 py-2 text-xs font-bold text-neutral-500 hover:bg-neutral-50">Clear all</button>

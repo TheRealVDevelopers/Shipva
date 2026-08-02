@@ -4,14 +4,20 @@
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
-export interface Note { id: string; title: string; body: string; ts: number; read: boolean; tone: 'info' | 'success' | 'warning' }
+export interface Note {
+  id: string; title: string; body: string; ts: number; read: boolean;
+  tone: 'info' | 'success' | 'warning';
+  /** In-app path this notification opens when clicked, e.g.
+   *  "/p/trips?open=<tourId>". Absent = the row isn't clickable. */
+  link?: string;
+}
 
 interface NotifyApi {
   notes: Note[];
   unread: number;
   soundOn: boolean;
   toggleSound: () => void;
-  push: (n: { title: string; body: string; tone?: Note['tone']; silent?: boolean }) => void;
+  push: (n: { title: string; body: string; tone?: Note['tone']; silent?: boolean; link?: string }) => void;
   markAllRead: () => void;
   clear: () => void;
 }
@@ -64,8 +70,8 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     } catch { /* autoplay blocked until first interaction */ }
   }, [soundOn]);
 
-  const push = useCallback<NotifyApi['push']>(({ title, body, tone = 'info', silent }) => {
-    setNotes((p) => [{ id: `n${Date.now().toString(36)}${seq++}`, title, body, tone, ts: Date.now(), read: false }, ...p]);
+  const push = useCallback<NotifyApi['push']>(({ title, body, tone = 'info', silent, link }) => {
+    setNotes((p) => [{ id: `n${Date.now().toString(36)}${seq++}`, title, body, tone, ts: Date.now(), read: false, ...(link ? { link } : {}) }, ...p]);
     if (!silent) play();
   }, [play]);
 
