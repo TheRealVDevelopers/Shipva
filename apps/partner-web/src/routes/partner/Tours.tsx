@@ -107,6 +107,12 @@ export function Tours() {
   // Step 2 of route creation: hand the new line to a POC.
   const [assignFor, setAssignFor] = useState<{ id: string; tourId: string; vrids: number } | null>(null);
   const [assignPoc, setAssignPoc] = useState('');
+  // Bulk reassign — tick several lines and hand them over together. Held by id
+  // so a live snapshot doesn't drop the selection mid-edit.
+  const [picking, setPicking] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkTo, setBulkTo] = useState('');
+  const [bulkOpen, setBulkOpen] = useState(false);
   // Diesel request (was "Open / Update") — the advance ask for a run.
   const [dieselId, setDieselId] = useState<string | null>(null);
   const diesel = dieselId ? tours.find((t) => t.id === dieselId) ?? null : null;
@@ -257,6 +263,27 @@ export function Tours() {
     }
     if (t.id) logTour(t.id, 'Route restored', { detail: `VRIDs re-claimed: ${tourVridList(t).join(', ') || 'none'}` });
     push({ title: 'Route restored', body: `${t.tourId || 'Route'} is back on the board as Planned.`, tone: 'success' });
+  }
+
+  const toggleOne = (id: string) => setSelected((prev) => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+
+  /** Reassign — and log — every ticked line in one go. */
+  function reassignSelected(uid: string) {
+    const m = assignable.find((x) => x.uid === uid);
+    if (!m) return;
+    let n = 0;
+    tours.forEach((t) => {
+      if (!t.id || !selected.has(t.id)) return;
+      updateTour(t.id, { ownerUid: m.uid, ownerName: m.name, leaderUid: teamOf(m) },
+        { action: t.ownerName ? 'Reassigned' : 'Assigned', detail: `${t.ownerName ? `${t.ownerName} → ` : ''}${m.name}` });
+      n++;
+    });
+    push({ title: 'Reassigned', body: `${n} line${n === 1 ? '' : 's'} handed to ${m.name}.`, tone: 'success' });
+    setBulkOpen(false); setBulkTo(''); setSelected(new Set()); setPicking(false);
   }
 
   /**
@@ -423,6 +450,14 @@ export function Tours() {
                   <button onClick={() => exportAmazonSheet(shown)} className="hidden items-center gap-1.5 rounded-lg bg-white/10 px-3 py-2 text-xs font-bold text-white ring-1 ring-inset ring-white/15 hover:bg-white/15 sm:inline-flex" title="Amazon's own 54-column sheet"><FileSpreadsheet size={13} /> Amazon sheet</button>
                 </>
               )}
+              {/* Bulk reassign — tick several lines and hand them over at once. */}
+              {canAssign && (
+                <button onClick={() => { setPicking((v) => !v); setSelected(new Set()); }}
+                  className="hidden items-center gap-1.5 rounded-lg bg-white/10 px-3 py-2 text-xs font-bold text-white ring-1 ring-inset ring-white/15 hover:bg-white/15 sm:inline-flex"
+                  title="Select multiple lines to reassign at once">
+                  <UserCog size={13} /> {picking ? 'Cancel select' : 'Select to reassign'}
+                </button>
+              )}
               <button onClick={() => { resetForm(); setOpen(true); }} className="inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-extrabold shadow-sm" style={{ background: ORANGE, color: INK }}><RouteIcon size={14} /> Route Assign</button>
             </div>
           </div>
@@ -453,17 +488,42 @@ export function Tours() {
           })}
         </div>
 
+        {/* Bulk-reassign action bar — above the list while selecting. */}
+        {picking && (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-primary-50 px-4 py-2.5 ring-1 ring-inset ring-primary-100">
+            <div className="flex items-center gap-3 text-xs font-bold text-primary-800">
+              <button onClick={() => setSelected(new Set(shown.map((t) => t.id!).filter(Boolean)))} className="underline hover:text-primary-900">Select all {shown.length} shown</button>
+              {selected.size > 0 && <button onClick={() => setSelected(new Set())} className="underline hover:text-primary-900">Clear</button>}
+              <span>{selected.size} selected</span>
+            </div>
+            <button onClick={() => setBulkOpen(true)} disabled={selected.size === 0}
+              className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-extrabold text-white disabled:opacity-40" style={{ background: INK }}>
+              <UserCog size={13} /> Reassign {selected.size || ''}
+            </button>
+          </div>
+        )}
+
         {/* Compact list — a dense row per line, built for 100+ tours (client's
             call: replace the big card layout with a compact list/table). */}
         <div className="overflow-hidden rounded-xl bg-white shadow-sm" style={{ border: '1px solid #D5D9D9' }}>
           <div className="divide-y" style={{ borderColor: '#EDEFF1' }}>
             {shown.map((t) => (
-              <TourRow key={t.id} t={t} isAdmin={isAdmin} canEdit={canEdit} canAssign={canAssign}
-                state={t.archived ? 'cancelled' : t.draft ? 'draft' : 'live'}
-                onDiesel={() => t.id && setDieselId(t.id)}
-                onAssign={() => { setAssignPoc(t.ownerUid ?? ''); setAssignFor({ id: t.id!, tourId: t.tourId, vrids: t.legs?.length ?? 0 }); }}
-                onEdit={() => startEdit(t)} onDelete={() => setConfirmDel(t)} onShare={updateTour}
-                onRestore={() => void doRestore(t)} />
+              <div key={t.id} className={`flex items-start ${picking && t.id && selected.has(t.id) ? 'bg-primary-50/50' : ''}`}>
+                {picking && (
+                  <label className="flex cursor-pointer items-center py-3 pl-4">
+                    <input type="checkbox" checked={!!t.id && selected.has(t.id)} onChange={() => t.id && toggleOne(t.id)}
+                      className="h-4 w-4 rounded border-neutral-300 text-primary-600 focus:ring-primary-400" aria-label={`Select ${t.tourId}`} />
+                  </label>
+                )}
+                <div className="min-w-0 flex-1">
+                  <TourRow t={t} isAdmin={isAdmin} canEdit={canEdit} canAssign={canAssign}
+                    state={t.archived ? 'cancelled' : t.draft ? 'draft' : 'live'}
+                    onDiesel={() => t.id && setDieselId(t.id)}
+                    onAssign={() => { setAssignPoc(t.ownerUid ?? ''); setAssignFor({ id: t.id!, tourId: t.tourId, vrids: t.legs?.length ?? 0 }); }}
+                    onEdit={() => startEdit(t)} onDelete={() => setConfirmDel(t)} onShare={updateTour}
+                    onRestore={() => void doRestore(t)} />
+                </div>
+              </div>
             ))}
             {shown.length === 0 && (
               <div className="py-12 text-center text-sm text-neutral-400">
@@ -594,6 +654,26 @@ export function Tours() {
         )}
         {missing.length > 0 && <p className="text-[11px] font-semibold" style={{ color: '#B15C00' }}>To create, still needed: {missing.join(' · ')}.</p>}
       </Modal>
+
+      {/* Bulk reassign — every ticked line, to one employee, together */}
+      {bulkOpen && canAssign && (
+        <Modal open onClose={() => setBulkOpen(false)}
+          title={`Reassign ${selected.size} line${selected.size === 1 ? '' : 's'}`}
+          subtitle="They all move to the same employee"
+          onSubmit={() => reassignSelected(bulkTo)}
+          submitLabel={`Reassign ${selected.size}`} submitDisabled={!bulkTo}>
+          <Field label="Assign to" required hint={isAdmin ? 'Only this employee sees and updates the selected lines' : 'Which of your POCs runs these lines'}>
+            <Select value={bulkTo} onChange={(e) => setBulkTo(e.target.value)}>
+              <option value="">— Assign to an employee —</option>
+              {assignable.map((m) => <option key={m.uid} value={m.uid}>{m.name}{m.uid === member?.uid ? ' (me)' : ''}</option>)}
+            </Select>
+          </Field>
+          <p className="rounded-lg px-3 py-2 text-[11px] text-neutral-500 ring-1 ring-inset ring-neutral-200" style={{ background: '#F7F8F8' }}>
+            {tours.filter((t) => t.id && selected.has(t.id)).map((t) => t.tourId).slice(0, 8).join(', ')}
+            {selected.size > 8 ? ` +${selected.size - 8} more` : ''}
+          </p>
+        </Modal>
+      )}
 
       {/* Reassign an existing line — opened from the row's Assign/Reassign button.
           (New lines are assigned in the Route Assign form itself.) */}
