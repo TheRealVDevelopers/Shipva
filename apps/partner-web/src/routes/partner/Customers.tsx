@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   Plus, Phone, Building2, Receipt, FileText, FileWarning, Download, ShieldCheck,
-  Clock, FileSignature, ChevronLeft, Pencil, Trash2, BadgeCheck, AlertTriangle, Ban, Check,
+  Clock, FileSignature, ChevronLeft, Pencil, Trash2, BadgeCheck, AlertTriangle, Ban, Check, Search, X,
 } from 'lucide-react';
 import { PartnerLayout } from '../../components/layout/PartnerLayout.js';
 import { Card } from '../../components/ui/Card.js';
@@ -29,6 +29,7 @@ import {
 } from '../../lib/validate.js';
 import { printAgreement } from '../../lib/agreement.js';
 import { printJoiningLetter } from '../../lib/joiningLetter.js';
+import { duplicateError, recordMatches } from '../../lib/uniqueness.js';
 
 const ENTITY_TYPES: { id: EntityType; label: string }[] = [
   { id: 'proprietorship', label: 'Proprietorship' },
@@ -92,7 +93,7 @@ function trialWindow(): { start: string; end: string } {
 }
 
 export function Customers() {
-  const { customers, addCustomer, setCustomerAgreement, updateCustomer, deleteCustomer } = useStore();
+  const { customers, drivers, trucks, attached, addCustomer, setCustomerAgreement, updateCustomer, deleteCustomer } = useStore();
   const { member } = useAuth();
   const { push } = useNotify();
   const isAdmin = member?.role === 'owner' || member?.role === 'manager';
@@ -100,6 +101,7 @@ export function Customers() {
   // owner/manager (isAdmin), since that's what makes a vendor usable.
   const canEdit = canEditRecords(member?.role);
 
+  const [q, setQ] = useState('');
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState(1);
   const [f, setF] = useState<Form>(EMPTY);
@@ -123,14 +125,21 @@ export function Customers() {
   // GST-registered vendors give GSTIN + PAN; a proprietor without GST gives
   // PAN + Aadhaar instead (clause 5.5 needs a GSTIN to invoice, 5.8 a PAN for TDS).
   const hasGst = !!f.gstin.trim();
+  // The client's rule: no duplicate GSTIN, PAN, Aadhaar or mobile across any
+  // register. Editing excludes this record's own id.
+  const regs = { customers, owners: attached, drivers, trucks };
+  // Search by name or number (client's ask): company, contact, both phones,
+  // GSTIN, PAN, Aadhaar, city.
+  const shownCustomers = customers.filter((c) =>
+    recordMatches([c.name, c.contactName, c.phone, c.phone2, c.gstin, c.pan, c.aadhaar, c.city], q));
   const errs = {
     name: requiredError(f.name, 'Legal entity name'),
-    gstin: hasGst ? gstError(f.gstin) : '',
-    pan: panError(f.pan),
-    aadhaar: hasGst ? '' : aadhaarError(f.aadhaar),
+    gstin: hasGst ? (gstError(f.gstin) || duplicateError('gstin', f.gstin, regs, editId ?? undefined)) : '',
+    pan: panError(f.pan) || duplicateError('pan', f.pan, regs, editId ?? undefined),
+    aadhaar: hasGst ? '' : (aadhaarError(f.aadhaar) || duplicateError('aadhaar', f.aadhaar, regs, editId ?? undefined)),
     contactName: nameError(f.contactName, { label: 'Contact name' }),
-    phone: phoneError(f.phone),
-    phone2: f.phone2.trim() ? phoneError(f.phone2, { label: 'Second phone' }) : '',
+    phone: phoneError(f.phone) || duplicateError('phone', f.phone, regs, editId ?? undefined),
+    phone2: f.phone2.trim() ? (phoneError(f.phone2, { label: 'Second phone' }) || duplicateError('phone', f.phone2, regs, editId ?? undefined)) : '',
     email: requiredError(f.email, 'Email') || (/^[^@\s]+@[^@\s.]+\.[^@\s]+$/.test(f.email.trim()) ? '' : 'Enter a valid email'),
     addressLine1: requiredError(f.addressLine1, 'Address line 1'),
     city: nameError(f.city, { label: 'City' }),
@@ -336,8 +345,13 @@ export function Customers() {
         </section>
 
         <Card>
-          <div className="flex items-center justify-between border-b border-neutral-100 px-5 py-3">
-            <h3 className="text-sm font-semibold text-neutral-800">Transporter directory</h3>
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-100 px-5 py-3">
+            <div className="flex items-center gap-2 rounded-lg bg-neutral-50 px-3 py-1.5 ring-1 ring-inset ring-neutral-200">
+              <Search size={14} className="text-neutral-400" />
+              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, mobile, GSTIN, PAN, city"
+                className="w-64 max-w-full bg-transparent text-xs text-neutral-700 outline-none placeholder:text-neutral-400" />
+              {q && <button onClick={() => setQ('')} className="text-neutral-400 hover:text-rose-500" title="Clear"><X size={13} /></button>}
+            </div>
             <Button size="sm" onClick={startAdd}><Plus size={13} /> Add transporter</Button>
           </div>
           <Table>
@@ -345,7 +359,7 @@ export function Customers() {
               <Tr><Th>Company</Th><Th>Onboarding</Th><Th>GSTIN / PAN</Th><Th>City</Th><Th className="text-right">Rate</Th><Th className="text-right">Outstanding</Th><Th></Th></Tr>
             </THead>
             <TBody>
-              {customers.map((c) => {
+              {shownCustomers.map((c) => {
                 const st = effectiveStage(c);
                 return (
                   <Tr key={c.id}>
@@ -402,6 +416,11 @@ export function Customers() {
                   </Tr>
                 );
               })}
+              {shownCustomers.length === 0 && (
+                <tr><td colSpan={7} className="py-10 text-center text-sm text-neutral-400">
+                  {customers.length === 0 ? 'No transporters yet — press "Add transporter".' : `No transporter matches “${q}”.`}
+                </td></tr>
+              )}
             </TBody>
           </Table>
         </Card>

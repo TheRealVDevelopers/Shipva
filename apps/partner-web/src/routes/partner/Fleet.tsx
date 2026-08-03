@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Phone, Star, Plus, Truck as TruckIcon, FileCheck2, AlertTriangle, ShieldCheck,
-  ShieldAlert, Pencil, Trash2, BadgeCheck, X,
+  ShieldAlert, Pencil, Trash2, BadgeCheck, X, Search,
 } from 'lucide-react';
 import { PartnerLayout } from '../../components/layout/PartnerLayout.js';
 import { Card } from '../../components/ui/Card.js';
@@ -28,6 +28,7 @@ import {
   type TruckType,
 } from '../../lib/truckTypes.js';
 import { vendorNamesOf } from '../../lib/vendors.js';
+import { duplicateError, recordMatches, type Registers } from '../../lib/uniqueness.js';
 import { VendorLinkAudit } from '../../components/VendorLinkAudit.js';
 const TABS = ['Drivers', 'Trucks'] as const;
 
@@ -79,6 +80,7 @@ export function Fleet({ register }: { register: 'drivers' | 'trucks' }) {
   const canEdit = canEditRecords(member?.role);
 
   const tab: (typeof TABS)[number] = register === 'trucks' ? 'Trucks' : 'Drivers';
+  const [q, setQ] = useState('');
   const [add, setAdd] = useState<null | 'driver' | 'truck'>(null);
   const [nd, setNd] = useState(DRV_EMPTY);
   const [nt, setNt] = useState(TRK_EMPTY);
@@ -106,19 +108,44 @@ export function Fleet({ register }: { register: 'drivers' | 'trucks' }) {
   const editTruck = editTruckId ? trucks.find((t) => t.id === editTruckId) ?? null : null;
   const [confirmDel, setConfirmDel] = useState<{ kind: 'driver' | 'truck'; id: string; label: string } | null>(null);
 
+  // Search by name or any number (client's ask). A driver matches on name,
+  // phone, licence, PAN, Aadhaar and vendor; a truck on reg, type, feet, RC,
+  // insurance, fitness and vendor.
+  const shownDrivers = useMemo(() => drivers.filter((d) =>
+    recordMatches([d.name, d.phone, d.licenseNo, d.pan, d.aadhaar, d.vendor], q)), [drivers, q]);
+  const shownTrucks = useMemo(() => trucks.filter((t) =>
+    recordMatches([t.reg, t.type, t.feet, t.rc, t.insuranceNo, t.fitnessNo, t.vendor], q)), [trucks, q]);
+
   const driversPending = drivers.filter((d) => driverMissing(d).length > 0).length;
   const trucksPending = trucks.filter((t) => truckMissing(t).length > 0).length;
   const trucksUnverified = trucks.filter((t) => !isVerified(t)).length;
 
+  // Every register, for the duplicate checks below. The client's rule: no
+  // repeated phone, Aadhaar, PAN, GST, vehicle number, RC, licence… anywhere.
+  const regs = useMemo(() => ({ customers, owners: attached, drivers, trucks }), [customers, attached, drivers, trucks]);
+
+  // The docs modals edit an existing record, so its own id is excluded — a
+  // driver keeping their own licence never trips, but another driver's does.
+  const dDocErrs = {
+    aadhaar: duplicateError('aadhaar', dForm.aadhaar, regs, docDriverId ?? undefined),
+    licenseNo: duplicateError('licence', dForm.licenseNo, regs, docDriverId ?? undefined),
+    pan: duplicateError('pan', dForm.pan, regs, docDriverId ?? undefined),
+  };
+  const tDocErrs = {
+    rc: duplicateError('rc', tForm.rc, regs, docTruckId ?? undefined),
+    insuranceNo: duplicateError('insurance', tForm.insuranceNo, regs, docTruckId ?? undefined),
+    fitnessNo: duplicateError('fitness', tForm.fitnessNo, regs, docTruckId ?? undefined),
+  };
+
   // ── New driver — the client requires Aadhaar, licence and PAN up front ──────
   const ndErrs = {
     name: nameError(nd.name, { label: 'Full name' }),
-    phone: phoneError(nd.phone),
-    aadhaar: aadhaarError(nd.aadhaar),
-    licenseNo: licenceError(nd.licenseNo),
+    phone: phoneError(nd.phone) || duplicateError('phone', nd.phone, regs),
+    aadhaar: aadhaarError(nd.aadhaar) || duplicateError('aadhaar', nd.aadhaar, regs),
+    licenseNo: licenceError(nd.licenseNo) || duplicateError('licence', nd.licenseNo, regs),
     // PAN is optional for drivers now (client's call) — only validate the format
     // if one was entered. Aadhaar and licence stay required.
-    pan: nd.pan.trim() ? panError(nd.pan) : '',
+    pan: nd.pan.trim() ? (panError(nd.pan) || duplicateError('pan', nd.pan, regs)) : '',
   };
   function submitDriver() {
     setTried(true);
@@ -139,7 +166,7 @@ export function Fleet({ register }: { register: 'drivers' | 'trucks' }) {
     // Vendor first, and required: the client wants a truck tied to a transporter
     // or truck owner before anything else. RC/insurance/fitness come next.
     vendor: nt.vendor ? '' : 'Select the vendor this truck belongs to',
-    reg: vehicleRegError(nt.reg),
+    reg: vehicleRegError(nt.reg) || duplicateError('vehicleReg', nt.reg, regs),
     capacityKg: positiveError(nt.capacityKg, 'Capacity'),
   };
   function submitTruck() {
@@ -225,7 +252,14 @@ export function Fleet({ register }: { register: 'drivers' | 'trucks' }) {
         {/* The Drivers/Trucks tab bar is gone — the two registers are their own
             entries under Vendors Register now, so tabbing here would be a
             second way to say the same thing. */}
-        <div className="flex items-center justify-end">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2 rounded-lg bg-white px-3 py-1.5 ring-1 ring-inset ring-neutral-200">
+            <Search size={14} className="text-neutral-400" />
+            <input value={q} onChange={(e) => setQ(e.target.value)}
+              placeholder={tab === 'Drivers' ? 'Search name, mobile, licence, PAN, Aadhaar' : 'Search reg, type, RC, vendor'}
+              className="w-64 max-w-full bg-transparent text-xs text-neutral-700 outline-none placeholder:text-neutral-400" />
+            {q && <button onClick={() => setQ('')} className="text-neutral-400 hover:text-rose-500" title="Clear"><X size={13} /></button>}
+          </div>
           <Button size="sm" onClick={() => { setTried(false); setAdd(tab === 'Drivers' ? 'driver' : 'truck'); }}>
             <Plus size={12} /> {tab === 'Drivers' ? 'Onboard driver' : 'Add truck'}
           </Button>
@@ -236,7 +270,7 @@ export function Fleet({ register }: { register: 'drivers' | 'trucks' }) {
             <Table>
               <THead><Tr><Th>Driver</Th><Th>Vendor</Th><Th>Duty</Th><Th>Documents</Th><Th>Rating</Th><Th></Th></Tr></THead>
               <TBody>
-                {drivers.map((d) => {
+                {shownDrivers.map((d) => {
                   const miss = driverMissing(d);
                   return (
                     <Tr key={d.id}>
@@ -264,6 +298,11 @@ export function Fleet({ register }: { register: 'drivers' | 'trucks' }) {
                     </Tr>
                   );
                 })}
+                {shownDrivers.length === 0 && (
+                  <tr><td colSpan={6} className="py-10 text-center text-sm text-neutral-400">
+                    {drivers.length === 0 ? 'No drivers yet — press "Onboard driver".' : `No driver matches “${q}”.`}
+                  </td></tr>
+                )}
               </TBody>
             </Table>
           </Card>
@@ -272,7 +311,7 @@ export function Fleet({ register }: { register: 'drivers' | 'trucks' }) {
             <Table>
               <THead><Tr><Th>Truck</Th><Th>Vendor</Th><Th>Type</Th><Th>Capacity</Th><Th>Status</Th><Th>Documents</Th><Th></Th></Tr></THead>
               <TBody>
-                {trucks.map((t) => {
+                {shownTrucks.map((t) => {
                   const miss = truckMissing(t);
                   return (
                     <Tr key={t.id}>
@@ -294,6 +333,11 @@ export function Fleet({ register }: { register: 'drivers' | 'trucks' }) {
                     </Tr>
                   );
                 })}
+                {shownTrucks.length === 0 && (
+                  <tr><td colSpan={7} className="py-10 text-center text-sm text-neutral-400">
+                    {trucks.length === 0 ? 'No trucks yet — press "Add truck".' : `No truck matches “${q}”.`}
+                  </td></tr>
+                )}
               </TBody>
             </Table>
           </Card>
@@ -370,31 +414,33 @@ export function Fleet({ register }: { register: 'drivers' | 'trucks' }) {
 
       {/* Driver documents */}
       <Modal open={!!docDriver} onClose={() => setDocDriverId(null)} title={`Documents · ${docDriver?.name ?? ''}`} subtitle="Aadhaar, driving licence & PAN"
-        onSubmit={() => { if (docDriver) { setDriverDocs(docDriver.id, dForm); setDocDriverId(null); } }} submitLabel="Save documents" wide>
-        <Field label="Aadhaar number" hint="12-digit UIDAI number"><TextInput value={dForm.aadhaar} onChange={(e) => setDForm({ ...dForm, aadhaar: e.target.value })} placeholder="4821 7745 9012" /></Field>
+        onSubmit={() => { if (docDriver && allClear(dDocErrs)) { setDriverDocs(docDriver.id, dForm); setDocDriverId(null); } }}
+        submitLabel="Save documents" submitDisabled={!allClear(dDocErrs)} wide>
+        <Field label="Aadhaar number" hint="12-digit UIDAI number" error={dDocErrs.aadhaar}><TextInput value={dForm.aadhaar} onChange={(e) => setDForm({ ...dForm, aadhaar: e.target.value })} placeholder="4821 7745 9012" /></Field>
         <Field label="Aadhaar card"><DocumentUpload value={dForm.aadhaarImg} onChange={(v) => setDForm({ ...dForm, aadhaarImg: v })} label="Upload Aadhaar" path={`documents/drivers/${docDriver?.id}/aadhaar`} /></Field>
         <Row>
-          <Field label="Driving licence no"><TextInput value={dForm.licenseNo} onChange={(e) => setDForm({ ...dForm, licenseNo: e.target.value.toUpperCase() })} placeholder="KA0120200012345" /></Field>
+          <Field label="Driving licence no" error={dDocErrs.licenseNo}><TextInput value={dForm.licenseNo} onChange={(e) => setDForm({ ...dForm, licenseNo: e.target.value.toUpperCase() })} placeholder="KA0120200012345" /></Field>
           <Field label="Licence expiry"><DateInput value={dForm.licenseExpiry} onChange={(v) => setDForm({ ...dForm, licenseExpiry: v })} /></Field>
         </Row>
         <Field label="Driving licence"><DocumentUpload value={dForm.licenseImg} onChange={(v) => setDForm({ ...dForm, licenseImg: v })} label="Upload licence" path={`documents/drivers/${docDriver?.id}/licence`} /></Field>
-        <Field label="PAN number"><TextInput value={dForm.pan} onChange={(e) => setDForm({ ...dForm, pan: e.target.value.toUpperCase() })} placeholder="ABCDE1234F" /></Field>
+        <Field label="PAN number" error={dDocErrs.pan}><TextInput value={dForm.pan} onChange={(e) => setDForm({ ...dForm, pan: e.target.value.toUpperCase() })} placeholder="ABCDE1234F" /></Field>
         <Field label="PAN card"><DocumentUpload value={dForm.panImg} onChange={(v) => setDForm({ ...dForm, panImg: v })} label="Upload PAN" path={`documents/drivers/${docDriver?.id}/pan`} /></Field>
         {docDriver && <VerifyPanel record={docDriver} missing={driverMissing({ ...docDriver, ...dForm })} isAdmin={isAdmin} onVerify={(on) => verify('driver', docDriver.id, on)} />}
       </Modal>
 
       {/* Truck documents */}
       <Modal open={!!docTruck} onClose={() => setDocTruckId(null)} title={`Documents · ${docTruck?.reg ?? ''}`} subtitle="RC, insurance & fitness"
-        onSubmit={() => { if (docTruck) { setTruckDocs(docTruck.id, tForm); setDocTruckId(null); } }} submitLabel="Save documents" wide>
-        <Field label="RC number"><TextInput value={tForm.rc} onChange={(e) => setTForm({ ...tForm, rc: e.target.value.toUpperCase() })} placeholder="RC-KA01C5521" /></Field>
+        onSubmit={() => { if (docTruck && allClear(tDocErrs)) { setTruckDocs(docTruck.id, tForm); setDocTruckId(null); } }}
+        submitLabel="Save documents" submitDisabled={!allClear(tDocErrs)} wide>
+        <Field label="RC number" error={tDocErrs.rc}><TextInput value={tForm.rc} onChange={(e) => setTForm({ ...tForm, rc: e.target.value.toUpperCase() })} placeholder="RC-KA01C5521" /></Field>
         <Field label="RC"><DocumentUpload value={tForm.rcImg} onChange={(v) => setTForm({ ...tForm, rcImg: v })} label="Upload RC" path={`documents/trucks/${docTruck?.id}/rc`} /></Field>
         <Row>
-          <Field label="Insurance no"><TextInput value={tForm.insuranceNo} onChange={(e) => setTForm({ ...tForm, insuranceNo: e.target.value.toUpperCase() })} placeholder="INS-778812" /></Field>
+          <Field label="Insurance no" error={tDocErrs.insuranceNo}><TextInput value={tForm.insuranceNo} onChange={(e) => setTForm({ ...tForm, insuranceNo: e.target.value.toUpperCase() })} placeholder="INS-778812" /></Field>
           <Field label="Insurance expiry"><DateInput value={tForm.insuranceExpiry} onChange={(v) => setTForm({ ...tForm, insuranceExpiry: v })} /></Field>
         </Row>
         <Field label="Insurance"><DocumentUpload value={tForm.insuranceImg} onChange={(v) => setTForm({ ...tForm, insuranceImg: v })} label="Upload insurance" path={`documents/trucks/${docTruck?.id}/insurance`} /></Field>
         <Row>
-          <Field label="Fitness cert no"><TextInput value={tForm.fitnessNo} onChange={(e) => setTForm({ ...tForm, fitnessNo: e.target.value.toUpperCase() })} placeholder="FIT-4521" /></Field>
+          <Field label="Fitness cert no" error={tDocErrs.fitnessNo}><TextInput value={tForm.fitnessNo} onChange={(e) => setTForm({ ...tForm, fitnessNo: e.target.value.toUpperCase() })} placeholder="FIT-4521" /></Field>
           <Field label="Fitness expiry"><DateInput value={tForm.fitnessExpiry} onChange={(v) => setTForm({ ...tForm, fitnessExpiry: v })} /></Field>
         </Row>
         <Field label="Fitness certificate"><DocumentUpload value={tForm.fitnessImg} onChange={(v) => setTForm({ ...tForm, fitnessImg: v })} label="Upload fitness" path={`documents/trucks/${docTruck?.id}/fitness`} /></Field>
@@ -405,7 +451,7 @@ export function Fleet({ register }: { register: 'drivers' | 'trucks' }) {
       {editDriver && (
         <Modal open onClose={() => setEditDriverId(null)} title={`Edit · ${editDriver.name}`} subtitle="Details only — documents are managed separately"
           onSubmit={() => { setEditDriverId(null); }} submitLabel="Done">
-          <EditDriverBody driver={editDriver} vendorNames={vendorNames} onSave={(patch) => updateDriver(editDriver.id, patch)} />
+          <EditDriverBody driver={editDriver} vendorNames={vendorNames} regs={regs} onSave={(patch) => updateDriver(editDriver.id, patch)} />
         </Modal>
       )}
 
@@ -413,7 +459,7 @@ export function Fleet({ register }: { register: 'drivers' | 'trucks' }) {
       {editTruck && (
         <Modal open onClose={() => setEditTruckId(null)} title={`Edit · ${editTruck.reg}`} subtitle="Details only — documents are managed separately"
           onSubmit={() => { setEditTruckId(null); }} submitLabel="Done">
-          <EditTruckBody truck={editTruck} vendorNames={vendorNames} onSave={(patch) => updateTruck(editTruck.id, patch)} />
+          <EditTruckBody truck={editTruck} vendorNames={vendorNames} regs={regs} onSave={(patch) => updateTruck(editTruck.id, patch)} />
         </Modal>
       )}
 
@@ -470,15 +516,15 @@ function VerifyPanel({ record, missing, isAdmin, onVerify }: {
 }
 
 // Mirrors the onboard form: a driver's vendor, not their vehicle.
-function EditDriverBody({ driver, vendorNames, onSave }: {
-  driver: FleetDriver; vendorNames: string[]; onSave: (p: Partial<FleetDriver>) => void;
+function EditDriverBody({ driver, vendorNames, regs, onSave }: {
+  driver: FleetDriver; vendorNames: string[]; regs: Registers; onSave: (p: Partial<FleetDriver>) => void;
 }) {
   const [name, setName] = useState(driver.name);
   const [phone, setPhone] = useState(driver.phone);
   const [vendor, setVendor] = useState(driver.vendor ?? '');
   const errs = {
     name: nameError(name, { label: 'Full name' }),
-    phone: phoneError(phone),
+    phone: phoneError(phone) || duplicateError('phone', phone, regs, driver.id),
   };
   const dirty = name !== driver.name || phone !== driver.phone || vendor !== (driver.vendor ?? '');
   // An older record may name a vendor that's since been renamed or removed —
@@ -510,15 +556,15 @@ function EditDriverBody({ driver, vendorNames, onSave }: {
 // Status is deliberately NOT editable here — the client asked for it to go. It
 // still exists on the record (the list and the fleet KPIs read it); it's just
 // no longer something a person types.
-function EditTruckBody({ truck, vendorNames, onSave }: {
-  truck: Truck; vendorNames: string[]; onSave: (p: Partial<Truck>) => void;
+function EditTruckBody({ truck, vendorNames, regs, onSave }: {
+  truck: Truck; vendorNames: string[]; regs: Registers; onSave: (p: Partial<Truck>) => void;
 }) {
   const [reg, setReg] = useState(truck.reg);
   const [type, setType] = useState(truck.type);
   const [capacityKg, setCapacityKg] = useState(String(truck.capacityKg));
   const [vendor, setVendor] = useState(truck.vendor ?? '');
   const [serviceDue, setServiceDue] = useState(truck.serviceDueDate ?? '');
-  const errs = { reg: vehicleRegError(reg), capacityKg: positiveError(capacityKg, 'Capacity') };
+  const errs = { reg: vehicleRegError(reg) || duplicateError('vehicleReg', reg, regs, truck.id), capacityKg: positiveError(capacityKg, 'Capacity') };
   const dirty = reg !== truck.reg || type !== truck.type || Number(capacityKg) !== truck.capacityKg || vendor !== (truck.vendor ?? '') || serviceDue !== (truck.serviceDueDate ?? '');
   const options = vendor && !vendorNames.includes(vendor) ? [vendor, ...vendorNames] : vendorNames;
   return (

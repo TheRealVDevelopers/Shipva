@@ -2,7 +2,7 @@ import { useState } from 'react';
 import {
   Truck as TruckIcon, Phone, HandCoins, FileText, FileWarning, Download, Plus,
   ShieldCheck, ShieldAlert, Clock, FileSignature, ChevronLeft, Pencil, Trash2, BadgeCheck,
-  AlertTriangle, Ban,
+  AlertTriangle, Ban, Search, X,
 } from 'lucide-react';
 import { PartnerLayout } from '../../components/layout/PartnerLayout.js';
 import { Card, CardHeader } from '../../components/ui/Card.js';
@@ -29,6 +29,7 @@ import {
 } from '../../lib/validate.js';
 import { printAgreement } from '../../lib/agreement.js';
 import { printJoiningLetter } from '../../lib/joiningLetter.js';
+import { duplicateError, recordMatches } from '../../lib/uniqueness.js';
 import { useNotify } from '../../lib/notify.js';
 
 const STAGE_TONE: Record<OnboardStage, BadgeTone> = {
@@ -57,7 +58,7 @@ function trialWindow(): { start: string; end: string } {
 }
 
 export function Payables() {
-  const { attached, setAttachedAgreement, recordOwnerPayment, addAttached, updateAttached, deleteAttached } = useStore();
+  const { attached, customers, drivers, trucks, setAttachedAgreement, recordOwnerPayment, addAttached, updateAttached, deleteAttached } = useStore();
   const { member } = useAuth();
   const { push } = useNotify();
   const isAdmin = member?.role === 'owner' || member?.role === 'manager';
@@ -83,6 +84,7 @@ export function Payables() {
   const [docsForId, setDocsForId] = useState<string | null>(null);
   const docsFor = docsForId ? attached.find((a) => a.id === docsForId) ?? null : null;
   const [confirmDel, setConfirmDel] = useState<AttachedTruck | null>(null);
+  const [q, setQ] = useState('');
 
   const totalPayable = attached.reduce((s, a) => s + a.balancePaise, 0);
   const owed = attached.filter((a) => a.balancePaise > 0).length;
@@ -91,15 +93,23 @@ export function Payables() {
 
   // ── Validation ──────────────────────────────────────────────────────────────
   const hasGst = !!f.gstin.trim();
+  // No duplicate vehicle number, mobile, PAN, Aadhaar or GST across any
+  // register (the client's rule). Editing excludes this owner's own id.
+  const regs = { customers, owners: attached, drivers, trucks };
+  const self = editId ?? undefined;
+  // Search by name or number: owner, transporter, vehicle number, both phones,
+  // PAN, Aadhaar, GST.
+  const shownOwners = attached.filter((a) =>
+    recordMatches([a.owner, a.transporterName, a.reg, a.phone, a.phone2, a.pan, a.aadhaar, a.gstin], q));
   const errs = {
     owner: nameError(f.owner, { label: 'Owner name' }),
     transporterName: '',                                   // optional — independents have none
-    reg: vehicleRegError(f.reg),
-    phone: phoneError(f.phone),
-    phone2: f.phone2.trim() ? phoneError(f.phone2, { label: 'Second phone' }) : '',
-    pan: panError(f.pan),
-    aadhaar: aadhaarError(f.aadhaar),
-    gstin: hasGst ? gstError(f.gstin) : '',
+    reg: vehicleRegError(f.reg) || duplicateError('vehicleReg', f.reg, regs, self),
+    phone: phoneError(f.phone) || duplicateError('phone', f.phone, regs, self),
+    phone2: f.phone2.trim() ? (phoneError(f.phone2, { label: 'Second phone' }) || duplicateError('phone', f.phone2, regs, self)) : '',
+    pan: panError(f.pan) || duplicateError('pan', f.pan, regs, self),
+    aadhaar: aadhaarError(f.aadhaar) || duplicateError('aadhaar', f.aadhaar, regs, self),
+    gstin: hasGst ? (gstError(f.gstin) || duplicateError('gstin', f.gstin, regs, self)) : '',
     addressLine1: requiredError(f.addressLine1, 'Address line 1'),
     city: nameError(f.city, { label: 'City' }),
     state: nameError(f.state, { label: 'State' }),
@@ -276,7 +286,13 @@ export function Payables() {
         <Card>
           <CardHeader title="Truck-owner ledger" subtitle="Balances owed to attached vehicles"
             action={
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-2 rounded-lg bg-neutral-50 px-3 py-1.5 ring-1 ring-inset ring-neutral-200">
+                  <Search size={14} className="text-neutral-400" />
+                  <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search owner, mobile, vehicle, PAN, GST"
+                    className="w-56 max-w-full bg-transparent text-xs text-neutral-700 outline-none placeholder:text-neutral-400" />
+                  {q && <button onClick={() => setQ('')} className="text-neutral-400 hover:text-rose-500" title="Clear"><X size={13} /></button>}
+                </div>
                 <Button size="sm" variant="secondary" onClick={() => setPayOpen(true)}><HandCoins size={13} /> Record payment</Button>
                 <Button size="sm" onClick={startAdd}><Plus size={13} /> Add owner</Button>
               </div>
@@ -286,7 +302,7 @@ export function Payables() {
               <Tr><Th>Owner</Th><Th>Transporter</Th><Th>Vehicle</Th><Th>KYC</Th><Th>Onboarding</Th><Th className="text-right">Balance</Th><Th></Th></Tr>
             </THead>
             <TBody>
-              {attached.map((a) => {
+              {shownOwners.map((a) => {
                 const st = effectiveStage(a);
                 const kyc = kycOf(a);
                 return (
@@ -351,6 +367,11 @@ export function Payables() {
                   </Tr>
                 );
               })}
+              {shownOwners.length === 0 && (
+                <tr><td colSpan={7} className="py-10 text-center text-sm text-neutral-400">
+                  {attached.length === 0 ? 'No truck owners yet — press "Add owner".' : `No owner matches “${q}”.`}
+                </td></tr>
+              )}
             </TBody>
           </Table>
         </Card>
