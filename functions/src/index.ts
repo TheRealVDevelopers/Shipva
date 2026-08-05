@@ -7,6 +7,7 @@ setGlobalOptions({
 
 export { setUserRole } from './callable/setUserRole.js';
 export { removeOrgMember, releaseOrphanLogin } from './callable/removeOrgMember.js';
+export { adminResetPassword } from './callable/adminResetPassword.js';
 export { createBooking } from './callable/createBooking.js';
 export { acceptBooking } from './callable/acceptBooking.js';
 export { placeBid } from './callable/placeBid.js';

@@ -318,6 +318,19 @@ export async function deleteMember(uid: string): Promise<{ authDeleted: boolean 
 }
 
 /**
+ * Admin password reset — an owner/manager gives a teammate a fresh temporary
+ * password when they're locked out. Runs server-side (Admin SDK), because the
+ * client SDK can only change the *current* user's password. The teammate is
+ * forced to set their own on next sign-in, so the returned temp password is
+ * single-use — hand it over, done.
+ */
+export async function adminResetPassword(uid: string): Promise<{ tempPassword: string; email: string }> {
+  const call = httpsCallable<{ targetUid: string }, { ok: boolean; tempPassword: string; email: string }>(functions, 'adminResetPassword');
+  const res = await call({ targetUid: uid });
+  return { tempPassword: res.data?.tempPassword ?? '', email: res.data?.email ?? '' };
+}
+
+/**
  * Delete a Firebase Auth account that has no member record behind it. Used to
  * recover from an employee removed under the old flow: their login still
  * squats on the email, so inviting them again fails. Returns false when there

@@ -12,9 +12,11 @@ import { useAuth } from '../../lib/auth.js';
 import { roleLabel, defaultPages, type Role } from '../../lib/roles.js';
 import {
   watchMembers, inviteMember, updateMember, deleteMember, releaseOrphanLogin, changeMemberLeader, pagesForRole,
-  missingProfile, profileComplete, isActivated,
+  missingProfile, profileComplete, isActivated, adminResetPassword,
   canManageMember, canDeleteMember, ASSIGNABLE_PAGES, type Member,
 } from '../../lib/members.js';
+import { sendPasswordResetEmail } from 'firebase/auth';
+import { auth } from '../../firebase.js';
 import type { FeatureId } from '../../lib/features.js';
 import {
   watchAllToday, watchActivity, presence, fmtClock, fmtActive, type Activity,
@@ -431,6 +433,11 @@ function EmployeeDetail({ member: m, actor, members, onClose }: { member: Member
   const [busy, setBusy] = useState(false);
   // Reporting line — the new team leader to move this person to.
   const [newLeader, setNewLeader] = useState(m.leaderUid ?? '');
+  // Admin password reset — one-time temp password shown after a reset, plus the
+  // arm/confirm step so a stray click can't blow away someone's password.
+  const [resetInfo, setResetInfo] = useState<{ tempPassword: string; email: string } | null>(null);
+  const [armReset, setArmReset] = useState(false);
+  const [resetBusy, setResetBusy] = useState(false);
 
   const gaps = missingProfile(m);
   const ready = gaps.length === 0;
@@ -466,6 +473,38 @@ function EmployeeDetail({ member: m, actor, members, onClose }: { member: Member
       onClose();
     } catch { push({ title: "Couldn't change the reporting line", body: 'Please try again.', tone: 'warning' }); }
     finally { setBusy(false); }
+  }
+
+  // Admin reset: set a fresh temporary password (shown once) that the employee
+  // replaces on next sign-in. Server-side, owner/manager only.
+  async function doReset() {
+    if (resetBusy) return;
+    setResetBusy(true);
+    try {
+      const info = await adminResetPassword(m.uid);
+      setResetInfo(info);
+      setArmReset(false);
+      push({ title: 'Password reset', body: `${m.name} has a new temporary password. Hand it over securely.`, tone: 'success' });
+    } catch (e) {
+      const code = (e as { code?: string })?.code ?? '';
+      const body = code.includes('failed-precondition') ? `${m.name} has no sign-in account yet.`
+        : code.includes('permission-denied') ? 'Only an owner or manager can do this.'
+          : 'Please try again in a minute.';
+      push({ title: "Couldn't reset the password", body, tone: 'warning' });
+    } finally { setResetBusy(false); }
+  }
+
+  // Alternative: email the employee a self-service reset link instead of handing
+  // over a temp password.
+  async function emailResetLink() {
+    if (resetBusy) return;
+    setResetBusy(true);
+    try {
+      await sendPasswordResetEmail(auth, m.email);
+      push({ title: 'Reset link sent', body: `A password-reset email is on its way to ${m.email}.`, tone: 'success' });
+    } catch {
+      push({ title: "Couldn't send the link", body: 'Please try again in a minute.', tone: 'warning' });
+    } finally { setResetBusy(false); }
   }
 
   async function saveTerms() {
@@ -582,6 +621,31 @@ function EmployeeDetail({ member: m, actor, members, onClose }: { member: Member
       {seesMoney && (
         <Field label="Monthly salary (₹)" hint="Used for payroll and printed on the joining letter">
           <TextInput type="number" value={salary} onChange={(e) => setSalary(e.target.value)} placeholder="25000" />
+        </Field>
+      )}
+
+      {/* Admin password reset — owner/manager only, and never the owner account
+          (it recovers itself through the emailed link). */}
+      {isAdminActor && m.role !== 'owner' && (
+        <Field label="Sign-in & security" hint="If they're locked out, reset their password. They set their own again on next sign-in.">
+          {resetInfo ? (
+            <div className="space-y-2 rounded-lg bg-amber-50 p-3 ring-1 ring-inset ring-amber-100">
+              <p className="text-[11px] font-semibold text-amber-800">New temporary password — shown once. Send it to {m.name} over WhatsApp or in person; they'll set their own on next sign-in.</p>
+              <CopyRow label="Email" value={resetInfo.email || m.email} />
+              <CopyRow label="Temporary password" value={resetInfo.tempPassword} mono />
+            </div>
+          ) : armReset ? (
+            <div className="flex flex-wrap items-center gap-2 rounded-lg bg-rose-50 p-3 ring-1 ring-inset ring-rose-100">
+              <span className="text-xs font-semibold text-rose-800">Replace {m.name}'s password with a new temporary one?</span>
+              <Button size="sm" onClick={() => void doReset()} disabled={resetBusy}><KeyRound size={13} /> {resetBusy ? 'Resetting…' : 'Yes, reset'}</Button>
+              <Button size="sm" variant="secondary" onClick={() => setArmReset(false)} disabled={resetBusy}>Cancel</Button>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button size="sm" variant="secondary" onClick={() => setArmReset(true)}><KeyRound size={13} /> Reset password</Button>
+              <Button size="sm" variant="secondary" onClick={() => void emailResetLink()} disabled={resetBusy}><Mail size={13} /> Email reset link</Button>
+            </div>
+          )}
         </Field>
       )}
 

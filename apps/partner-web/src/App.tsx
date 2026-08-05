@@ -1,5 +1,6 @@
 import { Route, Routes, Navigate } from 'react-router-dom';
 import { Login } from './routes/partner/Login.js';
+import { AuthAction } from './routes/partner/AuthAction.js';
 import { Overview } from './routes/partner/Overview.js';
 import { Trips } from './routes/partner/Trips.js';
 import { Tours } from './routes/partner/Tours.js';
@@ -41,8 +42,17 @@ function Splash() {
   );
 }
 
+/** True when the URL is a Firebase email-action link (password reset / email
+ *  verification). These must render before the auth gate — the person is signed
+ *  out when they click the link in their inbox. */
+function isAuthActionPath(): boolean {
+  return window.location.pathname.replace(/\/+$/, '').endsWith('/auth/action');
+}
+
 export function App() {
   const { status, member } = useAuth();
+
+  if (isAuthActionPath()) return <AuthAction />;
 
   if (status === 'loading') return <Splash />;
   if (status !== 'ready' || !member) return <Login />;

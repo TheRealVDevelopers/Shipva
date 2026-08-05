@@ -6,7 +6,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   onAuthStateChanged, signInWithEmailAndPassword, signOut, updatePassword,
-  EmailAuthProvider, reauthenticateWithCredential, type User,
+  sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential, type User,
 } from 'firebase/auth';
 import { auth } from '../firebase.js';
 import {
@@ -21,6 +21,8 @@ interface AuthApi {
   member: Member | null;
   signIn: (email: string, password: string) => Promise<void>;
   signOutUser: () => Promise<void>;
+  /** Email a secure password-reset link (Forgot Password flow). */
+  sendReset: (email: string) => Promise<void>;
   /** Set a new password (first-login flow); clears the mustSetPassword flag. */
   setInitialPassword: (newPassword: string) => Promise<void>;
   /** Change password with re-authentication (from Profile). */
@@ -61,6 +63,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOutUser = useCallback(async () => { await signOut(auth); }, []);
 
+  // Fire Firebase's password-reset email. No ActionCodeSettings/continue URL is
+  // passed on purpose: a continue URL must sit on an Authorized Domain, and an
+  // unconfigured one would make this throw. The branded reset page is wired up
+  // instead through the console's "custom action URL" (see AuthAction).
+  const sendReset = useCallback(async (email: string) => {
+    await sendPasswordResetEmail(auth, email.trim());
+  }, []);
+
   const setInitialPassword = useCallback(async (newPassword: string) => {
     if (!auth.currentUser || !member) throw new Error('not signed in');
     await updatePassword(auth.currentUser, newPassword);
@@ -85,8 +95,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<AuthApi>(() => ({
-    status, user, member, signIn, signOutUser, setInitialPassword, changePassword, refreshMember,
-  }), [status, user, member, signIn, signOutUser, setInitialPassword, changePassword, refreshMember]);
+    status, user, member, signIn, signOutUser, sendReset, setInitialPassword, changePassword, refreshMember,
+  }), [status, user, member, signIn, signOutUser, sendReset, setInitialPassword, changePassword, refreshMember]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

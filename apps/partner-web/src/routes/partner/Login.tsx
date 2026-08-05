@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Mail, Lock, ArrowRight, ClipboardList, Users, Wallet, KeyRound, ShieldAlert, LogOut, BookOpen } from 'lucide-react';
+import { Mail, Lock, ArrowRight, ArrowLeft, ClipboardList, Users, Wallet, KeyRound, ShieldAlert, LogOut, BookOpen, MailCheck } from 'lucide-react';
 import { LogoMark } from '../../components/art.js';
 import { BRAND } from '../../lib/brand.js';
 import { useAuth } from '../../lib/auth.js';
@@ -46,6 +46,7 @@ function SignIn() {
   const [password, setPassword] = useState('');
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
+  const [forgot, setForgot] = useState(false);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -54,6 +55,8 @@ function SignIn() {
     catch (ex) { setErr(authError(ex)); }
     finally { setBusy(false); }
   }
+
+  if (forgot) return <ForgotPassword presetEmail={email} onBack={() => setForgot(false)} />;
 
   return (
     <form onSubmit={submit}>
@@ -69,7 +72,11 @@ function SignIn() {
           </div>
         </label>
         <label className="block">
-          <span className="text-xs font-bold text-neutral-700">Password</span>
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-neutral-700">Password</span>
+            <button type="button" onClick={() => { setErr(''); setForgot(true); }}
+              className="text-[11px] font-bold text-primary-600 hover:text-primary-700">Forgot password?</button>
+          </div>
           <div className="relative mt-1">
             <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
             <input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••"
@@ -87,6 +94,79 @@ function SignIn() {
         className="mt-3 flex items-center justify-center gap-1.5 text-center text-xs font-bold text-primary-600 hover:text-primary-700">
         <BookOpen size={13} /> Read the user guide — no login needed
       </a>
+    </form>
+  );
+}
+
+/** Forgot Password — emails a secure Sarva Express reset link. The success
+ *  message is deliberately the same whether or not the address is on file, so a
+ *  stranger can't use this to discover who has an account (email enumeration). */
+function ForgotPassword({ presetEmail, onBack }: { presetEmail: string; onBack: () => void }) {
+  const { sendReset } = useAuth();
+  const [email, setEmail] = useState(presetEmail);
+  const [sent, setSent] = useState(false);
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setErr(''); setBusy(true);
+    try {
+      await sendReset(email);
+      setSent(true);
+    } catch (ex) {
+      const code = (ex as { code?: string })?.code ?? '';
+      // Only surface faults the user can act on. "User not found" (and anything
+      // else) falls through to the same "we've sent it" screen — never reveal
+      // whether an address is registered.
+      if (code.includes('invalid-email')) setErr('That email address looks invalid.');
+      else if (code.includes('missing-email')) setErr('Please enter your email address.');
+      else if (code.includes('too-many-requests')) setErr('Too many attempts. Please wait a minute and try again.');
+      else if (code.includes('network')) setErr('Network error — check your connection.');
+      else setSent(true);
+    } finally { setBusy(false); }
+  }
+
+  if (sent) {
+    return (
+      <div>
+        <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700"><MailCheck size={20} /></div>
+        <h1 className="text-xl font-extrabold text-neutral-900">Check your email</h1>
+        <p className="mt-2 text-sm text-neutral-600">
+          If <span className="font-semibold text-neutral-800">{email.trim()}</span> is registered with {BRAND.name}, a secure
+          password-reset link is on its way. Open it, choose a new password, and sign straight back in.
+        </p>
+        <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-[11px] text-amber-800 ring-1 ring-inset ring-amber-100">
+          It can take a minute to arrive. If you don't see it, check your spam or promotions folder for a mail from {BRAND.name}.
+        </p>
+        <button type="button" onClick={onBack} className="mt-6 flex items-center justify-center gap-1.5 text-sm font-bold text-primary-600 hover:text-primary-700">
+          <ArrowLeft size={14} /> Back to sign in
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <form onSubmit={submit}>
+      <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-primary-100 text-primary-700"><KeyRound size={20} /></div>
+      <h1 className="text-xl font-extrabold text-neutral-900">Forgot your password?</h1>
+      <p className="mt-1 text-sm text-neutral-500">Enter your registered email and we'll send you a secure reset link.</p>
+      <label className="mt-6 block">
+        <span className="text-xs font-bold text-neutral-700">Email</span>
+        <div className="relative mt-1">
+          <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
+          <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="username" placeholder="you@company.com" autoFocus
+            className="w-full rounded-lg border border-neutral-200 bg-neutral-50 pl-9 pr-3 py-2.5 text-sm outline-none focus:border-primary-400 focus:bg-white" />
+        </div>
+      </label>
+      {err && <p className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">{err}</p>}
+      <button type="submit" disabled={busy || !email.trim()}
+        className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-primary-500 py-3 text-sm font-extrabold text-white transition-colors hover:bg-primary-600 disabled:opacity-50">
+        {busy ? 'Sending…' : <>Send reset link <ArrowRight size={15} /></>}
+      </button>
+      <button type="button" onClick={onBack} className="mt-4 flex w-full items-center justify-center gap-1.5 text-[11px] font-bold text-neutral-400 hover:text-neutral-600">
+        <ArrowLeft size={13} /> Back to sign in
+      </button>
     </form>
   );
 }
