@@ -19,6 +19,7 @@ import { canEditRecords, roleLabel } from '../../lib/roles.js';
 import { vendorNamesOf, driversForVendor, trucksForVendor } from '../../lib/vendors.js';
 import { Badge } from '../../components/ui/Badge.js';
 import { vridHolder, updateTourLegs } from '../../lib/tours.js';
+import { stopControls } from '../../lib/board.js';
 import { exportAmazonSheet } from '../../lib/exportAmazonSheet.js';
 import { exportRunHistory } from '../../lib/exportRuns.js';
 import { exportAmazonTemplate } from '../../lib/exportAmazonTemplate.js';
@@ -1315,32 +1316,40 @@ function LegUpdate({ tour, leg, index, multi, expanded, onToggle, allStops, onSt
           <ol className="relative">
             {leg.stops.map((s, si) => {
               const inDone = !!s.actualArrival, outDone = !!s.actualDeparture;
+              // Every stop is checked in and out on its own — the client runs
+              // stops out of order, and a POC updating HKA3 late must not block
+              // TBN8. So the buttons are gated only by THIS stop's own state.
+              const { canCheckIn, canCheckOut } = stopControls(s);
               const globalIdx = allStops.indexOf(s);
-              const current = !outDone && (globalIdx === 0 || !!allStops[globalIdx - 1]?.actualDeparture);
+              // The old sequential cursor is kept for the "Now" cue only, so one
+              // stop still reads as the live one; it no longer gates any button.
+              const frontier = !outDone && (globalIdx === 0 || !!allStops[globalIdx - 1]?.actualDeparture);
               return (
                 <li key={si} className="relative flex gap-3 pb-4 last:pb-0">
                   {si < leg.stops.length - 1 && <span className="absolute left-[13px] top-6 h-full w-0.5" style={{ background: outDone ? '#067D62' : '#D5D9D9' }} />}
-                  <span className="z-10 flex h-[27px] w-[27px] shrink-0 items-center justify-center rounded-full text-white ring-4 ring-white" style={{ background: outDone ? '#067D62' : current ? INK : '#c3c9cf' }}>
+                  <span className="z-10 flex h-[27px] w-[27px] shrink-0 items-center justify-center rounded-full text-white ring-4 ring-white" style={{ background: outDone ? '#067D62' : inDone ? ORANGE : frontier ? INK : '#c3c9cf' }}>
                     {outDone ? <Check size={15} /> : <span className="font-mono text-[11px] font-black">{si + 1}</span>}
                   </span>
                   <div className="min-w-0 flex-1 pt-0.5">
                     <div className="flex flex-wrap items-center gap-2 text-sm font-bold" style={{ color: INK }}>
                       <span className="font-mono">{s.name}</span>
-                      {current && !outDone && <span className="rounded-full px-2 py-0.5 text-[10px] font-extrabold" style={{ background: '#FFF3E0', color: '#B15C00' }}>Now</span>}
+                      {frontier && !inDone && <span className="rounded-full px-2 py-0.5 text-[10px] font-extrabold" style={{ background: '#FFF3E0', color: '#B15C00' }}>Now</span>}
+                      {inDone && !outDone && <span className="rounded-full px-2 py-0.5 text-[10px] font-extrabold" style={{ background: '#FFF3E0', color: '#B15C00' }}>In progress</span>}
                       {late(s) && <span className="rounded-full px-2 py-0.5 text-[10px] font-extrabold" style={{ background: '#FCE9EC', color: '#B12704' }}>Late</span>}
                       {s.mapUrl && <a href={s.mapUrl} target="_blank" rel="noreferrer" className="text-[11px] font-bold" style={{ color: '#007185' }}>Map</a>}
                     </div>
                     <div className="mt-1 grid grid-cols-2 gap-2 text-[11px]">
                       <div>
                         <div className="text-neutral-400">Arrival · plan {fmtDTShort(s.arrivalAt)}</div>
-                        {s.actualArrival ? <div className="font-bold" style={{ color: '#067D62' }}>✓ In {fmtClock(s.actualArrival)}</div>
-                          : current ? <button onClick={() => onStamp(si, 'actualArrival')} className="mt-0.5 inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-bold text-white" style={{ background: INK }}><LogIn size={11} /> Check in</button>
-                            : <div className="text-neutral-300">—</div>}
+                        {/* `?? 0` is unreachable — canCheckIn is false only once
+                            actualArrival is stamped; it just satisfies the type. */}
+                        {!canCheckIn ? <div className="font-bold" style={{ color: '#067D62' }}>✓ In {fmtClock(s.actualArrival ?? 0)}</div>
+                          : <button onClick={() => onStamp(si, 'actualArrival')} className="mt-0.5 inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-bold text-white" style={{ background: INK }}><LogIn size={11} /> Check in</button>}
                       </div>
                       <div>
                         <div className="text-neutral-400">Departure · plan {fmtDTShort(s.departureAt)}</div>
                         {s.actualDeparture ? <div className="font-bold" style={{ color: '#067D62' }}>✓ Out {fmtClock(s.actualDeparture)}</div>
-                          : inDone ? <button onClick={() => onStamp(si, 'actualDeparture')} className="mt-0.5 inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-bold" style={{ background: ORANGE, color: INK }}><LogOut size={11} /> Check out</button>
+                          : canCheckOut ? <button onClick={() => onStamp(si, 'actualDeparture')} className="mt-0.5 inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-bold" style={{ background: ORANGE, color: INK }}><LogOut size={11} /> Check out</button>
                             : <div className="text-neutral-300">—</div>}
                       </div>
                     </div>

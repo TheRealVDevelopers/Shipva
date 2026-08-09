@@ -27,6 +27,28 @@ export interface BoardStop {
   actualDeparture?: number | undefined;
 }
 
+/**
+ * Which check-in/out controls a stop offers.
+ *
+ * Each stop is checked in and out **on its own**. The client's crews work stops
+ * out of order and update late, so a POC who has not yet checked in at stop 1
+ * must still be able to check in at stop 3 — an earlier build gated check-in to
+ * a single cursor stop (the first undeparted stop across every VRID), which
+ * left every other stop showing a dash and nothing to press.
+ *
+ * The only ordering kept is within one stop: you cannot check OUT of a stop you
+ * never checked into, because a departure with no arrival has no meaning and
+ * would export as a blank arrival time.
+ */
+export function stopControls(s: Pick<BoardStop, 'actualArrival' | 'actualDeparture'>): {
+  canCheckIn: boolean; canCheckOut: boolean;
+} {
+  return {
+    canCheckIn: !s.actualArrival,
+    canCheckOut: !!s.actualArrival && !s.actualDeparture,
+  };
+}
+
 /** A run on the board, whether it came from a tour or a trip. */
 export interface BoardItem {
   kind: 'tour' | 'trip';
