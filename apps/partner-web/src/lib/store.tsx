@@ -553,6 +553,7 @@ interface StoreApi extends StoreShape {
   addSavedPoint: (p: SavedPoint) => void;
   addInvoice: (i: Omit<Invoice, 'no' | 'gstPaise' | 'totalPaise' | 'id'> & { gstRate?: number }) => void;
   markInvoicePaid: (no: string, mis?: Partial<Invoice>) => void;
+  updateInvoice: (no: string, patch: Partial<Invoice>) => void;
   addExpense: (e: Omit<Expense, 'id'>) => void;
   addFuelLog: (f: Omit<FuelLog, 'id'>) => void;
   addExpenseCategory: (name: string) => void;
@@ -817,12 +818,28 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const addInvoice = useCallback((i: Omit<Invoice, 'no' | 'gstPaise' | 'totalPaise' | 'id'> & { gstRate?: number }) => {
-    const gst = Math.round(i.basePaise * ((i.gstRate ?? 18) / 100));
+    const { gstRate, ...rest } = i;
+    const gst = Math.round(i.basePaise * ((gstRate ?? 18) / 100));
+    // Spread the row, then pin the computed fields. This used to name each
+    // column it wrote, which silently dropped every MIS field the form
+    // collected — the same whitelist drift that lost tour POD photos.
     void invoicesCol.add({
+      ...rest,
       no: nextInvoiceNo(invoicesRef.current),
-      client: i.client, date: i.date, dueDate: i.dueDate,
-      basePaise: i.basePaise, gstPaise: gst, totalPaise: i.basePaise + gst, status: i.status,
+      gstPaise: gst,
+      totalPaise: i.basePaise + gst,
     });
+  }, []);
+
+  /** Patch an MIS row by its invoice number — the vendor agreement cycle
+   *  (sent / disputed / no-dispute), settlement status and uploads. */
+  const updateInvoice = useCallback((no: string, patch: Partial<Invoice>) => {
+    const inv = invoicesRef.current.find((x) => x.no === no);
+    if (!inv?.id) return;
+    const data: Record<string, unknown> = { ...patch };
+    delete data.id; delete data.no;
+    Object.keys(data).forEach((k) => data[k] === undefined && delete data[k]);
+    void invoicesCol.update(inv.id, data);
   }, []);
 
   /** Settle an invoice. `mis` carries what the accountant recorded alongside —
@@ -977,7 +994,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     ...s, trips, tours, customers, drivers, trucks, attached,
     invoices, expenses, fuelLogs, payroll, requests,
     addTrip, updateTripStatus, updateTrip, archiveTrip, archiveTour, restoreTour,
-    advanceTrip, addSavedPoint, addInvoice, markInvoicePaid, addExpense, addFuelLog,
+    advanceTrip, addSavedPoint, addInvoice, markInvoicePaid, updateInvoice, addExpense, addFuelLog,
     addExpenseCategory, addRequest, resolveRequest, addCustomer, addDriver, addTruck,
     setDriverDocs, setTruckDocs, updateDriver, updateTruck, deleteDriver, deleteTruck,
     setCustomerAgreement, setAttachedAgreement, updateCustomer, deleteCustomer, updateAttached, deleteAttached,
@@ -986,7 +1003,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }), [s, trips, tours, customers, drivers, trucks, attached,
     invoices, expenses, fuelLogs, payroll, requests,
     addTrip, updateTripStatus, updateTrip, archiveTrip, archiveTour, restoreTour,
-    advanceTrip, addSavedPoint, addInvoice, markInvoicePaid, addExpense, addFuelLog,
+    advanceTrip, addSavedPoint, addInvoice, markInvoicePaid, updateInvoice, addExpense, addFuelLog,
     addExpenseCategory, addRequest, resolveRequest, addCustomer, addDriver, addTruck,
     setDriverDocs, setTruckDocs, updateDriver, updateTruck, deleteDriver, deleteTruck,
     setCustomerAgreement, setAttachedAgreement, updateCustomer, deleteCustomer, updateAttached, deleteAttached,

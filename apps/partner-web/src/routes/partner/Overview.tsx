@@ -89,7 +89,8 @@ export function Overview() {
     + payroll.reduce((s, p) => s + p.netPaise, 0);
   const profit = revenue - expenseTotal;
   const marginPct = revenue > 0 ? Math.round((profit / revenue) * 100) : 0;
-  const outstanding = invoices.filter((i) => i.status !== 'paid').reduce((s, i) => s + i.totalPaise, 0);
+  // A draft MIS is not committed spend, so it stays out of "outstanding".
+  const outstanding = invoices.filter((i) => i.status !== 'paid' && i.status !== 'draft').reduce((s, i) => s + i.totalPaise, 0);
   const collected = invoices.filter((i) => i.status === 'paid').reduce((s, i) => s + i.totalPaise, 0);
   const activeTrips = board.filter((i) => !inLane(i, 'Completed')).length;
   const fuelActual = fuelLogs.reduce((s, f) => s + f.costPaise, 0);
@@ -147,7 +148,7 @@ export function Overview() {
     };
   }, [trips, expenseTotal]);
 
-  const unpaid = invoices.filter((i) => i.status !== 'paid').sort((a, b) => b.totalPaise - a.totalPaise);
+  const unpaid = invoices.filter((i) => i.status !== 'paid' && i.status !== 'draft').sort((a, b) => b.totalPaise - a.totalPaise);
 
   // Live document-expiry alerts from truck & driver expiry dates (≤60 days).
   type Alert = { reg: string; doc: string; days: number };

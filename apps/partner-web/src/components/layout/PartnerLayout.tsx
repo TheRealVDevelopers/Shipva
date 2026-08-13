@@ -19,6 +19,8 @@ import { watchAllTasks, isOverdue, type Task } from '../../lib/tasks.js';
 import { BRAND } from '../../lib/brand.js';
 import { useStore } from '../../lib/store.js';
 import { dueAlerts, takeUnsent, alertTitle, alertBody, showDesktopAlert, requestAlertPermission, alertsEnabled } from '../../lib/tripAlerts.js';
+import { dueForReminder, toIso } from '../../lib/vendorMis.js';
+import { rupees } from '../../lib/format.js';
 
 /** Heartbeat that records screen-time while the tab is visible. The owner is a
  *  supervisor of the team, not a tracked worker, so we skip tracking for them. */
@@ -73,6 +75,49 @@ function useTripReminders() {
     const id = window.setInterval(tick, 60_000);
     return () => window.clearInterval(id);
   }, [status, push, navigate]);
+}
+
+/**
+ * Vendor payment due-date reminders — the client's "send automatic reminders to
+ * the accounts team on due dates".
+ *
+ * Only the people who actually settle vendors are told: owner, manager and
+ * accountant. `reminderOn` is stamped on the row once it fires, so the reminder
+ * is once per MIS per day no matter how many of them have the app open, and it
+ * survives a refresh.
+ */
+function useVendorDueReminders() {
+  const { member, status } = useAuth();
+  const { invoices, updateInvoice } = useStore();
+  const { push } = useNotify();
+  const navigate = useNavigate();
+  const seesMoney = member?.role === 'owner' || member?.role === 'manager' || member?.role === 'accountant';
+
+  const invRef = useRef(invoices);
+  invRef.current = invoices;
+
+  useEffect(() => {
+    if (status !== 'ready' || !seesMoney) return;
+    const tick = () => {
+      const todayIso = new Date().toISOString().slice(0, 10);
+      dueForReminder(invRef.current, todayIso).forEach((i) => {
+        const overdue = toIso(i.dueDate) < todayIso;
+        push({
+          title: overdue ? 'Vendor payment overdue' : 'Vendor payment due today',
+          body: `${i.client} · ${rupees(i.totalPaise)} · ${i.no}`,
+          tone: overdue ? 'warning' : 'info',
+          link: '/p/invoices',
+        });
+        // Stamp it so it doesn't fire again today, here or on anyone else's screen.
+        updateInvoice(i.no, { reminderOn: todayIso });
+      });
+    };
+    tick();
+    // Hourly is plenty for a date-based rule, and it catches a session left
+    // open across midnight.
+    const id = window.setInterval(tick, 3_600_000);
+    return () => window.clearInterval(id);
+  }, [status, seesMoney, push, navigate, updateInvoice]);
 }
 
 /**
@@ -391,6 +436,7 @@ export function PartnerLayout({ title, subtitle, children }: { title: string; su
   useActivityHeartbeat();
   useTeamTaskAlerts();
   useTripReminders();
+  useVendorDueReminders();
   return (
     <div className="flex h-screen bg-neutral-50">
       <aside className="hidden md:flex md:w-64 md:flex-col bg-primary-900 text-white">

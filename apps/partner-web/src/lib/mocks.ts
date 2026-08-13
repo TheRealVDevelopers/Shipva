@@ -228,7 +228,7 @@ export interface Trip {
 // The demo trips that used to live here were removed when the org went live —
 // real trips only. Nothing should fabricate business records.
 
-export type InvoiceStatus = 'paid' | 'pending' | 'overdue';
+export type InvoiceStatus = 'draft' | 'pending' | 'processing' | 'paid' | 'overdue';
 export interface Invoice {
   /** Firestore doc id (assigned on write); `no` is the human invoice number. */
   id?: string;
@@ -249,6 +249,44 @@ export interface Invoice {
   /** Worked figures for the billing month. */
   runKm?: number;
   extraKm?: number;
+
+  /**
+   * The billing period this MIS covers — "date range from-to". The trip count,
+   * the diesel advance and the run kilometres are all read against this window,
+   * so it has to be on the record rather than implied by the invoice date.
+   */
+  periodFrom?: string;
+  periodTo?: string;
+  /** The specific lorry this MIS is raised for, when the vendor runs several. */
+  vehicleReg?: string;
+  /**
+   * Trips in the period. `tripCount` is what the MIS bills on; `tripCountAuto`
+   * is what the system counted, kept alongside so an override is visible as an
+   * override rather than silently replacing the real figure.
+   */
+  tripCount?: number;
+  tripCountAuto?: number;
+  /** Charges the rate card cannot know about, keyed in by the accountant. */
+  tollPaise?: number;
+  otherChargesPaise?: number;
+  otherChargesNote?: string;
+  /** Diesel already advanced in the period — deducted from the payable. */
+  dieselAdvancePaise?: number;
+
+  /**
+   * Vendor agreement cycle. The MIS goes out, the vendor either disputes it (it
+   * comes back for editing and is re-sent) or accepts it with "no dispute";
+   * only then is an invoice raised against it.
+   */
+  sentToVendorOn?: string;
+  disputeOn?: string;
+  disputeNote?: string;
+  noDisputeOn?: string;
+  /** Who in Accounts processed it, and the vendor's own invoice document. */
+  processedBy?: string;
+  invoiceUrl?: string;
+  /** Last time an internal due-date reminder was raised, so it fires once a day. */
+  reminderOn?: string;
   /** Settlement, up to and including the bank reference. */
   paidOn?: string;
   paidAmountPaise?: number;
