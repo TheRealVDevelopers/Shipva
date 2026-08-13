@@ -16,6 +16,14 @@ const STYLES: Record<Variant, string> = {
 export function Button({
   variant = 'primary',
   size = 'md',
+  // Buttons default to `type="button"`, NOT the HTML default of "submit".
+  //
+  // Every Modal wraps its body in a <form>, so a plain <Button> inside one used
+  // to submit that form and close the dialog — which is why "Add rate card"
+  // threw the user back to the main page instead of opening the card form. The
+  // two buttons that genuinely submit (Modal's own Save, Settings) pass
+  // type="submit" explicitly and still win, because this is only a default.
+  type = 'button',
   children,
   className = '',
   ...rest
@@ -27,6 +35,7 @@ export function Button({
   const padding = size === 'sm' ? 'px-3 py-1.5 text-xs' : 'px-4 py-2 text-sm';
   return (
     <button
+      type={type}
       {...rest}
       className={`inline-flex items-center justify-center gap-1.5 rounded font-medium transition-colors ${padding} ${STYLES[variant]} ${className}`}
     >
