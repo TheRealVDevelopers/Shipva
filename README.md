@@ -16,6 +16,10 @@ front-end for this phase.
 > **Full Phase-1 spec:** [`docs/Transporter_OS_Spec.md`](docs/Transporter_OS_Spec.md) — the
 > authoritative reference for what to build, what to reuse, and the roadmap.
 >
+> **What the live app actually does:** [`docs/Operations_Manual.md`](docs/Operations_Manual.md) — the
+> client-facing functional manual for every screen, role and workflow in `apps/partner-web`. Keep it
+> updated in the same commit as any behaviour change it describes.
+>
 > This repo was bootstrapped from the Sarva Express operator-OS, reusing its Firebase setup,
 > Expo shell, design tokens and the `geofence`/`trackingToken` helpers. Phase 1 additionally
 > **ports operational depth** (RBAC roles, GST invoicing, payroll, trip lifecycle) from that repo.
