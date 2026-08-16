@@ -585,6 +585,8 @@ interface StoreApi extends StoreShape {
   updateTour: (id: string, patch: Partial<Tour>, log?: { action: string; detail?: string; vrid?: string }) => void;
   logTour: (id: string, action: string, opts?: { detail?: string; vrid?: string }) => void;
   reassignActiveWork: (pocUid: string, newTeamUid: string) => number;
+  /** Move an entire team's live runs from one team leader to another. */
+  transferTeamWork: (fromLeaderUid: string, toLeaderUid: string) => number;
   runPayroll: (period?: string) => void;
   addPayrollLine: (l: Omit<PayrollLine, 'id'>) => void;
   updatePayrollLine: (id: string, patch: Partial<PayrollLine>) => void;
@@ -723,6 +725,43 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     trips.forEach((t) => {
       if (t.id && t.ownerUid === pocUid && !t.archived && t.status !== 'closed' && t.leaderUid !== newTeamUid) {
         void updateTripDoc(t.id, { leaderUid: newTeamUid });
+        moved++;
+      }
+    });
+    return moved;
+  }, [tours, trips, actorName, member?.uid]);
+
+  /**
+   * Hand a WHOLE team from one team leader to another — the client's "when the
+   * team leader is changed, all assigned employees and POCs should move
+   * automatically, with the complete history".
+   *
+   * Moving the people is only half of it: every run also carries the team it
+   * belongs to. Because a run's `leaderUid` is `teamOf(owner)` — the POC's team
+   * leader, or the leader's own uid for work they hold themselves — every run
+   * belonging to that team, the leader's own included, already carries the old
+   * leader's uid. So one sweep over `leaderUid` moves the entire team's work,
+   * rather than walking each POC one at a time and missing the leader's own.
+   *
+   * Only live runs move; a finished run stays with the team that ran it, for
+   * the record. Each move is written to the run's history, so the handover is
+   * visible on the run itself and not only on the people.
+   */
+  const transferTeamWork = useCallback((fromLeaderUid: string, toLeaderUid: string): number => {
+    if (!fromLeaderUid || !toLeaderUid || fromLeaderUid === toLeaderUid) return 0;
+    let moved = 0;
+    tours.forEach((t) => {
+      if (t.id && t.leaderUid === fromLeaderUid && !t.archived && t.amzStatus !== 'COMPLETED') {
+        updateTourDoc(t.id, { leaderUid: toLeaderUid }, {
+          atMs: Date.now(), by: actorName, byUid: member?.uid ?? '',
+          action: 'Team leader changed', detail: 'Team handed to a new team leader',
+        });
+        moved++;
+      }
+    });
+    trips.forEach((t) => {
+      if (t.id && t.leaderUid === fromLeaderUid && !t.archived && t.status !== 'closed') {
+        void updateTripDoc(t.id, { leaderUid: toLeaderUid });
         moved++;
       }
     });
@@ -998,7 +1037,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     addExpenseCategory, addRequest, resolveRequest, addCustomer, addDriver, addTruck,
     setDriverDocs, setTruckDocs, updateDriver, updateTruck, deleteDriver, deleteTruck,
     setCustomerAgreement, setAttachedAgreement, updateCustomer, deleteCustomer, updateAttached, deleteAttached,
-    addStaff, addAttached, recordOwnerPayment, addTour, updateTour, logTour, reassignActiveWork, runPayroll,
+    addStaff, addAttached, recordOwnerPayment, addTour, updateTour, logTour, reassignActiveWork, transferTeamWork, runPayroll,
     addPayrollLine, updatePayrollLine, deletePayrollLine, reset,
   }), [s, trips, tours, customers, drivers, trucks, attached,
     invoices, expenses, fuelLogs, payroll, requests,
@@ -1007,7 +1046,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     addExpenseCategory, addRequest, resolveRequest, addCustomer, addDriver, addTruck,
     setDriverDocs, setTruckDocs, updateDriver, updateTruck, deleteDriver, deleteTruck,
     setCustomerAgreement, setAttachedAgreement, updateCustomer, deleteCustomer, updateAttached, deleteAttached,
-    addStaff, addAttached, recordOwnerPayment, addTour, updateTour, logTour, reassignActiveWork, runPayroll,
+    addStaff, addAttached, recordOwnerPayment, addTour, updateTour, logTour, reassignActiveWork, transferTeamWork, runPayroll,
     addPayrollLine, updatePayrollLine, deletePayrollLine, reset]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

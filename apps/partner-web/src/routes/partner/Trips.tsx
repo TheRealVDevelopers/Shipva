@@ -18,7 +18,7 @@ import {
 } from '../../lib/validate.js';
 import { isVerified, type Trip, type TripPoint } from '../../lib/mocks.js';
 import { useStore, stageOf, dieselRequestFor, requestStatusLabel, type Customer, type DelayReport, type Tour } from '../../lib/store.js';
-import { buildBoard, inLane, matches, sortForLane, isOverdue, type BoardItem, type Lane } from '../../lib/board.js';
+import { buildBoard, inLane, matches, sortForLane, isOverdue, freightOf, podAwaited, type BoardItem, type Lane } from '../../lib/board.js';
 import { ReportDelay } from '../../components/ReportDelay.js';
 import { LocationSuggest } from '../../components/LocationSuggest.js';
 import { TourOperate } from './Tours.js';
@@ -387,11 +387,35 @@ export function Trips() {
       updateTrip(i.id, startTransit ? { reports, status: 'in_transit' } : { reports });
     }
   }
-  const active = trips.filter((t) => t.status !== 'closed').length;
-  const freightTotal = trips.reduce((s, t) => s + t.freightPaise, 0);
-  // Real month-to-date count — this used to be a hardcoded demo number.
+  /**
+   * The summary tiles.
+   *
+   * These used to count `trips` only, so an operation running Amazon tours saw
+   * zeroes on every tile while the board underneath listed its runs — the
+   * client's "active trips shows zero, but trips exist". They now count the
+   * same unified board the list is built from.
+   *
+   * They also follow the filters, so changing the calendar updates them: the
+   * date window, the search box and "assigned to me" all apply. The lane tab
+   * deliberately does NOT — these tiles are the split across lanes, and
+   * narrowing them to one tab would force every other tile to zero.
+   */
   const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).getTime();
-  const tripsMtd = trips.filter((t) => (t.createdAtMs ?? 0) >= monthStart).length;
+  const inScope = useMemo(
+    () => board
+      .filter(inDateWindow)
+      .filter((i) => matches(i, q))
+      .filter((i) => !mineOnly || i.ownerUid === member?.uid),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [board, from, to, q, mineOnly, member?.uid],
+  );
+  const ranged = !!(from || to);
+  const active = inScope.filter((i) => !inLane(i, 'Completed')).length;
+  // With a date range picked, the second tile counts that range; with no range
+  // it keeps its month-to-date meaning.
+  const tripsMtd = ranged ? inScope.length : inScope.filter((i) => i.startMs >= monthStart).length;
+  const freightTotal = inScope.reduce((s, i) => s + freightOf(i), 0);
+  const podPending = inScope.filter(podAwaited).length;
   const tracked = trackId ? trips.find((t) => t.id === trackId) ?? null : null;
 
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF({ ...f, [k]: e.target.value });
@@ -545,10 +569,10 @@ export function Trips() {
     <PartnerLayout title="Trips" subtitle={isAdmin ? 'All routes across your team' : 'Your consignments & live tracking'}>
       <div className="space-y-6">
         <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <KpiCard label="Active trips" value={String(active)} hint="in progress" tone="primary" />
-          <KpiCard label="Trips · MTD" value={String(tripsMtd)} hint="this month" tone="accent" />
-          <KpiCard label="Freight billed" value={rupees(freightTotal)} hint="recent" tone="success" />
-          <KpiCard label="POD pending" value={String(trips.filter((t) => t.status === 'pod_pending').length)} hint="need proof" tone="danger" />
+          <KpiCard label="Active trips" value={String(active)} hint={ranged ? 'not completed · in range' : 'not completed'} tone="primary" />
+          <KpiCard label={ranged ? 'Trips · in range' : 'Trips · MTD'} value={String(tripsMtd)} hint={ranged ? 'selected dates' : 'this month'} tone="accent" />
+          <KpiCard label="Freight billed" value={rupees(freightTotal)} hint={ranged ? 'in range' : 'recent'} tone="success" />
+          <KpiCard label="POD pending" value={String(podPending)} hint="need proof" tone="danger" />
         </section>
 
         <Card>

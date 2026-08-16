@@ -28,6 +28,33 @@ export interface BoardStop {
 }
 
 /**
+ * Freight billed on a run, in paise.
+ *
+ * Only ordinary trips carry a freight figure. An Amazon tour is priced through
+ * the vendor's monthly rate card in the payment MIS, not per run, so it
+ * contributes nothing here — that is a real zero, not a missing number.
+ */
+export function freightOf(i: BoardItem): number {
+  if (i.kind !== 'trip') return 0;
+  return (i.source as { freightPaise?: number }).freightPaise ?? 0;
+}
+
+/**
+ * Is this run still waiting on proof of delivery?
+ *
+ * A trip says so in its status. A tour has a POD per VR ID, so it counts once
+ * any VR ID is missing one — but only after the run has left Upcoming, since a
+ * run that hasn't started yet isn't "pending POD", it simply hasn't happened.
+ */
+export function podAwaited(i: BoardItem): boolean {
+  if (i.kind === 'trip') return (i.source as { status?: string }).status === 'pod_pending';
+  if (i.lane === 'Upcoming') return false;
+  const legs = (i.source as { legs?: { ops?: { podGiven?: boolean } }[] }).legs ?? [];
+  if (legs.length === 0) return false;
+  return legs.some((l) => l.ops?.podGiven !== true);
+}
+
+/**
  * Which check-in/out controls a stop offers.
  *
  * Each stop is checked in and out **on its own**. The client's crews work stops

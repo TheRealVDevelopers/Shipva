@@ -233,6 +233,42 @@ export async function changeMemberLeader(
   });
 }
 
+/**
+ * Hand a whole team from one team leader to another.
+ *
+ * `changeMemberLeader` moves one person. This moves the team: every member
+ * reporting to `fromUid` is re-pointed at `toUid` in a single action, each with
+ * its own history entry, so nobody is left behind and the record on each person
+ * still says exactly when they moved and who moved them — the client's "all
+ * assigned employees and POCs should move automatically, with the complete
+ * history".
+ *
+ * The runs are moved separately by `transferTeamWork` in the store (it holds
+ * the trip and tour lists); the count it moved is passed in so each person's
+ * history entry carries the size of the handover.
+ *
+ * Returns the members that moved.
+ */
+export async function transferTeam(
+  members: Member[], fromUid: string, toUid: string, by: string, movedRuns: number, toName?: string,
+): Promise<Member[]> {
+  if (!fromUid || fromUid === toUid) return [];
+  const moving = members.filter((m) => m.leaderUid === fromUid);
+  const atMs = Date.now();
+  await Promise.all(moving.map((m) => {
+    const change: LeaderChange = {
+      atMs, by, movedCount: movedRuns,
+      fromUid,
+      ...(toUid ? { toUid, toName: toName ?? '' } : {}),
+    };
+    return updateDoc(doc(db, 'orgMembers', m.uid), {
+      leaderUid: toUid || '',
+      leaderHistory: arrayUnion(change),
+    });
+  }));
+  return moving;
+}
+
 /** Create the owner's own member doc on first sign-in (allowed by rules for the bootstrap email). */
 export async function bootstrapOwner(uid: string, email: string): Promise<Member> {
   const m = {

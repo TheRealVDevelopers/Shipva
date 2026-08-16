@@ -12,7 +12,7 @@ import { useAuth } from '../../lib/auth.js';
 import { roleLabel, defaultPages, type Role } from '../../lib/roles.js';
 import {
   watchMembers, inviteMember, updateMember, deleteMember, releaseOrphanLogin, changeMemberLeader, pagesForRole,
-  missingProfile, profileComplete, isActivated, adminResetPassword,
+  missingProfile, profileComplete, isActivated, adminResetPassword, transferTeam,
   canManageMember, canDeleteMember, ASSIGNABLE_PAGES, type Member,
 } from '../../lib/members.js';
 import { sendPasswordResetEmail } from 'firebase/auth';
@@ -426,7 +426,7 @@ function EditMember({ member, onClose, isSelf, adminEditor }: { member: Member; 
  */
 function EmployeeDetail({ member: m, actor, members, onClose }: { member: Member; actor: Member; members: Member[]; onClose: () => void }) {
   const { push } = useNotify();
-  const { reassignActiveWork } = useStore();
+  const { reassignActiveWork, transferTeamWork } = useStore();
   const [designation, setDesignation] = useState(m.designation ?? '');
   const [joinedOn, setJoinedOn] = useState(m.joinedOn ?? '');
   const [salary, setSalary] = useState(m.monthlySalaryPaise ? String(m.monthlySalaryPaise / 100) : '');
@@ -438,6 +438,9 @@ function EmployeeDetail({ member: m, actor, members, onClose }: { member: Member
   const [resetInfo, setResetInfo] = useState<{ tempPassword: string; email: string } | null>(null);
   const [armReset, setArmReset] = useState(false);
   const [resetBusy, setResetBusy] = useState(false);
+  // Whole-team handover: the leader taking over, and the arm/confirm step.
+  const [handTo, setHandTo] = useState('');
+  const [armHand, setArmHand] = useState(false);
 
   const gaps = missingProfile(m);
   const ready = gaps.length === 0;
@@ -451,6 +454,13 @@ function EmployeeDetail({ member: m, actor, members, onClose }: { member: Member
   const isPoc = m.role === 'supervisor' || m.role === 'accountant';
   const canMoveTeam = isAdminActor && isPoc;
   const teamLeaders = members.filter((x) => x.role === 'team_leader');
+  // Handing over a whole team: only offered on a team leader, and only to a
+  // different team leader. The people under them and their live runs move
+  // together — see transferTeam / transferTeamWork.
+  const isLeader = m.role === 'team_leader';
+  const canHandOver = isAdminActor && isLeader;
+  const myTeam = members.filter((x) => x.leaderUid === m.uid);
+  const otherLeaders = teamLeaders.filter((x) => x.uid !== m.uid);
   const nameOf = (uid?: string) => members.find((x) => x.uid === uid)?.name ?? '';
   const currentLeaderName = m.leaderUid ? (nameOf(m.leaderUid) || 'Team leader') : 'Owner (no team leader)';
 
@@ -473,6 +483,37 @@ function EmployeeDetail({ member: m, actor, members, onClose }: { member: Member
       onClose();
     } catch { push({ title: "Couldn't change the reporting line", body: 'Please try again.', tone: 'warning' }); }
     finally { setBusy(false); }
+  }
+
+  /**
+   * Hand this team leader's whole team to another leader: the people, their
+   * live runs, and this leader's own live runs, in one action.
+   *
+   * The runs move first. If the people moved first and the run sweep then
+   * failed, the runs would still carry the old leader's uid while their POCs
+   * pointed at the new one — the new leader would see the team but not their
+   * work, which is exactly the "access still not working" fault.
+   */
+  async function handOverTeam() {
+    if (!canHandOver || busy) return;
+    const to = handTo.trim();
+    if (!to || to === m.uid) return;
+    setBusy(true);
+    try {
+      const movedRuns = transferTeamWork(m.uid, to);
+      const movedPeople = await transferTeam(
+        members, m.uid, to, `${actor.name} · ${roleLabel(actor.role)}`, movedRuns, nameOf(to));
+      push({
+        title: 'Team handed over',
+        body: `${movedPeople.length} employee${movedPeople.length === 1 ? '' : 's'} and `
+          + `${movedRuns} active run${movedRuns === 1 ? '' : 's'} moved from ${m.name} to ${nameOf(to)}.`,
+        tone: 'success',
+      });
+      setArmHand(false);
+      onClose();
+    } catch {
+      push({ title: "Couldn't hand over the team", body: 'Please try again.', tone: 'warning' });
+    } finally { setBusy(false); }
   }
 
   // Admin reset: set a fresh temporary password (shown once) that the employee
@@ -582,6 +623,52 @@ function EmployeeDetail({ member: m, actor, members, onClose }: { member: Member
               <UserCog size={13} /> {busy ? 'Moving…' : 'Change'}
             </Button>
           </div>
+        </Field>
+      )}
+
+      {/* Hand the whole team to another leader — the client's team-leader
+          transfer. Everyone under them, and every live run, moves together. */}
+      {canHandOver && (
+        <Field label="Team handover"
+          hint="Moves every employee under this leader — and all their live trips &amp; tours — to another team leader.">
+          {otherLeaders.length === 0 ? (
+            <p className="rounded-lg bg-neutral-50 px-3 py-2 text-[11px] text-neutral-500 ring-1 ring-inset ring-neutral-200">
+              There is no other team leader to hand this team to. Make someone else a Team Leader first.
+            </p>
+          ) : armHand ? (
+            <div className="space-y-2 rounded-lg bg-amber-50 p-3 ring-1 ring-inset ring-amber-100">
+              <p className="text-xs font-semibold text-amber-900">
+                Move <b>{myTeam.length}</b> employee{myTeam.length === 1 ? '' : 's'} and all live runs from <b>{m.name}</b> to <b>{nameOf(handTo) || 'the new leader'}</b>?
+              </p>
+              {myTeam.length > 0 && (
+                <p className="text-[11px] text-amber-800">{myTeam.map((x) => x.name).join(', ')}</p>
+              )}
+              <p className="text-[11px] text-amber-800">
+                Finished runs stay with {m.name}, for the record. Every move is written to each person&rsquo;s history.
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button size="sm" onClick={() => void handOverTeam()} disabled={busy}>
+                  <UserCog size={13} /> {busy ? 'Moving…' : 'Yes, hand over'}
+                </Button>
+                <Button size="sm" variant="secondary" onClick={() => setArmHand(false)} disabled={busy}>Cancel</Button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center gap-2">
+              <Select value={handTo} onChange={(e) => setHandTo(e.target.value)} className="min-w-[14rem] flex-1">
+                <option value="">Hand this team to…</option>
+                {otherLeaders.map((tl) => <option key={tl.uid} value={tl.uid}>{tl.name}</option>)}
+              </Select>
+              <Button size="sm" variant="secondary" onClick={() => setArmHand(true)} disabled={!handTo.trim()}>
+                <UserCog size={13} /> Hand over team
+              </Button>
+            </div>
+          )}
+          <p className="mt-1 text-[11px] text-neutral-500">
+            {myTeam.length === 0
+              ? 'No employees report to this leader right now — only their own live runs would move.'
+              : `${myTeam.length} employee${myTeam.length === 1 ? '' : 's'} currently report${myTeam.length === 1 ? 's' : ''} to ${m.name}.`}
+          </p>
         </Field>
       )}
 
