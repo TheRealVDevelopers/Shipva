@@ -94,12 +94,42 @@ function fromSnap(id: string, d: Record<string, unknown>): Tour {
 /** Live subscription, role-scoped: admins see all; a Team Leader sees their
  *  whole team; a POC sees only their own. */
 export function watchToursFs(scope: Scope, cb: (tours: Tour[]) => void): () => void {
-  const q = isAdmin(scope.role) ? query(collection(db, 'orgTours'))
-    : scope.role === 'team_leader' ? query(collection(db, 'orgTours'), where('leaderUid', '==', scope.uid))
-      : query(collection(db, 'orgTours'), where('ownerUid', '==', scope.uid));
-  return onSnapshot(q, (qs) => {
-    cb(qs.docs.map((d) => fromSnap(d.id, d.data())).sort((a, b) => (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0)));
-  });
+  const sorted = (list: Tour[]) => list.sort((a, b) => (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0));
+  const read = (qs: { docs: { id: string; data: () => Record<string, unknown> }[] }) =>
+    qs.docs.map((d) => fromSnap(d.id, d.data()));
+
+  if (isAdmin(scope.role)) {
+    return onSnapshot(query(collection(db, 'orgTours')), (qs) => cb(sorted(read(qs))));
+  }
+
+  /**
+   * A team leader sees their team's work AND anything they hold themselves.
+   *
+   * This used to match `leaderUid` only, which quietly hid a leader's own
+   * routes: a run carries the team it was created in, so a POC promoted to Team
+   * Leader kept runs pointing at their FORMER leader and, as a leader, could no
+   * longer see them at all — an empty board while the work plainly existed.
+   *
+   * Two listeners merged rather than one or() query: an or() across two fields
+   * can demand a composite index and makes the rules harder to reason about,
+   * and both would ship untested against the live project.
+   */
+  if (scope.role === 'team_leader') {
+    const byTeam = new Map<string, Tour>();
+    const byOwn = new Map<string, Tour>();
+    const emit = () => cb(sorted([...new Map([...byTeam, ...byOwn]).values()]));
+    const stopTeam = onSnapshot(
+      query(collection(db, 'orgTours'), where('leaderUid', '==', scope.uid)),
+      (qs) => { byTeam.clear(); read(qs).forEach((t) => t.id && byTeam.set(t.id, t)); emit(); });
+    const stopOwn = onSnapshot(
+      query(collection(db, 'orgTours'), where('ownerUid', '==', scope.uid)),
+      (qs) => { byOwn.clear(); read(qs).forEach((t) => t.id && byOwn.set(t.id, t)); emit(); });
+    return () => { stopTeam(); stopOwn(); };
+  }
+
+  return onSnapshot(
+    query(collection(db, 'orgTours'), where('ownerUid', '==', scope.uid)),
+    (qs) => cb(sorted(read(qs))));
 }
 
 const vridKey = (vrid: string) => vrid.trim().toUpperCase();

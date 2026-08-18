@@ -374,6 +374,7 @@ function PageToggles({ adminRole, pages, onToggle }: { adminRole: boolean; pages
 
 function EditMember({ member, onClose, isSelf, adminEditor }: { member: Member; onClose: () => void; isSelf: boolean; adminEditor: boolean }) {
   const { push } = useNotify();
+  const { reassignActiveWork } = useStore();
   const [role, setRoleState] = useState<Role>(member.role);
   const [pages, setPages] = useState<FeatureId[]>(member.pages === 'all' ? defaultPages('supervisor') : member.pages.filter((p) => p !== 'overview'));
   const [phone, setPhone] = useState(member.phone ?? '');
@@ -386,8 +387,28 @@ function EditMember({ member, onClose, isSelf, adminEditor }: { member: Member; 
   async function save() {
     setBusy(true);
     try {
-      await updateMember(member.uid, { role, pages: pagesForRole(role, pages), phone });
-      push({ title: 'Access updated', body: `${member.name}'s permissions saved.`, tone: 'success' });
+      /**
+       * Promoting someone to Team Leader has to re-home them, not just relabel
+       * them. A leader reports to the owner, so their old reporting line is
+       * cleared; and a run carries the team it was created in, so their
+       * in-flight work is brought onto their own team. Without this they stayed
+       * filed under the leader they used to report to, and their runs stayed
+       * with that leader's team — the promoted leader opened Trips to an empty
+       * board while their routes plainly existed.
+       */
+      const becameLeader = role === 'team_leader' && member.role !== 'team_leader';
+      const moved = becameLeader ? reassignActiveWork(member.uid, member.uid) : 0;
+      await updateMember(member.uid, {
+        role, pages: pagesForRole(role, pages), phone,
+        ...(becameLeader ? { leaderUid: '' } : {}),
+      });
+      push({
+        title: 'Access updated',
+        body: becameLeader
+          ? `${member.name} is now a Team Leader${moved ? ` · ${moved} active run${moved === 1 ? '' : 's'} moved onto their own team` : ''}.`
+          : `${member.name}'s permissions saved.`,
+        tone: 'success',
+      });
       onClose();
     } catch { push({ title: "Couldn't save", body: 'Please try again.', tone: 'warning' }); }
     finally { setBusy(false); }

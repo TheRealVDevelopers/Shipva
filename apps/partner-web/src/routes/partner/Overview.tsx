@@ -279,7 +279,12 @@ export function Overview() {
             <StatCard label="Revenue" value={inr(revenue)} icon={<IndianRupee size={16} />} tone="primary" hint="gross freight" />
             <StatCard label="Net profit" value={inr(profit)} icon={<TrendingUp size={16} />} tone="success" hint={`${marginPct}% margin`} />
             <StatCard label="Outstanding" value={inr(outstanding)} icon={<Wallet size={16} />} tone="danger" hint="receivables" />
-            <StatCard label="Active trips" value={String(activeTrips)} icon={<Navigation size={16} />} tone="accent" hint={`${board.length} total runs`} />
+            {/* Deliberately NOT date-filtered: the dashboard reports every run
+                still open, whenever it is scheduled. The Trips page counts the
+                dates you pick there, so the two figures differ by design — the
+                hint says so, because a bare number next to a filtered board
+                reads as a miscount. */}
+            <StatCard label="Active trips" value={String(activeTrips)} icon={<Navigation size={16} />} tone="accent" hint={`all open runs · ${board.length} total`} />
           </section>
         )}
 

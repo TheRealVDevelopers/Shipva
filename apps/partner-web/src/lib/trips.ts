@@ -43,12 +43,32 @@ function fromSnap(id: string, d: Record<string, unknown>): Trip {
 /** Live subscription, scoped by role: admins see all; a Team Leader sees their
  *  whole team (leaderUid == them); a POC/supervisor sees only their own. */
 export function watchTrips(scope: Scope, cb: (trips: Trip[]) => void): () => void {
-  const q = isAdmin(scope.role) ? query(collection(db, 'orgTrips'))
-    : scope.role === 'team_leader' ? query(collection(db, 'orgTrips'), where('leaderUid', '==', scope.uid))
-      : query(collection(db, 'orgTrips'), where('ownerUid', '==', scope.uid));
-  return onSnapshot(q, (qs) => {
-    cb(qs.docs.map((d) => fromSnap(d.id, d.data())).sort((a, b) => (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0)));
-  });
+  const sorted = (list: Trip[]) => list.sort((a, b) => (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0));
+  const read = (qs: { docs: { id: string; data: () => Record<string, unknown> }[] }) =>
+    qs.docs.map((d) => fromSnap(d.id, d.data()));
+
+  if (isAdmin(scope.role)) {
+    return onSnapshot(query(collection(db, 'orgTrips')), (qs) => cb(sorted(read(qs))));
+  }
+
+  // Same fix as watchToursFs: a leader's own trips carry the team they were
+  // created in, so matching `leaderUid` alone hid them after a promotion.
+  if (scope.role === 'team_leader') {
+    const byTeam = new Map<string, Trip>();
+    const byOwn = new Map<string, Trip>();
+    const emit = () => cb(sorted([...new Map([...byTeam, ...byOwn]).values()]));
+    const stopTeam = onSnapshot(
+      query(collection(db, 'orgTrips'), where('leaderUid', '==', scope.uid)),
+      (qs) => { byTeam.clear(); read(qs).forEach((t) => t.id && byTeam.set(t.id, t)); emit(); });
+    const stopOwn = onSnapshot(
+      query(collection(db, 'orgTrips'), where('ownerUid', '==', scope.uid)),
+      (qs) => { byOwn.clear(); read(qs).forEach((t) => t.id && byOwn.set(t.id, t)); emit(); });
+    return () => { stopTeam(); stopOwn(); };
+  }
+
+  return onSnapshot(
+    query(collection(db, 'orgTrips'), where('ownerUid', '==', scope.uid)),
+    (qs) => cb(sorted(read(qs))));
 }
 
 /** LR is a short, readable, unique-enough receipt number. */
