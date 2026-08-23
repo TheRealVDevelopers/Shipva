@@ -31,7 +31,7 @@ import { printEmployeeJoiningLetter } from '../../lib/hrDocs.js';
 import { DocPreview } from '../../components/ui/DocumentUpload.js';
 import { useStore } from '../../lib/store.js';
 import { teamFix } from '../../lib/board.js';
-import { teamOf } from '../../lib/members.js';
+import { teamOf, leaderHasStaleLine } from '../../lib/members.js';
 
 const ROLE_TONE: Record<Role, BadgeTone> = { owner: 'success', manager: 'primary', team_leader: 'warning', supervisor: 'info', accountant: 'accent' };
 const EMPTY = { name: '', email: '', phone: '', role: 'supervisor' as Role, pages: defaultPages('supervisor'), leaderUid: '' };
@@ -71,6 +71,10 @@ export function Team() {
     const owner = members.find((x) => x.uid === uid);
     return owner ? teamOf(owner) : undefined;
   };
+  // A Team Leader still carrying a reporting line. Their runs get filed under
+  // THAT leader's team, which is why a promoted leader saw none of their own
+  // work. Cleared alongside the runs below.
+  const staleLeaders = isAdmin ? members.filter(leaderHasStaleLine) : [];
   const misfiled = isAdmin && members.length
     ? [
       ...tours.filter((t) => !t.archived && t.amzStatus !== 'COMPLETED')
@@ -83,17 +87,24 @@ export function Team() {
     : [];
 
   async function repairTeamLinks() {
-    if (fixBusy || misfiled.length === 0) return;
+    if (fixBusy || (misfiled.length === 0 && staleLeaders.length === 0)) return;
     setFixBusy(true);
     try {
+      // Clear the invalid reporting lines first: once a leader leads their own
+      // team, teamOf() gives the right answer for every run below.
+      await Promise.all(staleLeaders.map((m) => updateMember(m.uid, { leaderUid: '' })));
       misfiled.forEach((x) => {
         if (!x.run.id || !x.to) return;
         if (x.kind === 'tour') updateTour(x.run.id, { leaderUid: x.to });
         else updateTrip(x.run.id, { leaderUid: x.to });
       });
+      const bits = [
+        misfiled.length ? `${misfiled.length} run${misfiled.length === 1 ? '' : 's'} re-filed` : '',
+        staleLeaders.length ? `${staleLeaders.length} team leader${staleLeaders.length === 1 ? '' : 's'} now lead${staleLeaders.length === 1 ? 's' : ''} their own team` : '',
+      ].filter(Boolean);
       push({
         title: 'Team visibility repaired',
-        body: `${misfiled.length} run${misfiled.length === 1 ? '' : 's'} re-filed under the right team leader.`,
+        body: `${bits.join(' · ')}.`,
         tone: 'success',
       });
     } catch {
@@ -176,14 +187,21 @@ export function Team() {
 
         {/* Runs a team leader cannot see, because the run still points at the
             team its POC used to be in. One click re-files them. */}
-        {isAdmin && misfiled.length > 0 && (
+        {isAdmin && (misfiled.length > 0 || staleLeaders.length > 0) && (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-amber-50 px-4 py-3 ring-1 ring-inset ring-amber-200">
             <div className="min-w-0">
               <div className="text-sm font-extrabold text-amber-900">
-                {misfiled.length} active run{misfiled.length === 1 ? '' : 's'} {misfiled.length === 1 ? 'is' : 'are'} filed under the wrong team leader
+                {staleLeaders.length > 0 && (
+                  <>{staleLeaders.length} team leader{staleLeaders.length === 1 ? '' : 's'} {staleLeaders.length === 1 ? 'is' : 'are'} reporting to another leader{misfiled.length > 0 ? ' · ' : ''}</>
+                )}
+                {misfiled.length > 0 && (
+                  <>{misfiled.length} active run{misfiled.length === 1 ? '' : 's'} filed under the wrong team</>
+                )}
               </div>
               <div className="text-[11px] text-amber-800">
-                These were assigned before their POC was placed under their current leader, so that leader cannot see them. Re-filing makes them visible immediately — nothing else about the runs changes.
+                {staleLeaders.length > 0
+                  ? <>A team leader should report to the owner, not to another leader — while they do, their own trips are filed under that other team and they cannot see them. Fixing this puts {staleLeaders.length === 1 ? 'them' : 'each of them'} in charge of their own team and re-files the affected trips.</>
+                  : <>These were assigned before their POC was placed under their current leader, so that leader cannot see them. Re-filing makes them visible immediately — nothing else about the runs changes.</>}
               </div>
             </div>
             <Button size="sm" onClick={() => void repairTeamLinks()} disabled={fixBusy}>

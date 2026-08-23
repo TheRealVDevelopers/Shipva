@@ -138,10 +138,27 @@ export function isActivated(m: Member): boolean {
   return !!m.profileApprovedOn;
 }
 
-/** The "team" a member belongs to for trip/tour scoping: their Team Leader's
- *  uid, or their own uid if they lead a team (TL) or run the org (owner). */
-export function teamOf(m: { uid: string; leaderUid?: string }): string {
+/**
+ * The "team" a run belongs to: the handler's Team Leader, or their own uid when
+ * they lead a team themselves.
+ *
+ * Role is decisive, not just `leaderUid`. A Team Leader (and an owner or
+ * manager) always leads their OWN team, whatever reporting line is left on
+ * their record — a leader is not supposed to report to another leader, and a
+ * leftover value there used to be taken at face value. That is how every run
+ * assigned to a Team Leader ended up filed under the leader they were promoted
+ * from: their runs went to that other team, and they could not see their own
+ * work. Deciding on role makes the stale field harmless.
+ */
+export function teamOf(m: { uid: string; leaderUid?: string; role?: Role }): string {
+  if (m.role === 'team_leader' || m.role === 'owner' || m.role === 'manager') return m.uid;
   return m.leaderUid && m.leaderUid.trim() ? m.leaderUid : m.uid;
+}
+
+/** A Team Leader carrying a reporting line — invalid, and the reason their runs
+ *  were filed under someone else's team. Cleared by the repair action. */
+export function leaderHasStaleLine(m: Member): boolean {
+  return m.role === 'team_leader' && !!m.leaderUid && !!m.leaderUid.trim();
 }
 
 /** Can `me` manage `target` (edit / assign tasks / see in Team)?  Owner &
