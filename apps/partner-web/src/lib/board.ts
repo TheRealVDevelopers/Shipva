@@ -28,6 +28,39 @@ export interface BoardStop {
 }
 
 /**
+ * Team visibility repair.
+ *
+ * A run stores the team it belongs to as `leaderUid`, copied from the assignee
+ * at the moment it was assigned. That copy never updates itself, so a run
+ * assigned to a POC BEFORE that POC was placed under a team leader keeps
+ * pointing at whatever team they were in then — usually their own uid.
+ *
+ * The consequence is not merely a filtered-out row: the Firestore rules let a
+ * member read a run only when its `ownerUid` or `leaderUid` is theirs, so a
+ * leader is *denied* their own POC's older runs. No query change can recover
+ * them; the pointer on the run has to be corrected.
+ *
+ * `teamFix` returns the uid a run SHOULD carry, or null when it is already
+ * right (or the owner is no longer on the team, in which case leave it alone
+ * rather than guess).
+ */
+export interface TeamLink {
+  id?: string | undefined;
+  ownerUid?: string | undefined;
+  leaderUid?: string | undefined;
+  archived?: boolean | undefined;
+}
+
+export function teamFix(
+  run: TeamLink, teamOfOwner: (uid: string) => string | undefined,
+): string | null {
+  if (!run.id || run.archived || !run.ownerUid) return null;
+  const correct = teamOfOwner(run.ownerUid);
+  if (!correct) return null;
+  return run.leaderUid === correct ? null : correct;
+}
+
+/**
  * Freight billed on a run, in paise.
  *
  * Only ordinary trips carry a freight figure. An Amazon tour is priced through

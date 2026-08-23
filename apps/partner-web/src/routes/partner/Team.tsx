@@ -30,6 +30,8 @@ import { useNotify } from '../../lib/notify.js';
 import { printEmployeeJoiningLetter } from '../../lib/hrDocs.js';
 import { DocPreview } from '../../components/ui/DocumentUpload.js';
 import { useStore } from '../../lib/store.js';
+import { teamFix } from '../../lib/board.js';
+import { teamOf } from '../../lib/members.js';
 
 const ROLE_TONE: Record<Role, BadgeTone> = { owner: 'success', manager: 'primary', team_leader: 'warning', supervisor: 'info', accountant: 'accent' };
 const EMPTY = { name: '', email: '', phone: '', role: 'supervisor' as Role, pages: defaultPages('supervisor'), leaderUid: '' };
@@ -53,6 +55,51 @@ export function Team() {
   const isAdmin = me?.role === 'owner' || me?.role === 'manager';
   const isTL = me?.role === 'team_leader';
   const canManage = isAdmin || isTL;
+
+  /**
+   * Runs filed under the wrong team.
+   *
+   * `leaderUid` is copied onto a run when it is assigned, and never updates
+   * itself — so a run given to a POC before that POC was placed under a team
+   * leader still points at the team they were in then. The leader cannot see
+   * it, and the security rules will not even serve it to them. Only correcting
+   * the pointer on the run fixes that, which is what this does.
+   */
+  const { tours, trips, updateTour, updateTrip } = useStore();
+  const [fixBusy, setFixBusy] = useState(false);
+  const teamOfOwner = (uid: string) => {
+    const owner = members.find((x) => x.uid === uid);
+    return owner ? teamOf(owner) : undefined;
+  };
+  const misfiled = isAdmin && members.length
+    ? [
+      ...tours.filter((t) => !t.archived && t.amzStatus !== 'COMPLETED')
+        .map((t) => ({ kind: 'tour' as const, run: t, to: teamFix(t, teamOfOwner) }))
+        .filter((x) => x.to),
+      ...trips.filter((t) => !t.archived && t.status !== 'closed')
+        .map((t) => ({ kind: 'trip' as const, run: t, to: teamFix(t, teamOfOwner) }))
+        .filter((x) => x.to),
+    ]
+    : [];
+
+  async function repairTeamLinks() {
+    if (fixBusy || misfiled.length === 0) return;
+    setFixBusy(true);
+    try {
+      misfiled.forEach((x) => {
+        if (!x.run.id || !x.to) return;
+        if (x.kind === 'tour') updateTour(x.run.id, { leaderUid: x.to });
+        else updateTrip(x.run.id, { leaderUid: x.to });
+      });
+      push({
+        title: 'Team visibility repaired',
+        body: `${misfiled.length} run${misfiled.length === 1 ? '' : 's'} re-filed under the right team leader.`,
+        tone: 'success',
+      });
+    } catch {
+      push({ title: "Couldn't repair", body: 'Please try again.', tone: 'warning' });
+    } finally { setFixBusy(false); }
+  }
 
   useEffect(() => watchMembers((list) => setMembers(list.sort((a, b) => a.name.localeCompare(b.name)))), []);
   useEffect(() => watchAllToday((list) => setActivity(Object.fromEntries(list.map((a) => [a.uid, a])))), []);
@@ -126,6 +173,24 @@ export function Team() {
           </div>
           {canManage && <Button size="sm" variant="secondary" onClick={() => { setF(EMPTY); setInvite(true); }}><Plus size={13} /> {isTL ? 'Add POC' : 'Add Employee'}</Button>}
         </div>
+
+        {/* Runs a team leader cannot see, because the run still points at the
+            team its POC used to be in. One click re-files them. */}
+        {isAdmin && misfiled.length > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-amber-50 px-4 py-3 ring-1 ring-inset ring-amber-200">
+            <div className="min-w-0">
+              <div className="text-sm font-extrabold text-amber-900">
+                {misfiled.length} active run{misfiled.length === 1 ? '' : 's'} {misfiled.length === 1 ? 'is' : 'are'} filed under the wrong team leader
+              </div>
+              <div className="text-[11px] text-amber-800">
+                These were assigned before their POC was placed under their current leader, so that leader cannot see them. Re-filing makes them visible immediately — nothing else about the runs changes.
+              </div>
+            </div>
+            <Button size="sm" onClick={() => void repairTeamLinks()} disabled={fixBusy}>
+              <UserCog size={13} /> {fixBusy ? 'Repairing…' : 'Fix team visibility'}
+            </Button>
+          </div>
+        )}
 
         {!canManage && (
           <div className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900 ring-1 ring-inset ring-amber-100">
