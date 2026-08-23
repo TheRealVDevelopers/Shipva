@@ -13,6 +13,8 @@ import { genVrId } from './trip.js';
 interface Scope { uid: string; role: string; leaderUid?: string }
 interface Handler { uid: string; name: string; leaderUid?: string }
 const isAdmin = (role: string) => role === 'owner' || role === 'manager';
+/** Roles that see every run in the org, not just their own. */
+const seesAllRuns = (role: string) => isAdmin(role) || role === 'team_leader';
 
 function fromSnap(id: string, d: Record<string, unknown>): Trip {
   return {
@@ -47,23 +49,8 @@ export function watchTrips(scope: Scope, cb: (trips: Trip[]) => void): () => voi
   const read = (qs: { docs: { id: string; data: () => Record<string, unknown> }[] }) =>
     qs.docs.map((d) => fromSnap(d.id, d.data()));
 
-  if (isAdmin(scope.role)) {
+  if (seesAllRuns(scope.role)) {
     return onSnapshot(query(collection(db, 'orgTrips')), (qs) => cb(sorted(read(qs))));
-  }
-
-  // Same fix as watchToursFs: a leader's own trips carry the team they were
-  // created in, so matching `leaderUid` alone hid them after a promotion.
-  if (scope.role === 'team_leader') {
-    const byTeam = new Map<string, Trip>();
-    const byOwn = new Map<string, Trip>();
-    const emit = () => cb(sorted([...new Map([...byTeam, ...byOwn]).values()]));
-    const stopTeam = onSnapshot(
-      query(collection(db, 'orgTrips'), where('leaderUid', '==', scope.uid)),
-      (qs) => { byTeam.clear(); read(qs).forEach((t) => t.id && byTeam.set(t.id, t)); emit(); });
-    const stopOwn = onSnapshot(
-      query(collection(db, 'orgTrips'), where('ownerUid', '==', scope.uid)),
-      (qs) => { byOwn.clear(); read(qs).forEach((t) => t.id && byOwn.set(t.id, t)); emit(); });
-    return () => { stopTeam(); stopOwn(); };
   }
 
   return onSnapshot(

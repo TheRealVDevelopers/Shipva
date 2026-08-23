@@ -413,7 +413,7 @@ export function Tours() {
   const advTotal = tours.reduce((s, t) => s + (Number(t.advanceAmount) || 0), 0);
 
   return (
-    <PartnerLayout title="Amazon Tours" subtitle={isAdmin ? 'Relay line board — assign routes to your POCs' : 'Your assigned Relay lines'}>
+    <PartnerLayout title="Amazon Tours" subtitle={canAssign ? 'Relay line board — every route across the company' : 'Your assigned Relay lines'}>
       <div className="space-y-5">
         {/* Relay board banner */}
         <div className="overflow-hidden rounded-xl shadow-sm" style={{ background: INK }}>

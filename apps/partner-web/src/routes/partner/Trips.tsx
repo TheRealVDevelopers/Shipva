@@ -566,7 +566,7 @@ export function Trips() {
   }
 
   return (
-    <PartnerLayout title="Trips" subtitle={isAdmin ? 'All routes across your team' : 'Your consignments & live tracking'}>
+    <PartnerLayout title="Trips" subtitle={canAssign ? 'Every route across the company' : 'Your consignments & live tracking'}>
       <div className="space-y-6">
         <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <KpiCard label="Active trips" value={String(active)} hint={ranged ? 'not completed · in range' : 'not completed'} tone="primary" />
@@ -891,7 +891,7 @@ export function Trips() {
         </Row>
       </Modal>
 
-      {tracked && <TrackModal trip={tracked} onClose={() => setTrackId(null)} onAdvance={advanceTrip} showOwner={isAdmin} />}
+      {tracked && <TrackModal trip={tracked} onClose={() => setTrackId(null)} onAdvance={advanceTrip} showOwner={canAssign} />}
 
       {/* Cancel / archive trip — never a hard delete (the client's rule). */}
       {confirmDel && (

@@ -119,18 +119,30 @@ service cloud.firestore {
     // Trips — POC-scoped with a Team-Leader layer. Owner/manager see & manage
     // everything; a POC sees trips they own (ownerUid); a Team Leader sees the
     // whole team (leaderUid == them).
+    // A Team Leader sees and works EVERY run, the same view a manager gets —
+    // the client's role update. Deliberately read/create/update only: delete
+    // stays with the owning member or an admin, so the wider view does not
+    // hand leaders destructive rights they did not have before. Money, team
+    // administration and the rest of the manager's remit are unaffected;
+    // those are gated on their own collections.
     match /orgTrips/{id} {
-      allow read: if isOrgAdmin() || (isOrgMember() && (resource.data.ownerUid == request.auth.uid || resource.data.leaderUid == request.auth.uid));
-      allow create: if isOrgAdmin() || (isOrgMember() && (request.resource.data.ownerUid == request.auth.uid || request.resource.data.leaderUid == request.auth.uid));
-      allow update: if isOrgAdmin() || (isOrgMember() && (resource.data.ownerUid == request.auth.uid || resource.data.leaderUid == request.auth.uid));
+      allow read: if isOrgAdmin() || isOrgTeamLeader() || (isOrgMember() && (resource.data.ownerUid == request.auth.uid || resource.data.leaderUid == request.auth.uid));
+      allow create: if isOrgAdmin() || isOrgTeamLeader() || (isOrgMember() && (request.resource.data.ownerUid == request.auth.uid || request.resource.data.leaderUid == request.auth.uid));
+      allow update: if isOrgAdmin() || isOrgTeamLeader() || (isOrgMember() && (resource.data.ownerUid == request.auth.uid || resource.data.leaderUid == request.auth.uid));
       allow delete: if isOrgAdmin() || (isOrgMember() && (resource.data.ownerUid == request.auth.uid || resource.data.leaderUid == request.auth.uid));
     }
 
     // Amazon tours — same POC + Team-Leader scoping as trips.
+    // A Team Leader sees and works EVERY run, the same view a manager gets —
+    // the client's role update. Deliberately read/create/update only: delete
+    // stays with the owning member or an admin, so the wider view does not
+    // hand leaders destructive rights they did not have before. Money, team
+    // administration and the rest of the manager's remit are unaffected;
+    // those are gated on their own collections.
     match /orgTours/{id} {
-      allow read: if isOrgAdmin() || (isOrgMember() && (resource.data.ownerUid == request.auth.uid || resource.data.leaderUid == request.auth.uid));
-      allow create: if isOrgAdmin() || (isOrgMember() && (request.resource.data.ownerUid == request.auth.uid || request.resource.data.leaderUid == request.auth.uid));
-      allow update: if isOrgAdmin() || (isOrgMember() && (resource.data.ownerUid == request.auth.uid || resource.data.leaderUid == request.auth.uid));
+      allow read: if isOrgAdmin() || isOrgTeamLeader() || (isOrgMember() && (resource.data.ownerUid == request.auth.uid || resource.data.leaderUid == request.auth.uid));
+      allow create: if isOrgAdmin() || isOrgTeamLeader() || (isOrgMember() && (request.resource.data.ownerUid == request.auth.uid || request.resource.data.leaderUid == request.auth.uid));
+      allow update: if isOrgAdmin() || isOrgTeamLeader() || (isOrgMember() && (resource.data.ownerUid == request.auth.uid || resource.data.leaderUid == request.auth.uid));
       allow delete: if isOrgAdmin() || (isOrgMember() && (resource.data.ownerUid == request.auth.uid || resource.data.leaderUid == request.auth.uid));
     }
 

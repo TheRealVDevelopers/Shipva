@@ -15,6 +15,8 @@ import type { Tour, TourStop, TourLeg, TourEvent } from './store.js';
 interface Scope { uid: string; role: string; leaderUid?: string }
 interface Handler { uid: string; name: string; leaderUid?: string }
 const isAdmin = (role: string) => role === 'owner' || role === 'manager';
+/** Roles that see every run in the org, not just their own. */
+const seesAllRuns = (role: string) => isAdmin(role) || role === 'team_leader';
 
 const stripUndef = (o: Record<string, unknown>) => { Object.keys(o).forEach((k) => o[k] === undefined && delete o[k]); return o; };
 
@@ -98,33 +100,8 @@ export function watchToursFs(scope: Scope, cb: (tours: Tour[]) => void): () => v
   const read = (qs: { docs: { id: string; data: () => Record<string, unknown> }[] }) =>
     qs.docs.map((d) => fromSnap(d.id, d.data()));
 
-  if (isAdmin(scope.role)) {
+  if (seesAllRuns(scope.role)) {
     return onSnapshot(query(collection(db, 'orgTours')), (qs) => cb(sorted(read(qs))));
-  }
-
-  /**
-   * A team leader sees their team's work AND anything they hold themselves.
-   *
-   * This used to match `leaderUid` only, which quietly hid a leader's own
-   * routes: a run carries the team it was created in, so a POC promoted to Team
-   * Leader kept runs pointing at their FORMER leader and, as a leader, could no
-   * longer see them at all — an empty board while the work plainly existed.
-   *
-   * Two listeners merged rather than one or() query: an or() across two fields
-   * can demand a composite index and makes the rules harder to reason about,
-   * and both would ship untested against the live project.
-   */
-  if (scope.role === 'team_leader') {
-    const byTeam = new Map<string, Tour>();
-    const byOwn = new Map<string, Tour>();
-    const emit = () => cb(sorted([...new Map([...byTeam, ...byOwn]).values()]));
-    const stopTeam = onSnapshot(
-      query(collection(db, 'orgTours'), where('leaderUid', '==', scope.uid)),
-      (qs) => { byTeam.clear(); read(qs).forEach((t) => t.id && byTeam.set(t.id, t)); emit(); });
-    const stopOwn = onSnapshot(
-      query(collection(db, 'orgTours'), where('ownerUid', '==', scope.uid)),
-      (qs) => { byOwn.clear(); read(qs).forEach((t) => t.id && byOwn.set(t.id, t)); emit(); });
-    return () => { stopTeam(); stopOwn(); };
   }
 
   return onSnapshot(
