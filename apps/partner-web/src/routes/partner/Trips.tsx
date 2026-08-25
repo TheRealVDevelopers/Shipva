@@ -305,14 +305,26 @@ export function Trips() {
     return true;
   };
 
-  // Sorted by lane, per the client: Upcoming earliest-first by schedule, In
-  // Transit with overdue ("pending") pinned to the top, Completed newest-first.
-  const shown = sortForLane(
-    board
-      .filter((i) => inLane(i, filter)).filter(inDateWindow).filter((i) => matches(i, q))
-      // "Assigned to me" — narrow to the runs this member owns.
-      .filter((i) => !mineOnly || i.ownerUid === member?.uid),
-    filter,
+  /**
+   * Sorted by lane, per the client: Upcoming earliest-first by schedule, In
+   * Transit with overdue ("pending") pinned to the top, Completed newest-first.
+   *
+   * Memoised because leadership now loads every run in the company. Without
+   * this, four passes and a sort over the whole board ran on EVERY render —
+   * including every keystroke in the New Trip form, since typing there
+   * re-renders this page. That was the reported lag: fine for a supervisor with
+   * a handful of runs, painful for anyone above them.
+   */
+  const shown = useMemo(
+    () => sortForLane(
+      board
+        .filter((i) => inLane(i, filter)).filter(inDateWindow).filter((i) => matches(i, q))
+        // "Assigned to me" — narrow to the runs this member owns.
+        .filter((i) => !mineOnly || i.ownerUid === member?.uid),
+      filter,
+    ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [board, filter, from, to, q, mineOnly, member?.uid],
   );
 
   /** Hand a run to a different employee (leadership only). */

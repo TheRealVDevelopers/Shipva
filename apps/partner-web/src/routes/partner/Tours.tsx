@@ -395,9 +395,18 @@ export function Tours() {
 
   // The board shows live routes only; drafts and cancelled ones have their own
   // tabs so nothing silently disappears.
-  const live = tours.filter((t) => !t.archived && !t.draft);
-  const drafts = tours.filter((t) => t.draft && !t.archived);
-  const cancelled = tours.filter((t) => t.archived);
+  // One pass, memoised. Leadership now loads every tour in the company, and
+  // three separate scans ran on every render — including each keystroke in the
+  // Route Assign form.
+  const { live, drafts, cancelled } = useMemo(() => {
+    const live: Tour[] = [], drafts: Tour[] = [], cancelled: Tour[] = [];
+    for (const t of tours) {
+      if (t.archived) cancelled.push(t);
+      else if (t.draft) drafts.push(t);
+      else live.push(t);
+    }
+    return { live, drafts, cancelled };
+  }, [tours]);
   const pool = tab === 'Drafts' ? drafts : tab === 'Cancelled' ? cancelled : live;
   const shown = pool.filter((t) => {
     if (tab === 'Shared' && !isShared(t)) return false;

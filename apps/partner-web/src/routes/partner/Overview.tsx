@@ -56,9 +56,24 @@ export function Overview() {
   // "Trips by status" was counting ordinary trips only, so an operation that
   // runs on Amazon tours saw 0 / 0 / 0. Count both, through the shared board
   // lanes, the same way the Trips page groups them.
-  const board = buildBoard(tours, trips);
-  const laneCount = (lane: Lane) => board.filter((i) => inLane(i, lane)).length;
-  const tourLaneCount = (lane: Lane) => board.filter((i) => i.kind === 'tour' && inLane(i, lane)).length;
+  //
+  // Memoised, and counted in ONE pass. Leadership now loads every run in the
+  // company, and this used to rebuild the whole board — parsing dates for every
+  // stop of every run — on each render, then walk it another eight times for
+  // the lane and status tiles. That is what made the dashboard crawl for
+  // anyone above a supervisor.
+  const board = useMemo(() => buildBoard(tours, trips), [tours, trips]);
+  const lanes = useMemo(() => {
+    const all: Record<Lane, number> = { Upcoming: 0, 'In Transit': 0, Completed: 0 };
+    const tourOnly: Record<Lane, number> = { Upcoming: 0, 'In Transit': 0, Completed: 0 };
+    for (const i of board) {
+      all[i.lane] += 1;
+      if (i.kind === 'tour') tourOnly[i.lane] += 1;
+    }
+    return { all, tourOnly };
+  }, [board]);
+  const laneCount = (lane: Lane) => lanes.all[lane];
+  const tourLaneCount = (lane: Lane) => lanes.tourOnly[lane];
   // Four dashboards, by role (client requirement 1) — each sees only the KPIs,
   // reports and actions its job needs:
   //   Admin / Manager  everything: ops pulse, team, money, fleet.
@@ -101,8 +116,13 @@ export function Overview() {
   // The six-state breakdown is trip-specific; tours have no such states, so fold
   // each tour into the representative bucket for its lane. That keeps the bar and
   // legend populated for a tour-only operation instead of showing an empty strip.
+  const tripStatusTally = useMemo(() => {
+    const t: Partial<Record<TripStatus, number>> = {};
+    for (const x of trips) t[x.status] = (t[x.status] ?? 0) + 1;
+    return t;
+  }, [trips]);
   const statusCount = (st: TripStatus) => {
-    const t = trips.filter((x) => x.status === st).length;
+    const t = tripStatusTally[st] ?? 0;
     if (st === 'assigned') return t + tourLaneCount('Upcoming');
     if (st === 'in_transit') return t + tourLaneCount('In Transit');
     if (st === 'closed') return t + tourLaneCount('Completed');
