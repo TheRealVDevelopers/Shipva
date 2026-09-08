@@ -54,6 +54,13 @@ export interface Member {
   leaderHistory?: LeaderChange[];
   /** Forces the "set your own password" screen on first sign-in. */
   mustSetPassword?: boolean;
+  /**
+   * May edit a run that is already Completed. Off by default: a finished run is
+   * the record of what happened, so correcting one is a deliberate grant. Owner
+   * and manager always may; this is how that is extended to a named employee
+   * (the client: "grant edit access to specific employees").
+   */
+  canEditCompleted?: boolean;
 
   /**
    * HR profile — the client's point 15: an employee must complete their

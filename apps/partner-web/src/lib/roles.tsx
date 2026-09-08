@@ -56,6 +56,19 @@ export const canEditRecords = (role: Role | undefined): boolean =>
  * "may rewrite a record" and "may take the data out of the building" are
  * different questions and shouldn't drift together by accident.
  */
+/**
+ * Who may edit a run that has already been Completed.
+ *
+ * Separate from canEditRecords on purpose. A completed run is the record of
+ * what actually happened, so re-opening one is a stronger permission than
+ * editing a live trip: owner and manager always may, and anyone else only when
+ * an admin has granted it on their record. Team leaders are NOT included by
+ * default — the client asked for "Managers and Owners … or grant edit access to
+ * specific employees".
+ */
+export const canEditCompleted = (m: { role?: Role; canEditCompleted?: boolean } | null | undefined): boolean =>
+  !!m && (isOrgAdminRole(m.role as Role) || m.canEditCompleted === true);
+
 export const canExportData = (role: Role | undefined): boolean =>
   !!role && (isOrgAdminRole(role) || role === 'team_leader' || role === 'accountant');
 

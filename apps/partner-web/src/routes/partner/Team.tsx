@@ -461,6 +461,7 @@ function EditMember({ member, onClose, isSelf, adminEditor }: { member: Member; 
   const [role, setRoleState] = useState<Role>(member.role);
   const [pages, setPages] = useState<FeatureId[]>(member.pages === 'all' ? defaultPages('supervisor') : member.pages.filter((p) => p !== 'overview'));
   const [phone, setPhone] = useState(member.phone ?? '');
+  const [editDone, setEditDone] = useState(!!member.canEditCompleted);
   const [busy, setBusy] = useState(false);
   const adminRole = role === 'owner' || role === 'manager';
 
@@ -483,6 +484,7 @@ function EditMember({ member, onClose, isSelf, adminEditor }: { member: Member; 
       const moved = becameLeader ? reassignActiveWork(member.uid, member.uid) : 0;
       await updateMember(member.uid, {
         role, pages: pagesForRole(role, pages), phone,
+        canEditCompleted: editDone,
         ...(becameLeader ? { leaderUid: '' } : {}),
       });
       push({
@@ -514,6 +516,28 @@ function EditMember({ member, onClose, isSelf, adminEditor }: { member: Member; 
         </Field>
         <Field label="Phone"><TextInput value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+91 …" /></Field>
       </Row>
+      {/* A completed run is the record of what happened, so re-opening one is
+          a stronger grant than ordinary editing. Owner and manager always may;
+          this is how an admin extends it to a named employee. */}
+      {!adminRole && (
+        <Field label="Completed trips"
+          hint="Off by default. A completed trip is the record of what happened — only grant this to someone who needs to correct one.">
+          <label className="flex cursor-pointer items-start gap-2 rounded-lg bg-neutral-50 px-3 py-2.5 ring-1 ring-inset ring-neutral-200">
+            <input type="checkbox" checked={editDone} onChange={(e) => setEditDone(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-neutral-300 text-primary-600 focus:ring-primary-400" />
+            <span className="text-xs font-semibold text-neutral-700">
+              Can edit completed trips
+              <span className="block font-normal text-neutral-500">Lets {member.name} re-open a finished trip to correct its figures.</span>
+            </span>
+          </label>
+        </Field>
+      )}
+      {adminRole && (
+        <p className="rounded-lg bg-neutral-50 px-3 py-2 text-[11px] text-neutral-500 ring-1 ring-inset ring-neutral-200">
+          Owners and managers can always edit completed trips.
+        </p>
+      )}
+
       <PageToggles adminRole={adminRole} pages={pages} onToggle={toggle} />
     </Modal>
   );

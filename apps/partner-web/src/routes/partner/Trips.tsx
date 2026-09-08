@@ -24,7 +24,7 @@ import { LocationSuggest } from '../../components/LocationSuggest.js';
 import { TourOperate } from './Tours.js';
 import { useAuth } from '../../lib/auth.js';
 import { watchMembers, teamOf, type Member } from '../../lib/members.js';
-import { canEditRecords } from '../../lib/roles.js';
+import { canEditRecords, canEditCompleted } from '../../lib/roles.js';
 import { useNotify } from '../../lib/notify.js';
 import { printLR } from '../../lib/print.js';
 import { exportRows, rupeeCell, type Cell } from '../../lib/exportExcel.js';
@@ -62,8 +62,8 @@ const fmtActual = (ms?: number) => (ms ? new Date(ms).toLocaleString('en-IN', { 
  * from its own line board, and pretending otherwise would offer buttons that do
  * nothing.
  */
-function BoardRow({ item, expanded, onToggle, showOwner, canEdit, canAssign, onReport, onTrack, onPrintLR, onEdit, onDelete, onAdvance, onUpdate, onReassign }: {
-  item: BoardItem; expanded: boolean; onToggle: () => void; showOwner: boolean; canEdit: boolean; canAssign: boolean;
+function BoardRow({ item, expanded, onToggle, showOwner, canEdit, canEditDone, canAssign, onReport, onTrack, onPrintLR, onEdit, onDelete, onAdvance, onUpdate, onReassign }: {
+  item: BoardItem; expanded: boolean; onToggle: () => void; showOwner: boolean; canEdit: boolean; canEditDone: boolean; canAssign: boolean;
   onReport: () => void; onTrack: () => void; onPrintLR: () => void;
   onEdit: () => void; onDelete: () => void; onAdvance: () => void; onUpdate: () => void; onReassign: () => void;
 }) {
@@ -197,9 +197,20 @@ function BoardRow({ item, expanded, onToggle, showOwner, canEdit, canAssign, onR
                   <UserCog size={12} /> {item.ownerName ? 'Reassign' : 'Assign'}
                 </button>
               )}
-              {canEdit && (
+              {/* A completed run may only be re-opened by someone granted it —
+                  owner, manager, or an employee an admin has ticked. On the
+                  Completed tab the action is labelled for what it does. */}
+              {canEdit && (item.lane !== 'Completed' || canEditDone) && (
                 <>
-                  <button onClick={onEdit} className="rounded-lg p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-primary-600" title={isTour ? 'Edit on the Amazon Tours board' : 'Edit trip'}><Pencil size={14} /></button>
+                  {item.lane === 'Completed' ? (
+                    <button onClick={onEdit}
+                      className="inline-flex items-center gap-1 rounded-lg bg-white px-2.5 py-1.5 text-xs font-bold text-primary-600 ring-1 ring-inset ring-primary-200 hover:bg-primary-50"
+                      title={isTour ? 'Re-open this completed run to correct its figures' : 'Edit this completed trip'}>
+                      <Pencil size={12} /> Edit
+                    </button>
+                  ) : (
+                    <button onClick={onEdit} className="rounded-lg p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-primary-600" title={isTour ? 'Edit on the Amazon Tours board' : 'Edit trip'}><Pencil size={14} /></button>
+                  )}
                   {!isTour && <button onClick={onDelete} className="rounded-lg p-1.5 text-neutral-400 hover:bg-amber-50 hover:text-amber-600" title="Cancel / archive trip"><Trash2 size={14} /></button>}
                 </>
               )}
@@ -217,6 +228,8 @@ export function Trips() {
   const isAdmin = member?.role === 'owner' || member?.role === 'manager';
   const canAssign = isAdmin || member?.role === 'team_leader';
   const canEdit = canEditRecords(member?.role);
+  // Re-opening a finished run is a separate, stronger grant — see canEditCompleted.
+  const canEditDone = canEditCompleted(member);
   const { push } = useNotify();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
@@ -678,11 +691,18 @@ export function Trips() {
                     onToggle={() => setOpenRow(openRow === `${i.kind}-${i.id}` ? null : `${i.kind}-${i.id}`)}
                     showOwner={isAdmin || canAssign}
                     canEdit={canEdit}
+                    canEditDone={canEditDone}
                     canAssign={canAssign}
                     onReport={() => setReportFor(i)}
                     onTrack={() => i.kind === 'trip' && i.id && setTrackId(i.id)}
                     onPrintLR={() => i.kind === 'trip' && printLR(i.source as Trip)}
-                    onEdit={() => i.kind === 'trip' ? startEdit(i.source as Trip) : navigate('/p/tours')}
+                    onEdit={() => {
+                      if (i.kind === 'trip') { startEdit(i.source as Trip); return; }
+                      // A finished Amazon run is corrected in its own update
+                      // pop-up; sending them to the Tours board would lose the row.
+                      if (i.lane === 'Completed' && i.id) { setOperateId(i.id); return; }
+                      navigate('/p/tours');
+                    }}
                     onDelete={() => i.kind === 'trip' && setConfirmDel(i.source as Trip)}
                     onAdvance={() => i.kind === 'trip' && advanceOnCard(i.source as Trip)}
                     onUpdate={() => i.kind === 'tour' && i.id && setOperateId(i.id)}
@@ -704,7 +724,7 @@ export function Trips() {
 
       {/* Report a delay against a VRID's arrival/departure */}
       {operating && (
-        <TourOperate tour={operating} onClose={() => setOperateId(null)} onUpdate={updateTour} showOwner={isAdmin || canAssign} />
+        <TourOperate tour={operating} onClose={() => setOperateId(null)} onUpdate={updateTour} showOwner={isAdmin || canAssign} canEditDone={canEditDone} />
       )}
 
       {reportFor && (

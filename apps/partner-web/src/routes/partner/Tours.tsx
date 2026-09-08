@@ -1049,10 +1049,12 @@ function TourRow({ t, isAdmin, canEdit, canAssign, state, onDiesel, onEdit, onDe
  *
  * Mounted from Trips (the client moved updates out of the Amazon Tours board).
  */
-export function TourOperate({ tour, onClose, onUpdate, showOwner }: {
+export function TourOperate({ tour, onClose, onUpdate, showOwner , canEditDone = false }: {
   tour: Tour; onClose: () => void;
   onUpdate: (id: string, patch: Partial<Tour>, log?: { action: string; detail?: string; vrid?: string }) => void;
   showOwner: boolean;
+  /** Viewer may correct a VRID that has already been submitted. */
+  canEditDone?: boolean;
 }) {
   const { push } = useNotify();
   const legs = tour.legs ?? [];
@@ -1226,7 +1228,7 @@ export function TourOperate({ tour, onClose, onUpdate, showOwner }: {
  * the figures in local state so typing doesn't write to Firestore on every
  * keystroke — Save and Submit are what persist.
  */
-function LegUpdate({ tour, leg, index, multi, expanded, onToggle, allStops, onStamp, onStopFeedback, onLoadType, onSave, onSubmit }: {
+function LegUpdate({ tour, leg, index, multi, expanded, onToggle, allStops, onStamp, onStopFeedback, onLoadType, onSave, onSubmit , canEditDone = false }: {
   tour: Tour; leg: TourLeg; index: number; multi: boolean;
   expanded: boolean; onToggle: () => void;
   allStops: TourLegStop[];
@@ -1235,9 +1237,14 @@ function LegUpdate({ tour, leg, index, multi, expanded, onToggle, allStops, onSt
   onLoadType: (v: string) => void;
   onSave: (ops: TourLegOps) => void;
   onSubmit: (ops: TourLegOps) => void;
+  canEditDone?: boolean;
 }) {
   const stored = legOps(tour, index);
   const submitted = !!stored.completedAtMs;
+  // A submitted VRID is read-only. Someone granted "edit completed trips" can
+  // re-open it to correct the figures; it stays submitted either way, so the
+  // run does not fall back out of Completed.
+  const [reopened, setReopened] = useState(false);
 
   const [present, setPresent] = useState(stored.present || 'PRESENT');
   const [remarks, setRemarks] = useState(stored.remarks || '');
@@ -1446,9 +1453,31 @@ function LegUpdate({ tour, leg, index, multi, expanded, onToggle, allStops, onSt
           </div>
 
           {/* Save / submit — per VRID */}
-          {submitted ? (
-            <div className="mt-3 flex items-center justify-center gap-2 rounded-lg py-2 text-xs font-extrabold" style={{ background: '#EAF3EC', color: '#067D62' }}>
+          {submitted && !reopened ? (
+            <div className="mt-3 flex flex-wrap items-center justify-center gap-2 rounded-lg py-2 text-xs font-extrabold" style={{ background: '#EAF3EC', color: '#067D62' }}>
               <Flag size={14} /> {leg.vrid} updated
+              {canEditDone && (
+                <button type="button" onClick={() => setReopened(true)}
+                  className="inline-flex items-center gap-1 rounded-lg bg-white px-2 py-1 text-[11px] font-bold text-primary-600 ring-1 ring-inset ring-primary-200 hover:bg-primary-50">
+                  <Pencil size={11} /> Correct figures
+                </button>
+              )}
+            </div>
+          ) : submitted && reopened ? (
+            <div className="mt-2">
+              <p className="mb-2 text-center text-[11px] font-semibold" style={{ color: '#B15C00' }}>
+                Correcting a completed VRID. It stays completed — Save records the new figures.
+              </p>
+              <div className="flex items-center gap-2">
+                <button onClick={() => { onSave(collect()); setSaved(true); setTimeout(() => { setSaved(false); setReopened(false); }, 1200); }}
+                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-extrabold" style={{ background: ORANGE, color: INK }}>
+                  {saved ? <><Check size={15} /> Saved</> : <><Save size={15} /> Save correction</>}
+                </button>
+                <button onClick={() => setReopened(false)}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-bold ring-1 ring-inset" style={{ color: INK, borderColor: '#D5D9D9', background: '#fff' }}>
+                  Cancel
+                </button>
+              </div>
             </div>
           ) : (
             <>

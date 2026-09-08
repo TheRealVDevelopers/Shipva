@@ -12,7 +12,7 @@
  * kinds — the caller supplies the download handlers, since a transporter's rate
  * card and a truck owner's aren't built from the same record.
  */
-import { FileText, Upload, Check, AlertTriangle, Clock } from 'lucide-react';
+import { FileText, Upload, Check, AlertTriangle, Clock, Plus } from 'lucide-react';
 import { DocumentUpload } from './ui/DocumentUpload.js';
 import { Badge } from './ui/Badge.js';
 import { docStatuses, agreementReady, type VendorDocState, type VendorDocKind } from '../lib/vendorDocs.js';
@@ -28,9 +28,16 @@ export interface VendorDocsProps {
   onSigned: (kind: VendorDocKind, img: string | undefined) => void;
   /** Truck owners have no rate card of their own. */
   hide?: VendorDocKind[];
+  /**
+   * Start another rate card. A transporter commonly holds several — one per
+   * vehicle type — so the rate card row offers "Add" beside the signed-copy
+   * controls, rather than making people hunt for the Additional rate cards
+   * section further down. Only wired where extra cards are supported.
+   */
+  onAddRateCard?: (() => void) | undefined;
 }
 
-export function VendorDocs({ state, path, onSend, onSigned, hide = [] }: VendorDocsProps) {
+export function VendorDocs({ state, path, onSend, onSigned, hide = [], onAddRateCard }: VendorDocsProps) {
   const all = docStatuses(state).filter((d) => !hide.includes(d.kind));
   const canAgreement = agreementReady(state, hide);
 
@@ -72,12 +79,21 @@ export function VendorDocs({ state, path, onSend, onSigned, hide = [] }: VendorD
                   <Upload size={11} /> Signed copy from the vendor
                   <span className="font-normal text-neutral-400">— PDF or photo</span>
                 </div>
-                <DocumentUpload
-                  value={d.signedImg || undefined}
-                  onChange={(v) => onSigned(d.kind, v)}
-                  label="Upload signed document"
-                  path={`${path}/${d.kind}-signed`}
-                />
+                <div className="flex flex-wrap items-center gap-2">
+                  <DocumentUpload
+                    value={d.signedImg || undefined}
+                    onChange={(v) => onSigned(d.kind, v)}
+                    label="Upload signed document"
+                    path={`${path}/${d.kind}-signed`}
+                  />
+                  {d.kind === 'rateCard' && onAddRateCard && (
+                    <button type="button" onClick={onAddRateCard}
+                      className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-white px-2.5 py-1.5 text-xs font-bold text-primary-600 ring-1 ring-inset ring-primary-200 hover:bg-primary-50"
+                      title="Add another rate card for this transporter">
+                      <Plus size={12} /> Add
+                    </button>
+                  )}
+                </div>
               </div>
             )}
           </div>

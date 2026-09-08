@@ -113,6 +113,9 @@ export function Customers() {
   // Held by id and derived live, so uploading a signed copy re-renders the panel
   // instead of freezing the record as it was when the dialog opened.
   const [docsForId, setDocsForId] = useState<string | null>(null);
+  // Bumped by the rate card's "Add" button so the Additional rate cards
+  // editor below opens on a blank card.
+  const [addCardSignal, setAddCardSignal] = useState(0);
   const docsFor = docsForId ? customers.find((c) => c.id === docsForId) ?? null : null;
   const [ag, setAg] = useState(AG_EMPTY);
   const [confirmDel, setConfirmDel] = useState<Customer | null>(null);
@@ -631,10 +634,12 @@ export function Customers() {
             path={`documents/transporters/${docsFor.id}`}
             onSend={(kind) => sendDoc(docsFor, kind)}
             onSigned={(kind, img) => setSigned(docsFor, kind, img)}
+            onAddRateCard={() => setAddCardSignal((n) => n + 1)}
           />
           {/* Point 8: a transporter may hold several rate cards, each signed
               separately, and one is picked when work is priced. */}
-          <ExtraRateCards vendor={docsFor} onSave={(cards) => updateCustomer(docsFor.id, { rateCards: cards })} />
+          <ExtraRateCards vendor={docsFor} openSignal={addCardSignal}
+            onSave={(cards) => updateCustomer(docsFor.id, { rateCards: cards })} />
         </Modal>
       )}
 
@@ -663,14 +668,23 @@ export function Customers() {
  * retired without being deleted — an invoice raised against it must still be
  * able to name the card it was priced on.
  */
-function ExtraRateCards({ vendor, onSave }: {
+function ExtraRateCards({ vendor, onSave, openSignal = 0 }: {
   vendor: Customer;
   onSave: (cards: ExtraRateCard[]) => void;
+  /** Incremented by the rate card row's "Add" button — opens a blank card. */
+  openSignal?: number;
 }) {
   const { push } = useNotify();
   const { member } = useAuth();
   const cards = vendor.rateCards ?? [];
   const [editing, setEditing] = useState<ExtraRateCard | null>(null);
+
+  // Opened from the rate card row above. Ignores the initial 0 so the editor
+  // doesn't spring open every time the documents modal is shown.
+  useEffect(() => {
+    if (openSignal > 0) setEditing(blank());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openSignal]);
 
   const blank = (): ExtraRateCard => ({
     id: `rc-${Date.now()}`, label: '', vehicleType: '',
