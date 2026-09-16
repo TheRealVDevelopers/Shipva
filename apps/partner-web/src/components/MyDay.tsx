@@ -9,6 +9,7 @@ import {
 import {
   watchActivity, setBreak, presence, fmtClock, fmtActive, type Activity,
 } from '../lib/activity.js';
+import { ShiftTimer } from './ShiftTimer.js';
 import { watchWorklogFor, addWorklog, fmtTime, type WorklogEntry } from '../lib/worklog.js';
 
 function fmtDue(ms: number): string {
@@ -55,11 +56,14 @@ export function MyDayStrip() {
             </div>
           </div>
         </div>
-        <button
-          onClick={() => void setBreak(member.uid, member.name, !onBreak)}
-          className={`inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-bold ring-1 ring-inset transition ${onBreak ? 'bg-emerald-500 text-white ring-emerald-500 hover:bg-emerald-600' : 'bg-white text-amber-700 ring-amber-200 hover:bg-amber-50'}`}>
-          <Coffee size={14} /> {onBreak ? 'Resume work' : 'Take a break'}
-        </button>
+        <div className="flex items-center gap-3">
+          <ShiftTimer activity={activity} nowMs={now} size="lg" />
+          <button
+            onClick={() => void setBreak(member.uid, member.name, !onBreak)}
+            className={`inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-bold ring-1 ring-inset transition ${onBreak ? 'bg-emerald-500 text-white ring-emerald-500 hover:bg-emerald-600' : 'bg-white text-amber-700 ring-amber-200 hover:bg-amber-50'}`}>
+            <Coffee size={14} /> {onBreak ? 'Resume work' : 'Take a break'}
+          </button>
+        </div>
       </div>
 
       <div className="p-3">

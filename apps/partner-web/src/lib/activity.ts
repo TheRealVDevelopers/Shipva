@@ -97,6 +97,52 @@ export function presence(a: Activity | null): 'active' | 'break' | 'offline' {
   return Date.now() - a.lastAtMs < CONTINUOUS_GAP_MS ? 'active' : 'offline';
 }
 
+/**
+ * The 9-hour shift clock -- a continuous timer tracking how far into (or
+ * past) a 9-hour shift each employee is, ticking in real time on the
+ * dashboard.
+ *
+ * Elapsed is wall-clock time since the day's first heartbeat (firstAtMs),
+ * not activeMs -- a shift runs from when you clocked in, not only the
+ * seconds the tab happened to be focused, and it keeps running through a
+ * break. It is capped once presence reads "offline" (idle past the
+ * continuous-gap window), so a tab left open overnight can't inflate a shift
+ * into a false 20-hour reading -- the same honest-approximation rule breakMs()
+ * already follows.
+ */
+export const SHIFT_TARGET_MS = 9 * 60 * 60 * 1000;
+
+export function shiftElapsedMs(a: Activity | null, nowMs: number): number {
+  if (!a || !a.firstAtMs) return 0;
+  const cap = presence(a) === 'offline' ? a.lastAtMs : nowMs;
+  return Math.max(0, cap - a.firstAtMs);
+}
+
+/** 0-1, capped at 1 even once into overtime -- for a progress bar. */
+export function shiftProgress(elapsedMs: number): number {
+  return Math.min(1, elapsedMs / SHIFT_TARGET_MS);
+}
+
+export const isOvertime = (elapsedMs: number): boolean => elapsedMs > SHIFT_TARGET_MS;
+
+/** H:MM:SS -- a running shift clock, not a short duration label. */
+export function fmtShiftClock(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  return h + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+}
+
+/** "3h 12m left" while short of the target, "+1h 4m over" once past it. */
+export function fmtShiftRemaining(elapsedMs: number): string {
+  const diff = SHIFT_TARGET_MS - elapsedMs;
+  const m = Math.round(Math.abs(diff) / 60000);
+  const h = Math.floor(m / 60);
+  const label = h > 0 ? (h + 'h ' + (m % 60) + 'm') : (m + 'm');
+  return diff >= 0 ? (label + ' left') : ('+' + label + ' over');
+}
+
 export function fmtClock(ms: number): string {
   if (!ms) return '—';
   return new Date(ms).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' });

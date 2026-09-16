@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Plus, Phone, UserCog, Mail, Check, Copy, KeyRound, Shield, Pencil, ShieldCheck,
   Clock, ListTodo, CalendarClock, Coffee, Trash2, IdCard, FileText,
@@ -67,24 +67,32 @@ export function Team() {
    */
   const { tours, trips, updateTour, updateTrip } = useStore();
   const [fixBusy, setFixBusy] = useState(false);
-  const teamOfOwner = (uid: string) => {
-    const owner = members.find((x) => x.uid === uid);
-    return owner ? teamOf(owner) : undefined;
-  };
-  // A Team Leader still carrying a reporting line. Their runs get filed under
-  // THAT leader's team, which is why a promoted leader saw none of their own
-  // work. Cleared alongside the runs below.
-  const staleLeaders = isAdmin ? members.filter(leaderHasStaleLine) : [];
-  const misfiled = isAdmin && members.length
-    ? [
-      ...tours.filter((t) => !t.archived && t.amzStatus !== 'COMPLETED')
-        .map((t) => ({ kind: 'tour' as const, run: t, to: teamFix(t, teamOfOwner) }))
-        .filter((x) => x.to),
-      ...trips.filter((t) => !t.archived && t.status !== 'closed')
-        .map((t) => ({ kind: 'trip' as const, run: t, to: teamFix(t, teamOfOwner) }))
-        .filter((x) => x.to),
-    ]
-    : [];
+  // Memoised: this scans every tour and trip in the company (800+) and used to
+  // redo that on every render of this page -- opening an employee's detail
+  // modal, ticking a permission checkbox, typing in the invite form -- for a
+  // banner that only needs to change when the team roster or the run lists
+  // actually change.
+  const { staleLeaders, misfiled } = useMemo(() => {
+    const teamOfOwner = (uid: string) => {
+      const owner = members.find((x) => x.uid === uid);
+      return owner ? teamOf(owner) : undefined;
+    };
+    // A Team Leader still carrying a reporting line. Their runs get filed under
+    // THAT leader's team, which is why a promoted leader saw none of their own
+    // work. Cleared alongside the runs below.
+    const staleLeaders = isAdmin ? members.filter(leaderHasStaleLine) : [];
+    const misfiled = isAdmin && members.length
+      ? [
+        ...tours.filter((t) => !t.archived && t.amzStatus !== 'COMPLETED')
+          .map((t) => ({ kind: 'tour' as const, run: t, to: teamFix(t, teamOfOwner) }))
+          .filter((x) => x.to),
+        ...trips.filter((t) => !t.archived && t.status !== 'closed')
+          .map((t) => ({ kind: 'trip' as const, run: t, to: teamFix(t, teamOfOwner) }))
+          .filter((x) => x.to),
+      ]
+      : [];
+    return { staleLeaders, misfiled };
+  }, [isAdmin, members, tours, trips]);
 
   async function repairTeamLinks() {
     if (fixBusy || (misfiled.length === 0 && staleLeaders.length === 0)) return;

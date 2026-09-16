@@ -7,6 +7,7 @@ import { useAuth } from '../lib/auth.js';
 import { roleLabel } from '../lib/roles.js';
 import { watchMembers, type Member } from '../lib/members.js';
 import { watchAllToday, presence, fmtActive, type Activity } from '../lib/activity.js';
+import { ShiftTimer } from './ShiftTimer.js';
 import { watchAllTasks, isOverdue, elapsedMs, fmtDuration, type Task } from '../lib/tasks.js';
 
 function fmtDue(ms: number): string {
@@ -70,9 +71,10 @@ export function TeamMix() {
                     : <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-100 text-xs font-extrabold text-primary-700">{m.name.split(' ').map((n) => n[0]).slice(0, 2).join('').toUpperCase()}</div>}
                   <div>
                     <div className="text-sm font-bold text-neutral-900">{m.name} <span className="text-[11px] font-semibold text-neutral-400">· {roleLabel(m.role)}</span></div>
-                    <div className="flex items-center gap-2 text-[11px] text-neutral-500">
+                    <div className="flex flex-wrap items-center gap-2 text-[11px] text-neutral-500">
                       <Badge tone={pres === 'active' ? 'success' : pres === 'break' ? 'warning' : 'neutral'}>{pres === 'break' ? <><Coffee size={10} /> On break</> : pres === 'active' ? 'Active now' : 'Offline'}</Badge>
                       {act && <span className="inline-flex items-center gap-1"><Clock size={10} /> {fmtActive(act.activeMs)} today</span>}
+                      <ShiftTimer activity={act} nowMs={now} size="sm" />
                     </div>
                   </div>
                 </div>

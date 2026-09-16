@@ -93,25 +93,34 @@ export function Overview() {
   const [activity, setActivity] = useState<Activity[]>([]);
   useEffect(() => { if (isLead) return watchAllToday(setActivity); }, [isLead]);
 
-  const onTrip = trucks.filter((t) => t.status === 'on_trip').length;
-  const available = trucks.filter((t) => t.status === 'available').length;
-  const maintenance = trucks.filter((t) => t.status === 'maintenance').length;
-  const utilization = trucks.length ? Math.round((onTrip / trucks.length) * 100) : 0;
+  const { onTrip, available, maintenance, utilization } = useMemo(() => {
+    const onTrip = trucks.filter((t) => t.status === 'on_trip').length;
+    const available = trucks.filter((t) => t.status === 'available').length;
+    const maintenance = trucks.filter((t) => t.status === 'maintenance').length;
+    const utilization = trucks.length ? Math.round((onTrip / trucks.length) * 100) : 0;
+    return { onTrip, available, maintenance, utilization };
+  }, [trucks]);
 
-  const revenue = trips.reduce((s, t) => s + t.freightPaise, 0);
-  const expenseTotal = expenses.reduce((s, e) => s + e.amountPaise, 0)
-    + fuelLogs.reduce((s, f) => s + f.costPaise, 0)
-    + payroll.reduce((s, p) => s + p.netPaise, 0);
-  const profit = revenue - expenseTotal;
-  const marginPct = revenue > 0 ? Math.round((profit / revenue) * 100) : 0;
-  // A draft MIS is not committed spend, so it stays out of "outstanding".
-  const outstanding = invoices.filter((i) => i.status !== 'paid' && i.status !== 'draft').reduce((s, i) => s + i.totalPaise, 0);
-  const collected = invoices.filter((i) => i.status === 'paid').reduce((s, i) => s + i.totalPaise, 0);
-  const activeTrips = board.filter((i) => !inLane(i, 'Completed')).length;
-  const fuelActual = fuelLogs.reduce((s, f) => s + f.costPaise, 0);
-  const fuelExpected = fuelLogs.reduce((s, f) => s + f.expectedPaise, 0);
-  const fuelLeak = Math.max(0, fuelActual - fuelExpected);
-  const collectPct = (collected + outstanding) > 0 ? Math.round((collected / (collected + outstanding)) * 100) : 0;
+  const {
+    revenue, expenseTotal, profit, marginPct, outstanding, collected, activeTrips,
+    fuelActual, fuelExpected, fuelLeak, collectPct,
+  } = useMemo(() => {
+    const revenue = trips.reduce((s, t) => s + t.freightPaise, 0);
+    const expenseTotal = expenses.reduce((s, e) => s + e.amountPaise, 0)
+      + fuelLogs.reduce((s, f) => s + f.costPaise, 0)
+      + payroll.reduce((s, p) => s + p.netPaise, 0);
+    const profit = revenue - expenseTotal;
+    const marginPct = revenue > 0 ? Math.round((profit / revenue) * 100) : 0;
+    // A draft MIS is not committed spend, so it stays out of "outstanding".
+    const outstanding = invoices.filter((i) => i.status !== 'paid' && i.status !== 'draft').reduce((s, i) => s + i.totalPaise, 0);
+    const collected = invoices.filter((i) => i.status === 'paid').reduce((s, i) => s + i.totalPaise, 0);
+    const activeTrips = board.filter((i) => !inLane(i, 'Completed')).length;
+    const fuelActual = fuelLogs.reduce((s, f) => s + f.costPaise, 0);
+    const fuelExpected = fuelLogs.reduce((s, f) => s + f.expectedPaise, 0);
+    const fuelLeak = Math.max(0, fuelActual - fuelExpected);
+    const collectPct = (collected + outstanding) > 0 ? Math.round((collected / (collected + outstanding)) * 100) : 0;
+    return { revenue, expenseTotal, profit, marginPct, outstanding, collected, activeTrips, fuelActual, fuelExpected, fuelLeak, collectPct };
+  }, [trips, expenses, fuelLogs, payroll, invoices, board]);
 
   // The six-state breakdown is trip-specific; tours have no such states, so fold
   // each tour into the representative bucket for its lane. That keeps the bar and
@@ -134,15 +143,17 @@ export function Overview() {
   const ongoing = laneCount('In Transit');
   const completed = laneCount('Completed');
 
-  const payrollTotal = payroll.reduce((s, p) => s + p.netPaise, 0);
-  const catTotal = (labels: string[]) => expenses.filter((e) => labels.includes(e.category)).reduce((s, e) => s + e.amountPaise, 0);
-  const expenseSegments = [
-    { label: 'Fuel', value: fuelActual, color: 'var(--sx-accent-500)' },
-    { label: 'Salaries', value: payrollTotal, color: 'var(--sx-primary-500)' },
-    { label: 'Toll & RTO', value: catTotal(['Toll', 'RTO/Police']), color: '#0ea5e9' },
-    { label: 'Repairs', value: catTotal(['Repairs']), color: '#8b5cf6' },
-    { label: 'Other', value: catTotal(['Loading', 'Misc']), color: 'var(--sx-neutral-400)' },
-  ].filter((s) => s.value > 0);
+  const expenseSegments = useMemo(() => {
+    const payrollTotal = payroll.reduce((s, p) => s + p.netPaise, 0);
+    const catTotal = (labels: string[]) => expenses.filter((e) => labels.includes(e.category)).reduce((s, e) => s + e.amountPaise, 0);
+    return [
+      { label: 'Fuel', value: fuelActual, color: 'var(--sx-accent-500)' },
+      { label: 'Salaries', value: payrollTotal, color: 'var(--sx-primary-500)' },
+      { label: 'Toll & RTO', value: catTotal(['Toll', 'RTO/Police']), color: '#0ea5e9' },
+      { label: 'Repairs', value: catTotal(['Repairs']), color: '#8b5cf6' },
+      { label: 'Other', value: catTotal(['Loading', 'Misc']), color: 'var(--sx-neutral-400)' },
+    ].filter((s) => s.value > 0);
+  }, [payroll, expenses, fuelActual]);
 
   // Real last-6-month trend. This used to splice five months of invented
   // history onto one live figure, which made a brand-new account look like a
@@ -168,36 +179,53 @@ export function Overview() {
     };
   }, [trips, expenseTotal]);
 
-  const unpaid = invoices.filter((i) => i.status !== 'paid' && i.status !== 'draft').sort((a, b) => b.totalPaise - a.totalPaise);
+  const unpaid = useMemo(
+    () => invoices.filter((i) => i.status !== 'paid' && i.status !== 'draft').sort((a, b) => b.totalPaise - a.totalPaise),
+    [invoices],
+  );
 
   // Live document-expiry alerts from truck & driver expiry dates (≤60 days).
   type Alert = { reg: string; doc: string; days: number };
   const nowMs = Date.now();
-  const mkAlert = (reg: string, doc: string, exp?: string): Alert | null => {
-    if (!exp) return null;
-    const t = Date.parse(exp);
-    return isNaN(t) ? null : { reg, doc, days: Math.round((t - nowMs) / 86400000) };
-  };
-  const liveAlerts: Alert[] = [
-    ...trucks.flatMap((t) => [mkAlert(t.reg, 'Insurance', t.insuranceExpiry), mkAlert(t.reg, 'Fitness', t.fitnessExpiry), mkAlert(t.reg, 'Service due', t.serviceDueDate)]),
-    ...drivers.map((d) => mkAlert(d.name, 'Licence', d.licenseExpiry)),
-  ].filter((x): x is Alert => x !== null && x.days <= 60).sort((a, b) => a.days - b.days).slice(0, 6);
+  const liveAlerts: Alert[] = useMemo(() => {
+    // A snapshot taken when this actually recomputes (trucks/drivers changed),
+    // not the outer nowMs -- a 60-day expiry threshold doesn't need per-render freshness.
+    const asOf = Date.now();
+    const mkAlert = (reg: string, doc: string, exp?: string): Alert | null => {
+      if (!exp) return null;
+      const t = Date.parse(exp);
+      return isNaN(t) ? null : { reg, doc, days: Math.round((t - asOf) / 86400000) };
+    };
+    return [
+      ...trucks.flatMap((t) => [mkAlert(t.reg, 'Insurance', t.insuranceExpiry), mkAlert(t.reg, 'Fitness', t.fitnessExpiry), mkAlert(t.reg, 'Service due', t.serviceDueDate)]),
+      ...drivers.map((d) => mkAlert(d.name, 'Licence', d.licenseExpiry)),
+    ].filter((x): x is Alert => x !== null && x.days <= 60).sort((a, b) => a.days - b.days).slice(0, 6);
+  }, [trucks, drivers]);
 
   // ── Operations pulse (team leader / admin) ──────────────────────────────────
-  const activeRuns = board.filter((i) => !inLane(i, 'Completed'));
-  const inTransitRuns = board.filter((i) => inLane(i, 'In Transit'));
-  const overdueRuns = inTransitRuns.filter((i) => isOverdue(i, nowMs));
-  const staleRuns = inTransitRuns.filter((i) => !i.lastUpdatedMs || nowMs - i.lastUpdatedMs > STALE_UPDATE_MS);
-  const delayedRuns = board.filter((i) => (i.source.reports?.length ?? 0) > 0 && !inLane(i, 'Completed'));
-  // On-time = active runs not currently overdue on their next update.
-  const onTimePct = activeRuns.length ? Math.round(((activeRuns.length - overdueRuns.length) / activeRuns.length) * 100) : 100;
-  // Delay rate = active runs carrying at least one delay report.
-  const delayPct = activeRuns.length ? Math.round((delayedRuns.length / activeRuns.length) * 100) : 0;
-  const updatedRuns = inTransitRuns.length - staleRuns.length;
-  const activeNow = activity.filter((a) => presence(a) === 'active').length;
-  const onBreakNow = activity.filter((a) => presence(a) === 'break').length;
-  // Runs that need a look: overdue on schedule, or no update in 30+ minutes.
-  const attention = [...new Set([...overdueRuns, ...staleRuns])].slice(0, 6);
+  const {
+    activeRuns, inTransitRuns, overdueRuns, staleRuns, delayedRuns,
+    onTimePct, delayPct, updatedRuns, activeNow, onBreakNow, attention,
+  } = useMemo(() => {
+    // Own snapshot, for the same reason as liveAlerts above: this only needs
+    // to be as fresh as the last time board/activity actually changed.
+    const asOf = Date.now();
+    const activeRuns = board.filter((i) => !inLane(i, 'Completed'));
+    const inTransitRuns = board.filter((i) => inLane(i, 'In Transit'));
+    const overdueRuns = inTransitRuns.filter((i) => isOverdue(i, asOf));
+    const staleRuns = inTransitRuns.filter((i) => !i.lastUpdatedMs || asOf - i.lastUpdatedMs > STALE_UPDATE_MS);
+    const delayedRuns = board.filter((i) => (i.source.reports?.length ?? 0) > 0 && !inLane(i, 'Completed'));
+    // On-time = active runs not currently overdue on their next update.
+    const onTimePct = activeRuns.length ? Math.round(((activeRuns.length - overdueRuns.length) / activeRuns.length) * 100) : 100;
+    // Delay rate = active runs carrying at least one delay report.
+    const delayPct = activeRuns.length ? Math.round((delayedRuns.length / activeRuns.length) * 100) : 0;
+    const updatedRuns = inTransitRuns.length - staleRuns.length;
+    const activeNow = activity.filter((a) => presence(a) === 'active').length;
+    const onBreakNow = activity.filter((a) => presence(a) === 'break').length;
+    // Runs that need a look: overdue on schedule, or no update in 30+ minutes.
+    const attention = [...new Set([...overdueRuns, ...staleRuns])].slice(0, 6);
+    return { activeRuns, inTransitRuns, overdueRuns, staleRuns, delayedRuns, onTimePct, delayPct, updatedRuns, activeNow, onBreakNow, attention };
+  }, [board, activity]);
 
   // ── Accounts figures — the settlement queues that make up their day ────────
   const dieselReqs = requests.filter((r) => r.kind === 'diesel' && r.status === 'pending');

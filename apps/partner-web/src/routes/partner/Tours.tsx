@@ -408,18 +408,36 @@ export function Tours() {
     return { live, drafts, cancelled };
   }, [tours]);
   const pool = tab === 'Drafts' ? drafts : tab === 'Cancelled' ? cancelled : live;
-  const shown = pool.filter((t) => {
+  /**
+   * Memoised. This was the other half of the "Amazon Tools is slow" report:
+   * every keystroke anywhere on the page -- including the Route Assign form,
+   * which shares this component -- re-ran a lower-case string search over
+   * EVERY live tour (800+ once the company's whole board loads) to redraw a
+   * list the keystroke had nothing to do with. Same fault, same fix, as the
+   * Trips board's `shown` (see "Stop rebuilding the whole board on every
+   * render") -- it was simply missed here.
+   */
+  const shown = useMemo(() => pool.filter((t) => {
     if (tab === 'Shared' && !isShared(t)) return false;
     // Calendar filter: the run's service date (or, failing that, its date label).
     if (dateF && (t.serviceAt ? t.serviceAt.slice(0, 10) !== dateF : true)) return false;
     if (!q) return true;
     const hay = `${t.tourId} ${(t.legs ?? []).map((l) => l.vrid).join(' ')} ${(t.vrIds ?? []).join(' ')} ${t.vehicleId} ${t.amzEquipmentType} ${t.vendorName} ${t.driver} ${t.ownerName ?? ''}`.toLowerCase();
     return hay.includes(q.toLowerCase());
-  });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [pool, tab, dateF, q]);
 
-  const inTransit = live.filter((t) => t.amzStatus === 'IN PROGRESS').length;
-  const completed = live.filter((t) => t.amzStatus === 'COMPLETED').length;
-  const advTotal = tours.reduce((s, t) => s + (Number(t.advanceAmount) || 0), 0);
+  // Counted alongside the live/drafts/cancelled split, in one pass, instead of
+  // two more full scans of `live` plus a reduce over all of `tours` on every render.
+  const { inTransit, completed, advTotal } = useMemo(() => {
+    let inTransit = 0, completed = 0, advTotal = 0;
+    for (const t of live) {
+      if (t.amzStatus === 'IN PROGRESS') inTransit++;
+      else if (t.amzStatus === 'COMPLETED') completed++;
+    }
+    for (const t of tours) advTotal += Number(t.advanceAmount) || 0;
+    return { inTransit, completed, advTotal };
+  }, [live, tours]);
 
   return (
     <PartnerLayout title="Amazon Tours" subtitle={canAssign ? 'Relay line board — every route across the company' : 'Your assigned Relay lines'}>
