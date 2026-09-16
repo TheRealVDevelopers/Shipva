@@ -7,6 +7,7 @@ import {
   addDoc, collection, deleteDoc, doc, onSnapshot, query, updateDoc, where,
 } from 'firebase/firestore';
 import { db } from '../firebase.js';
+import { applyDocChanges, type DocChangeLike } from './docSync.js';
 import type { Trip, TripPoint, TripStatus } from './mocks.js';
 import { genVrId } from './trip.js';
 
@@ -45,17 +46,21 @@ function fromSnap(id: string, d: Record<string, unknown>): Trip {
 /** Live subscription, scoped by role: admins see all; a Team Leader sees their
  *  whole team (leaderUid == them); a POC/supervisor sees only their own. */
 export function watchTrips(scope: Scope, cb: (trips: Trip[]) => void): () => void {
-  const sorted = (list: Trip[]) => list.sort((a, b) => (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0));
-  const read = (qs: { docs: { id: string; data: () => Record<string, unknown> }[] }) =>
-    qs.docs.map((d) => fromSnap(d.id, d.data()));
+  const sorted = (list: Trip[]) => [...list].sort((a, b) => (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0));
+  // Same fix as watchToursFs (lib/tours.ts) -- see docSync.ts. Firestore hands
+  // onSnapshot the full result set on every write to ANY matching document, so
+  // re-parsing every doc every time meant one check-in anywhere re-ran the
+  // whole company's trip list for every other viewer. docChanges() only lists
+  // what actually changed, and unchanged Trip objects keep their identity
+  // across updates.
+  const byId = new Map<string, Trip>();
+  const onChange = (qs: { docChanges: () => DocChangeLike[] }) =>
+    cb(sorted(applyDocChanges(byId, qs.docChanges(), fromSnap)));
 
-  if (seesAllRuns(scope.role)) {
-    return onSnapshot(query(collection(db, 'orgTrips')), (qs) => cb(sorted(read(qs))));
-  }
-
-  return onSnapshot(
-    query(collection(db, 'orgTrips'), where('ownerUid', '==', scope.uid)),
-    (qs) => cb(sorted(read(qs))));
+  const q = seesAllRuns(scope.role)
+    ? query(collection(db, 'orgTrips'))
+    : query(collection(db, 'orgTrips'), where('ownerUid', '==', scope.uid));
+  return onSnapshot(q, onChange);
 }
 
 /** LR is a short, readable, unique-enough receipt number. */

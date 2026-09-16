@@ -10,6 +10,7 @@ import {
   addDoc, arrayUnion, collection, deleteDoc, doc, getDoc, onSnapshot, query, setDoc, updateDoc, where,
 } from 'firebase/firestore';
 import { db } from '../firebase.js';
+import { applyDocChanges, type DocChangeLike } from './docSync.js';
 import type { Tour, TourStop, TourLeg, TourEvent } from './store.js';
 
 interface Scope { uid: string; role: string; leaderUid?: string }
@@ -96,17 +97,18 @@ function fromSnap(id: string, d: Record<string, unknown>): Tour {
 /** Live subscription, role-scoped: admins see all; a Team Leader sees their
  *  whole team; a POC sees only their own. */
 export function watchToursFs(scope: Scope, cb: (tours: Tour[]) => void): () => void {
-  const sorted = (list: Tour[]) => list.sort((a, b) => (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0));
-  const read = (qs: { docs: { id: string; data: () => Record<string, unknown> }[] }) =>
-    qs.docs.map((d) => fromSnap(d.id, d.data()));
+  const sorted = (list: Tour[]) => [...list].sort((a, b) => (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0));
+  // One Map per subscription, updated incrementally rather than rebuilt from
+  // scratch on every push -- see docSync.ts for why this is the real fix for
+  // "the Amazon Tours board is completely slow" on a company-wide board.
+  const byId = new Map<string, Tour>();
+  const onChange = (qs: { docChanges: () => DocChangeLike[] }) =>
+    cb(sorted(applyDocChanges(byId, qs.docChanges(), fromSnap)));
 
-  if (seesAllRuns(scope.role)) {
-    return onSnapshot(query(collection(db, 'orgTours')), (qs) => cb(sorted(read(qs))));
-  }
-
-  return onSnapshot(
-    query(collection(db, 'orgTours'), where('ownerUid', '==', scope.uid)),
-    (qs) => cb(sorted(read(qs))));
+  const q = seesAllRuns(scope.role)
+    ? query(collection(db, 'orgTours'))
+    : query(collection(db, 'orgTours'), where('ownerUid', '==', scope.uid));
+  return onSnapshot(q, onChange);
 }
 
 const vridKey = (vrid: string) => vrid.trim().toUpperCase();

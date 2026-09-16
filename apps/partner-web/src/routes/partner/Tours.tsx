@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, memo } from 'react';
 import {
   Trash2, FileSpreadsheet, Search, X, Check, Route as RouteIcon, UserCog, ChevronRight, CalendarRange,
   LogIn, LogOut, Flag, AlertTriangle, Truck, Plus, Send, Save, Pencil, Fuel, Copy,
@@ -224,7 +224,9 @@ export function Tours() {
   }
 
   /** Load an existing route back into the Route Assign form. */
-  function startEdit(t: Tour) {
+  // useCallback with a stable dep (member's uid, not the member object) so
+  // TourRow can be React.memo'd effectively -- see the note on TourRow below.
+  const startEdit = useCallback((t: Tour) => {
     setF({
       serviceAt: t.serviceAt ?? '', vendor: t.vendorName === 'Sarva Express' ? OWN_FLEET : (t.vendorName ?? ''),
       tripType: (t.scheduleAdhoc === 'ADHOC' ? 'ADHOC' : 'SCHEDULE'),
@@ -241,7 +243,8 @@ export function Tours() {
     })));
     setEditId(t.id);
     setOpen(true);
-  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [member?.uid]);
 
   function doDelete() {
     if (!confirmDel) return;
@@ -256,7 +259,7 @@ export function Tours() {
   }
 
   /** Put a cancelled route back on the board, re-claiming its VRIDs. */
-  async function doRestore(t: Tour) {
+  const doRestore = useCallback(async (t: Tour) => {
     const clash = await restoreTour(t);
     if (clash) {
       push({ title: "Can't restore", body: `VRID ${clash} has since been used on another route. Free it there first.`, tone: 'warning' });
@@ -264,7 +267,7 @@ export function Tours() {
     }
     if (t.id) logTour(t.id, 'Route restored', { detail: `VRIDs re-claimed: ${tourVridList(t).join(', ') || 'none'}` });
     push({ title: 'Route restored', body: `${t.tourId || 'Route'} is back on the board as Planned.`, tone: 'success' });
-  }
+  }, [restoreTour, push, logTour]);
 
   const toggleOne = (id: string) => setSelected((prev) => {
     const next = new Set(prev);
@@ -407,6 +410,17 @@ export function Tours() {
     }
     return { live, drafts, cancelled };
   }, [tours]);
+    // Stable per-row handlers, keyed by id/tour rather than closing over a
+  // specific row inline -- what makes React.memo on TourRow effective. See
+  // "Stop rebuilding the whole board on every render" / the Tours.tsx follow-up
+  // for why: with 800+ tours, an inline `() => setDieselId(t.id)` recreated on
+  // every render of Tours() made every row look "changed" to memo, every time.
+  const openDiesel = useCallback((id: string) => setDieselId(id), []);
+  const openAssign = useCallback((t: Tour) => {
+    setAssignPoc(t.ownerUid ?? '');
+    setAssignFor({ id: t.id!, tourId: t.tourId, vrids: t.legs?.length ?? 0 });
+  }, []);
+
   const pool = tab === 'Drafts' ? drafts : tab === 'Cancelled' ? cancelled : live;
   /**
    * Memoised. This was the other half of the "Amazon Tools is slow" report:
@@ -544,12 +558,15 @@ export function Tours() {
                   </label>
                 )}
                 <div className="min-w-0 flex-1">
+                  {/* Every callback here is a STABLE reference (useCallback,
+                      or setState's own stable setter) so TourRow's memo below
+                      actually works -- a fresh arrow function per row per
+                      render would make every row "changed" every time. */}
                   <TourRow t={t} isAdmin={isAdmin} canEdit={canEdit} canAssign={canAssign}
                     state={t.archived ? 'cancelled' : t.draft ? 'draft' : 'live'}
-                    onDiesel={() => t.id && setDieselId(t.id)}
-                    onAssign={() => { setAssignPoc(t.ownerUid ?? ''); setAssignFor({ id: t.id!, tourId: t.tourId, vrids: t.legs?.length ?? 0 }); }}
-                    onEdit={() => startEdit(t)} onDelete={() => setConfirmDel(t)} onShare={updateTour}
-                    onRestore={() => void doRestore(t)} />
+                    onDiesel={openDiesel} onAssign={openAssign}
+                    onEdit={startEdit} onDelete={setConfirmDel} onShare={updateTour}
+                    onRestore={doRestore} />
                 </div>
               </div>
             ))}
@@ -869,13 +886,25 @@ function DieselRequest({ tour, onClose, onSave }: {
  * and the WhatsApp share/copy actions; collapsed it's ID, route summary, driver,
  * status, and the two primary actions (diesel + share).
  */
-function TourRow({ t, isAdmin, canEdit, canAssign, state, onDiesel, onEdit, onDelete, onShare, onAssign, onRestore }: {
+/**
+ * One row on the Amazon Tours board.
+ *
+ * Wrapped in React.memo: with the whole company's tours loaded (800+ once
+ * leadership sees every run), re-rendering every row on every unrelated
+ * keystroke or Firestore push was a real cost. Memo only pays off because
+ * every callback prop below is a STABLE reference from the parent (see
+ * startEdit/doRestore/openDiesel/openAssign, all useCallback'd, plus
+ * setConfirmDel and updateTour which are already stable) -- an inline arrow
+ * function recreated per row per render would make every row look "changed"
+ * to memo's shallow comparison every single time, defeating the point.
+ */
+const TourRow = memo(function TourRow({ t, isAdmin, canEdit, canAssign, state, onDiesel, onEdit, onDelete, onShare, onAssign, onRestore }: {
   t: Tour; isAdmin: boolean; canEdit: boolean; canAssign: boolean;
   /** Which tab this row is on — a draft or a cancelled route can't be shared,
    *  fuelled or assigned; a cancelled one can be restored. */
   state: 'live' | 'draft' | 'cancelled';
-  onDiesel: () => void; onEdit: () => void; onDelete: () => void; onAssign: () => void;
-  onShare: (id: string, patch: Partial<Tour>) => void; onRestore: () => void;
+  onDiesel: (id: string) => void; onEdit: (t: Tour) => void; onDelete: (t: Tour) => void; onAssign: (t: Tour) => void;
+  onShare: (id: string, patch: Partial<Tour>) => void; onRestore: (t: Tour) => void;
 }) {
   const legs = t.legs && t.legs.length ? t.legs : [];
   const allStops = legs.flatMap((l) => l.stops);
@@ -938,7 +967,7 @@ function TourRow({ t, isAdmin, canEdit, canAssign, state, onDiesel, onEdit, onDe
             <>
               <span className="rounded-full px-2 py-0.5 text-[10px] font-extrabold" style={{ background: '#FCE9EC', color: '#B12704' }}>Cancelled</span>
               {canEdit && (
-                <button onClick={onRestore} className="inline-flex items-center gap-1 rounded-lg border px-2 py-1.5 text-xs font-extrabold"
+                <button onClick={() => onRestore(t)} className="inline-flex items-center gap-1 rounded-lg border px-2 py-1.5 text-xs font-extrabold"
                   style={{ borderColor: '#D5D9D9', color: '#0F5C9E', background: '#fff' }}
                   title="Put this route back on the board and re-claim its VRIDs">
                   <RouteIcon size={12} /> Restore
@@ -950,10 +979,10 @@ function TourRow({ t, isAdmin, canEdit, canAssign, state, onDiesel, onEdit, onDe
               <span className="rounded-full px-2 py-0.5 text-[10px] font-extrabold" style={{ background: '#EDEFF1', color: '#5A6572' }}>Draft</span>
               {canEdit && (
                 <>
-                  <button onClick={onEdit} className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-extrabold shadow-sm" style={{ background: ORANGE, color: INK }}>
+                  <button onClick={() => onEdit(t)} className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-extrabold shadow-sm" style={{ background: ORANGE, color: INK }}>
                     <Pencil size={12} /> Resume
                   </button>
-                  <button onClick={onDelete} className="rounded-lg p-1.5 text-neutral-400 hover:bg-amber-50 hover:text-amber-600" title="Discard this draft"><Trash2 size={14} /></button>
+                  <button onClick={() => onDelete(t)} className="rounded-lg p-1.5 text-neutral-400 hover:bg-amber-50 hover:text-amber-600" title="Discard this draft"><Trash2 size={14} /></button>
                 </>
               )}
             </>
@@ -975,12 +1004,12 @@ function TourRow({ t, isAdmin, canEdit, canAssign, state, onDiesel, onEdit, onDe
             title="Copy the driver message exactly as laid out">
             {copied ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
           </button>
-          <button onClick={onDiesel} className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-extrabold shadow-sm" style={{ background: ORANGE, color: INK }}><Fuel size={12} /> Diesel</button>
+          <button onClick={() => t.id && onDiesel(t.id)} className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-extrabold shadow-sm" style={{ background: ORANGE, color: INK }}><Fuel size={12} /> Diesel</button>
           {diesel && (
             <Badge tone={diesel.status === 'approved' ? 'success' : diesel.status === 'rejected' ? 'danger' : 'warning'}><Fuel size={10} /> {requestStatusLabel(diesel)}</Badge>
           )}
           {canAssign && (
-            <button onClick={onAssign} className="inline-flex items-center gap-1 rounded-lg border px-2 py-1.5 text-xs font-extrabold"
+            <button onClick={() => onAssign(t)} className="inline-flex items-center gap-1 rounded-lg border px-2 py-1.5 text-xs font-extrabold"
               style={{ borderColor: t.ownerName ? '#D5D9D9' : ORANGE, color: t.ownerName ? '#475467' : '#B45309', background: t.ownerName ? '#fff' : '#FFF7ED' }}
               title={t.ownerName ? `Assigned to ${t.ownerName} — tap to reassign` : 'Not assigned — tap to assign'}>
               <UserCog size={12} /> {t.ownerName ? 'Reassign' : 'Assign'}
@@ -988,8 +1017,8 @@ function TourRow({ t, isAdmin, canEdit, canAssign, state, onDiesel, onEdit, onDe
           )}
           {canEdit && (
             <>
-              <button onClick={onEdit} className="rounded-lg p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-primary-600" title="Edit route"><Pencil size={14} /></button>
-              <button onClick={onDelete} className="rounded-lg p-1.5 text-neutral-400 hover:bg-amber-50 hover:text-amber-600" title="Cancel route — keeps the record, frees the Tour ID & VRIDs"><Trash2 size={14} /></button>
+              <button onClick={() => onEdit(t)} className="rounded-lg p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-primary-600" title="Edit route"><Pencil size={14} /></button>
+              <button onClick={() => onDelete(t)} className="rounded-lg p-1.5 text-neutral-400 hover:bg-amber-50 hover:text-amber-600" title="Cancel route — keeps the record, frees the Tour ID & VRIDs"><Trash2 size={14} /></button>
             </>
           )}
           </>
@@ -1046,7 +1075,7 @@ function TourRow({ t, isAdmin, canEdit, canAssign, state, onDiesel, onEdit, onDe
       )}
     </div>
   );
-}
+});
 
 /* ─── POC operate / check-in view ────────────────────────────────────── */
 
