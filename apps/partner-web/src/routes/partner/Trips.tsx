@@ -200,7 +200,7 @@ function BoardRow({ item, expanded, onToggle, showOwner, canEdit, canEditDone, c
               {/* A completed run may only be re-opened by someone granted it —
                   owner, manager, or an employee an admin has ticked. On the
                   Completed tab the action is labelled for what it does. */}
-              {canEdit && (item.lane !== 'Completed' || canEditDone) && (
+              {(item.lane === 'Completed' ? canEditDone : canEdit) && (
                 <>
                   {item.lane === 'Completed' ? (
                     <button onClick={onEdit}
@@ -211,7 +211,7 @@ function BoardRow({ item, expanded, onToggle, showOwner, canEdit, canEditDone, c
                   ) : (
                     <button onClick={onEdit} className="rounded-lg p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-primary-600" title={isTour ? 'Edit on the Amazon Tours board' : 'Edit trip'}><Pencil size={14} /></button>
                   )}
-                  {!isTour && <button onClick={onDelete} className="rounded-lg p-1.5 text-neutral-400 hover:bg-amber-50 hover:text-amber-600" title="Cancel / archive trip"><Trash2 size={14} /></button>}
+                  {!isTour && canEdit && <button onClick={onDelete} className="rounded-lg p-1.5 text-neutral-400 hover:bg-amber-50 hover:text-amber-600" title="Cancel / archive trip"><Trash2 size={14} /></button>}
                 </>
               )}
             </div>

@@ -582,7 +582,7 @@ interface StoreApi extends StoreShape {
   recordOwnerPayment: (id: string, amountPaise: number) => void;
   /** Returns the new route's id so the caller can assign it to a POC next. */
   addTour: (t: Omit<Tour, 'id'>, handledBy?: { uid: string; name: string; leaderUid?: string }) => Promise<string>;
-  updateTour: (id: string, patch: Partial<Tour>, log?: { action: string; detail?: string; vrid?: string }) => void;
+  updateTour: (id: string, patch: Partial<Tour>, log?: { action: string; detail?: string; vrid?: string }) => Promise<void>;
   logTour: (id: string, action: string, opts?: { detail?: string; vrid?: string }) => void;
   reassignActiveWork: (pocUid: string, newTeamUid: string) => number;
   /** Move an entire team's live runs from one team leader to another. */
@@ -680,8 +680,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
    * a person deliberately did should say so here. Stamped with the signed-in
    * member automatically.
    */
-  const updateTour = useCallback((id: string, patch: Partial<Tour>, log?: { action: string; detail?: string; vrid?: string }) => {
-    void updateTourDoc(id, patch, log
+  const updateTour = useCallback((id: string, patch: Partial<Tour>, log?: { action: string; detail?: string; vrid?: string }): Promise<void> => {
+    return updateTourDoc(id, patch, log
       ? {
         atMs: Date.now(), by: actorName, byUid: member?.uid ?? '',
         action: log.action,

@@ -20,6 +20,7 @@ import { vendorNamesOf, driversForVendor, trucksForVendor } from '../../lib/vend
 import { Badge } from '../../components/ui/Badge.js';
 import { vridHolder, updateTourLegs } from '../../lib/tours.js';
 import { stopControls } from '../../lib/board.js';
+import { odometerSpan } from '../../lib/km.js';
 import { exportAmazonSheet } from '../../lib/exportAmazonSheet.js';
 import { exportRunHistory } from '../../lib/exportRuns.js';
 import { exportAmazonTemplate } from '../../lib/exportAmazonTemplate.js';
@@ -1098,7 +1099,7 @@ const TourRow = memo(function TourRow({ t, isAdmin, canEdit, canAssign, state, o
  */
 export function TourOperate({ tour, onClose, onUpdate, showOwner , canEditDone = false }: {
   tour: Tour; onClose: () => void;
-  onUpdate: (id: string, patch: Partial<Tour>, log?: { action: string; detail?: string; vrid?: string }) => void;
+  onUpdate: (id: string, patch: Partial<Tour>, log?: { action: string; detail?: string; vrid?: string }) => void | Promise<void>;
   showOwner: boolean;
   /** Viewer may correct a VRID that has already been submitted. */
   canEditDone?: boolean;
@@ -1196,13 +1197,19 @@ export function TourOperate({ tour, onClose, onUpdate, showOwner , canEditDone =
     }
     const vrid = legs[li]?.vrid ?? '';
     const changed = diffOps(legOps(tour, li), merged);
-    onUpdate(tour.id, patch, {
+    // A rejected write used to vanish: updateTour swallowed it, so a save the
+    // server refused looked exactly like a save that worked. Say so.
+    Promise.resolve(onUpdate(tour.id, patch, {
       action: alsoComplete ? 'VRID submitted' : 'VRID updated',
       vrid,
       // A save with nothing altered still belongs in the trail — it records
       // that someone looked, which is what "not just the latest" is about.
       ...(changed ? { detail: changed } : {}),
-    });
+    })).catch(() => push({
+      title: "Couldn't save your changes",
+      body: 'The server refused the update — you may not have permission to edit this trip. Nothing was changed.',
+      tone: 'warning',
+    }));
   }
 
   function onLegSubmit(li: number, ops: TourLegOps) {
@@ -1253,6 +1260,7 @@ export function TourOperate({ tour, onClose, onUpdate, showOwner , canEditDone =
               onLoadType={(v) => setLoadType(li, v)}
               onSave={(ops) => writeOps(li, ops, false)}
               onSubmit={(ops) => onLegSubmit(li, ops)}
+              canEditDone={canEditDone}
             />
           ))}
           {legs.length === 0 && <p className="py-8 text-center text-sm text-neutral-400">This route has no VRIDs to update.</p>}
@@ -1307,11 +1315,7 @@ function LegUpdate({ tour, leg, index, multi, expanded, onToggle, allStops, onSt
   const [saved, setSaved] = useState(false);
 
   // Total KM is derived from the odometer, never typed.
-  const kmSpan = (() => {
-    const a = Number(startKm), b = Number(endKm);
-    if (!startKm.trim() || !endKm.trim() || !Number.isFinite(a) || !Number.isFinite(b)) return null;
-    return b - a;
-  })();
+  const kmSpan = odometerSpan(startKm, endKm);
   const totalKm = kmSpan === null ? (stored.totalManualKm || '') : String(kmSpan);
   const kmBackwards = kmSpan !== null && kmSpan < 0;
 
@@ -1427,7 +1431,12 @@ function LegUpdate({ tour, leg, index, multi, expanded, onToggle, allStops, onSt
             })}
           </ol>
 
-          {/* This VRID's operational figures */}
+          {/* This VRID's operational figures. A submitted VRID is locked until
+              someone with the grant presses "Correct figures" -- before, the
+              inputs stayed live with no Save button, so edits were typed and
+              silently lost. A disabled fieldset disables every input, button
+              and photo control inside it in one place. */}
+          <fieldset disabled={submitted && !reopened} className="m-0 min-w-0 border-0 p-0">
           <div className="mt-3 rounded-xl p-3 ring-1 ring-inset" style={{ background: '#F7F8F8', borderColor: '#D5D9D9' }}>
             <div className="mb-2 text-xs font-extrabold" style={{ color: INK }}>
               {multi ? `Update ${leg.vrid}` : 'Open and update'}
@@ -1498,6 +1507,7 @@ function LegUpdate({ tour, leg, index, multi, expanded, onToggle, allStops, onSt
               <MultiImageUpload label="POD photos" value={stored.podPhotos} onChange={setPhotos('podPhotos')} path={`${photoPath}/pod`} />
             </div>
           </div>
+          </fieldset>
 
           {/* Save / submit — per VRID */}
           {submitted && !reopened ? (
