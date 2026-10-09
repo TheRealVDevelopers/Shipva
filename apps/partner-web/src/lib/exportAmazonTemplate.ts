@@ -37,6 +37,23 @@ function toDate(v?: string | number): Date | '' {
   return isNaN(d.getTime()) ? '' : d;
 }
 
+/**
+ * Excel keeps a date/time as a bare serial number with NO timezone, and exceljs
+ * writes a JS Date by its UTC fields. Every Date we build here is local time
+ * (a stop planned for 19:30 is 19:30 India time), so handing it over as-is put
+ * 14:00 in the file in India -- 5h30m early -- and moved every date-only cell
+ * (local midnight is 18:30 the previous day in UTC) onto the PREVIOUS DAY.
+ * That was the "dates are wrong and the stop arrival/departure times are off"
+ * report. This returns a Date whose UTC fields carry the local wall-clock, so
+ * the workbook shows exactly what the app shows. The import side already reads
+ * these back with UTC getters for the same reason (see importTourSheet).
+ */
+export function excelWallClock(d: Date): Date {
+  return new Date(Date.UTC(
+    d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds(), d.getMilliseconds(),
+  ));
+}
+
 /** Numeric when it is a number, so their totals still work. */
 function toNum(v?: string): number | string {
   if (!v || !String(v).trim()) return '';
@@ -45,17 +62,37 @@ function toNum(v?: string): number | string {
 }
 
 /**
- * When the POC actually recorded this stop event — the template's "Sarva POC
- * Updated Time". Taken from the audit trail so a later correction shows the
- * time it was corrected, not the time it claims the lorry moved. Falls back to
- * the stamp itself for runs that predate the trail.
+ * Longest gap between a stop's stamp and the audit entry that recorded it. They
+ * are written by the same click, so in practice it is milliseconds; the
+ * allowance only has to tell "this click" from "a different stop that happens
+ * to share the name".
  */
-function pocUpdatedAt(t: Tour, vrid: string, stopName: string, kind: 'in' | 'out'): Date | '' {
+const SAME_CLICK_MS = 10 * 60 * 1000;
+
+/**
+ * When the POC actually recorded this stop event -- the template's "Sarva POC
+ * Updated Time". Taken from the audit trail, and matched to THIS stop by how
+ * close the entry is to the stop's own stamp.
+ *
+ * It used to take the latest "Checked in" entry whose text started with the
+ * stop's name. This client's routes repeat stop names constantly
+ * (HKR2 -> TBI1 -> TBI1 -> HKR2), so the first and last stop both reported the
+ * LAST one's time. When no entry sits beside the stamp (a run that predates
+ * the trail, or an imported one) the stamp itself is the time the POC updated
+ * the site, so the column is never left blank next to a recorded arrival.
+ */
+function pocUpdatedAt(t: Tour, vrid: string, stopName: string, kind: 'in' | 'out', stamp?: number): Date | '' {
+  if (!stamp) return '';
   const action = kind === 'in' ? 'Checked in' : 'Checked out';
-  const hit = [...legHistory(t, vrid)]
-    .reverse()
-    .find((e) => e.action === action && (e.detail ?? '').startsWith(stopName));
-  return hit ? new Date(hit.atMs) : '';
+  const prefix = `${stopName} at `;
+  let best: { atMs: number } | undefined;
+  let bestGap = Infinity;
+  for (const e of legHistory(t, vrid)) {
+    if (e.action !== action || !(e.detail ?? '').startsWith(prefix)) continue;
+    const gap = Math.abs(e.atMs - stamp);
+    if (gap < bestGap) { best = e; bestGap = gap; }
+  }
+  return new Date(best && bestGap <= SAME_CLICK_MS ? best.atMs : stamp);
 }
 
 type CellValue = string | number | Date | '';
@@ -69,7 +106,7 @@ function stopCells(t: Tour, leg: TourLeg, s: TourLegStop | undefined, full: bool
     name,
     toDate(s?.arrivalAt),                                   // Stop N Yard Arrival (planned)
     arrivalPoc,                                             // Arrival Time, per the POC
-    name ? pocUpdatedAt(t, leg.vrid, name, 'in') : '',      // Sarva POC Updated Time
+    name ? pocUpdatedAt(t, leg.vrid, name, 'in', s?.actualArrival) : '',      // Sarva POC Updated Time
     s?.feedback ?? '',                                      // Feedback
     toDate(s?.departureAt),                                 // Stop N Yard Departure (planned)
   ];
@@ -78,7 +115,7 @@ function stopCells(t: Tour, leg: TourLeg, s: TourLegStop | undefined, full: bool
   return [
     ...head,
     departurePoc,                                           // Departure Time, per the POC
-    name ? pocUpdatedAt(t, leg.vrid, name, 'out') : '',      // Sarva POC Updated Time
+    name ? pocUpdatedAt(t, leg.vrid, name, 'out', s?.actualDeparture) : '',      // Sarva POC Updated Time
     // Their sheet carries a second Feedback per stop; we hold one note per
     // stop, so it goes in the arrival column and this stays blank rather than
     // repeating the same text twice.
@@ -119,6 +156,10 @@ const TEMPLATE_HEADERS: string[] = [
  * their existing layout is untouched.
  */
 const EXTRA_HEADERS: string[] = [
+  // Their template stops after "Stop 3 Yard Departure", so stop 3's actual
+  // departure had nowhere to go and was dropped from the file. Kept out of the
+  // 67 (so their layout is untouched) but captured here.
+  'Stop 3 Departure Time (POC)', 'Stop 3 Departure - Sarva POC Updated Time',
   'VR ID no.', 'Sarva POC', 'Status', 'AMZ Status', 'Record state',
   'Created by', 'Created date', 'Created time',
   'Updated by', 'Updated date', 'Updated time',
@@ -170,7 +211,10 @@ function extraRow(t: Tour, leg: TourLeg, index: number, total: number, lane: str
   const dateOnly = (ms?: number) => { const d = dt(ms); return d ? new Date(d.getFullYear(), d.getMonth(), d.getDate()) : ''; };
   const timeOnly = (ms?: number) => (ms ? new Date(ms).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false }) : '');
 
+  const s3 = leg.stops?.[2];
   return [
+    dt(s3?.actualDeparture),
+    s3?.name ? pocUpdatedAt(t, leg.vrid, s3.name, 'out', s3.actualDeparture) : '',
     `${index + 1} of ${total}`,
     t.ownerName ?? '',
     lane,
@@ -234,7 +278,7 @@ export const TEMPLATE_COLUMN_COUNT = TEMPLATE_HEADERS.length;
  * Write the workbook and hand it to the browser. Real .xlsx with real date
  * cells, headers styled the way their file reads (bold, wrapped, centred).
  */
-export async function exportAmazonTemplate(input: AmazonTemplateInput): Promise<number> {
+export async function buildTemplateWorkbook(input: AmazonTemplateInput) {
   const { headers, rows } = buildTemplateRows(input);
   const ExcelJS = await import('exceljs');
   const wb = new ExcelJS.Workbook();
@@ -243,7 +287,8 @@ export async function exportAmazonTemplate(input: AmazonTemplateInput): Promise<
   const ws = wb.addWorksheet('Sheet1');
 
   ws.addRow(headers);
-  rows.forEach((r) => ws.addRow(r));
+  // Dates go through excelWallClock -- see the note there.
+  rows.forEach((r) => ws.addRow(r.map((v) => (v instanceof Date ? excelWallClock(v) : v))));
 
   const header = ws.getRow(1);
   header.font = { bold: true };
@@ -268,7 +313,12 @@ export async function exportAmazonTemplate(input: AmazonTemplateInput): Promise<
     c.alignment = { wrapText: true, vertical: 'top' };
   }
   ws.views = [{ state: 'frozen', ySplit: 1 }];
+  return { wb, rowCount: rows.length };
+}
 
+/** Write the workbook and hand it to the browser. */
+export async function exportAmazonTemplate(input: AmazonTemplateInput): Promise<number> {
+  const { wb, rowCount } = await buildTemplateWorkbook(input);
   const buf = await wb.xlsx.writeBuffer();
   const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   const url = URL.createObjectURL(blob);
@@ -277,5 +327,5 @@ export async function exportAmazonTemplate(input: AmazonTemplateInput): Promise<
   a.download = `${brandSlug}-${input.name ?? 'amazon-export'}-${new Date().toISOString().slice(0, 10)}.xlsx`;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
-  return rows.length;
+  return rowCount;
 }
